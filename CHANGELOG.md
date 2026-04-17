@@ -4,6 +4,29 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] — 2026-04-17
+
+### Added
+- **Bundled `mobile-design` skill** (vendored from
+  [sickn33/antigravity-awesome-skills](https://github.com/sickn33/antigravity-awesome-skills),
+  MIT). Mobile-first / touch-first / platform-respectful design discipline,
+  including the Mobile Feasibility & Risk Index (MFRI) decision framework and
+  per-platform / color / typography / navigation / performance / testing
+  references.
+- **Bundled `mobile-touch` skill** (vendored from
+  [dylantarre/animation-principles](https://github.com/dylantarre/animation-principles),
+  MIT). Disney's 12 animation principles applied to mobile gestures, haptics,
+  spring/ease curves, and overscroll behavior.
+- Skill Routing wired in `CLAUDE.md`: `lib/presentation/**` now auto-attaches
+  both new skills, and dedicated rows for "모바일 화면/UX" and "제스처/햅틱/모션"
+  trigger them by intent. Agent routing for UI requests now flows
+  `pencil → mobile-design (MFRI) → flutter-ui → riverpod-logic`, with a
+  separate motion-specific path through `mobile-touch → flutter-ui`.
+
+### Notes
+- Both upstream LICENSE files are vendored alongside each skill as
+  `LICENSE.upstream` to preserve attribution under MIT.
+
 ## [0.2.1] — 2026-04-17
 
 ### Fixed
