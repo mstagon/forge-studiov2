@@ -6,6 +6,7 @@ import { TerminalPanel } from './components/terminal/TerminalPanel'
 import { DashboardPanel } from './components/dashboard/DashboardPanel'
 import { CommandPalette } from './components/dashboard/CommandPalette'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
+import { GitGraphPanel } from './components/git/GitGraphPanel'
 import { useWorkspaceStore } from './stores/workspace'
 import { useTerminalStore } from './stores/terminal'
 
@@ -116,6 +117,7 @@ export default function App() {
           <TerminalPanel />
         </div>
         <DashboardPanel />
+        <GitGraphPanel />
       </div>
       <StatusBar />
 

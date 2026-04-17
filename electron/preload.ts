@@ -51,6 +51,29 @@ const api = {
       ipcRenderer.invoke('harness:getMcpStatus', workspacePath),
   },
 
+  // ─── Git ─────────────────────────────────────────────────────────
+  git: {
+    status: (cwd: string) => ipcRenderer.invoke('git:status', cwd),
+    log: (cwd: string, limit?: number) => ipcRenderer.invoke('git:log', cwd, limit),
+    branches: (cwd: string) => ipcRenderer.invoke('git:branches', cwd),
+    stage: (cwd: string, files: string[]) => ipcRenderer.invoke('git:stage', cwd, files),
+    stageAll: (cwd: string) => ipcRenderer.invoke('git:stageAll', cwd),
+    unstage: (cwd: string, files: string[]) => ipcRenderer.invoke('git:unstage', cwd, files),
+    unstageAll: (cwd: string) => ipcRenderer.invoke('git:unstageAll', cwd),
+    commit: (cwd: string, message: string) => ipcRenderer.invoke('git:commit', cwd, message),
+    push: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
+    pull: (cwd: string) => ipcRenderer.invoke('git:pull', cwd),
+    fetch: (cwd: string) => ipcRenderer.invoke('git:fetch', cwd),
+    checkout: (cwd: string, branch: string) => ipcRenderer.invoke('git:checkout', cwd, branch),
+    createBranch: (cwd: string, name: string) => ipcRenderer.invoke('git:createBranch', cwd, name),
+    deleteBranch: (cwd: string, name: string) => ipcRenderer.invoke('git:deleteBranch', cwd, name),
+    diff: (cwd: string, file: string, staged: boolean) => ipcRenderer.invoke('git:diff', cwd, file, staged),
+    commitDiff: (cwd: string, hash: string) => ipcRenderer.invoke('git:commitDiff', cwd, hash),
+    commitFiles: (cwd: string, hash: string) => ipcRenderer.invoke('git:commitFiles', cwd, hash),
+    discard: (cwd: string, file: string) => ipcRenderer.invoke('git:discard', cwd, file),
+    remotes: (cwd: string) => ipcRenderer.invoke('git:remotes', cwd),
+  },
+
   // ─── System ──────────────────────────────────────────────────────
   system: {
     openExternal: (url: string) =>

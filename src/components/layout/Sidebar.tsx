@@ -1,9 +1,11 @@
 import { useWorkspaceStore } from '@/stores/workspace'
-import { VscFolder, VscExtensions, VscGear, VscAdd, VscTrash, VscCheck, VscCircleFilled } from 'react-icons/vsc'
+import { VscFolder, VscExtensions, VscGear, VscAdd, VscTrash, VscCheck, VscCircleFilled, VscGitMerge } from 'react-icons/vsc'
+import { GitSidebar } from '@/components/git/GitSidebar'
 import type { SidebarView } from '@/types'
 
 const NAV_ITEMS: { view: SidebarView; icon: typeof VscFolder; label: string }[] = [
   { view: 'workspaces', icon: VscFolder, label: 'Workspaces' },
+  { view: 'git', icon: VscGitMerge, label: 'Git' },
   { view: 'dashboard', icon: VscExtensions, label: 'Dashboard' },
   { view: 'settings', icon: VscGear, label: 'Settings' },
 ]
@@ -73,6 +75,9 @@ export function Sidebar() {
                 }
               }}
             />
+          )}
+          {sidebarView === 'git' && (
+            <GitSidebar />
           )}
           {sidebarView === 'dashboard' && harnessInfo && (
             <DashboardSummary info={harnessInfo} />

@@ -40,7 +40,43 @@ export interface McpStatus {
   command?: string
 }
 
-export type SidebarView = 'workspaces' | 'dashboard' | 'settings'
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  parents: string[]
+  message: string
+  author: string
+  email: string
+  date: string
+  refs: string[]
+}
+
+export interface GitFileChange {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R' | 'C' | 'U' | '?'
+  oldPath?: string
+}
+
+export interface GitStatus {
+  branch: string
+  upstream: string
+  ahead: number
+  behind: number
+  staged: GitFileChange[]
+  unstaged: GitFileChange[]
+  untracked: string[]
+  isRepo: boolean
+}
+
+export interface GitBranch {
+  name: string
+  current: boolean
+  remote: string
+  lastCommitHash: string
+  lastCommitMsg: string
+}
+
+export type SidebarView = 'workspaces' | 'git' | 'dashboard' | 'settings'
 export type Theme = 'dark' | 'light'
 
 declare global {

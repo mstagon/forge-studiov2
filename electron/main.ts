@@ -3,6 +3,7 @@ import path from 'path'
 import { PtyManager } from './services/PtyManager'
 import { WorkspaceManager } from './services/WorkspaceManager'
 import { HarnessScanner } from './services/HarnessScanner'
+import { GitManager } from './services/GitManager'
 
 process.env.DIST_ELECTRON = path.join(__dirname)
 process.env.DIST = path.join(process.env.DIST_ELECTRON, '../dist')
@@ -14,6 +15,7 @@ let mainWindow: BrowserWindow | null = null
 const ptyManager = new PtyManager()
 const workspaceManager = new WorkspaceManager()
 const harnessScanner = new HarnessScanner()
+const gitManager = new GitManager()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -237,6 +239,84 @@ ipcMain.handle('harness:readFile', async (_event, filePath: string) => {
 
 ipcMain.handle('harness:getMcpStatus', async (_event, workspacePath: string) => {
   return harnessScanner.getMcpStatus(workspacePath)
+})
+
+// ─── IPC Handlers: Git ─────────────────────────────────────────────
+
+ipcMain.handle('git:status', async (_event, cwd: string) => {
+  return gitManager.getStatus(cwd)
+})
+
+ipcMain.handle('git:log', async (_event, cwd: string, limit?: number) => {
+  return gitManager.getLog(cwd, limit)
+})
+
+ipcMain.handle('git:branches', async (_event, cwd: string) => {
+  return gitManager.getBranches(cwd)
+})
+
+ipcMain.handle('git:stage', async (_event, cwd: string, files: string[]) => {
+  await gitManager.stage(cwd, files)
+})
+
+ipcMain.handle('git:stageAll', async (_event, cwd: string) => {
+  await gitManager.stageAll(cwd)
+})
+
+ipcMain.handle('git:unstage', async (_event, cwd: string, files: string[]) => {
+  await gitManager.unstage(cwd, files)
+})
+
+ipcMain.handle('git:unstageAll', async (_event, cwd: string) => {
+  await gitManager.unstageAll(cwd)
+})
+
+ipcMain.handle('git:commit', async (_event, cwd: string, message: string) => {
+  return gitManager.commit(cwd, message)
+})
+
+ipcMain.handle('git:push', async (_event, cwd: string) => {
+  return gitManager.push(cwd)
+})
+
+ipcMain.handle('git:pull', async (_event, cwd: string) => {
+  return gitManager.pull(cwd)
+})
+
+ipcMain.handle('git:fetch', async (_event, cwd: string) => {
+  return gitManager.fetch(cwd)
+})
+
+ipcMain.handle('git:checkout', async (_event, cwd: string, branch: string) => {
+  await gitManager.checkout(cwd, branch)
+})
+
+ipcMain.handle('git:createBranch', async (_event, cwd: string, name: string) => {
+  await gitManager.createBranch(cwd, name)
+})
+
+ipcMain.handle('git:deleteBranch', async (_event, cwd: string, name: string) => {
+  await gitManager.deleteBranch(cwd, name)
+})
+
+ipcMain.handle('git:diff', async (_event, cwd: string, file: string, staged: boolean) => {
+  return gitManager.getDiff(cwd, file, staged)
+})
+
+ipcMain.handle('git:commitDiff', async (_event, cwd: string, hash: string) => {
+  return gitManager.getCommitDiff(cwd, hash)
+})
+
+ipcMain.handle('git:commitFiles', async (_event, cwd: string, hash: string) => {
+  return gitManager.getCommitFiles(cwd, hash)
+})
+
+ipcMain.handle('git:discard', async (_event, cwd: string, file: string) => {
+  await gitManager.discard(cwd, file)
+})
+
+ipcMain.handle('git:remotes', async (_event, cwd: string) => {
+  return gitManager.getRemotes(cwd)
 })
 
 // ─── IPC Handlers: System ───────────────────────────────────────────
