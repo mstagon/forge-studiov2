@@ -148,4 +148,89 @@ export class WorkspaceManager {
       // non-fatal
     }
   }
+
+  /**
+   * Update a workspace's harness from the bundled template.
+   * Preserves: agent-memory/, settings.local.json, .pdca-* files.
+   * Backs up the existing .claude/ as .claude.bak.<timestamp>.
+   */
+  async updateHarness(options: {
+    workspacePath: string
+    templatePath: string
+    claudeMdPath?: string
+  }): Promise<{ backupPath: string; version: string }> {
+    const { workspacePath, templatePath, claudeMdPath } = options
+    const claudeDir = path.join(workspacePath, '.claude')
+
+    if (!(await fs.pathExists(templatePath))) {
+      throw new Error(`Bundled harness template not found: ${templatePath}`)
+    }
+
+    // Snapshot files to preserve from the existing .claude/
+    const preserved: { rel: string; tmp: string }[] = []
+    const tmpDir = path.join(workspacePath, `.claude.tmp.${Date.now()}`)
+
+    if (await fs.pathExists(claudeDir)) {
+      await fs.ensureDir(tmpDir)
+      const candidates = ['agent-memory', 'settings.local.json']
+      for (const rel of candidates) {
+        const src = path.join(claudeDir, rel)
+        if (await fs.pathExists(src)) {
+          const dest = path.join(tmpDir, rel)
+          await fs.copy(src, dest)
+          preserved.push({ rel, tmp: dest })
+        }
+      }
+      // Preserve any .pdca-* files at root of .claude/
+      const entries = await fs.readdir(claudeDir)
+      for (const entry of entries) {
+        if (entry.startsWith('.pdca-')) {
+          const src = path.join(claudeDir, entry)
+          const dest = path.join(tmpDir, entry)
+          await fs.copy(src, dest)
+          preserved.push({ rel: entry, tmp: dest })
+        }
+      }
+    }
+
+    // Backup the existing .claude/
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupPath = path.join(workspacePath, `.claude.bak.${stamp}`)
+    if (await fs.pathExists(claudeDir)) {
+      await fs.move(claudeDir, backupPath)
+    }
+
+    // Copy new bundled template
+    await fs.copy(templatePath, claudeDir, {
+      filter: (src) => {
+        const rel = path.relative(templatePath, src)
+        return !rel.includes('settings.local.json') && !rel.includes('.pdca-')
+      },
+    })
+
+    // Restore preserved files
+    for (const item of preserved) {
+      const dest = path.join(claudeDir, item.rel)
+      await fs.copy(item.tmp, dest, { overwrite: true })
+    }
+    await fs.remove(tmpDir).catch(() => {})
+
+    // Update CLAUDE.md
+    if (claudeMdPath && (await fs.pathExists(claudeMdPath))) {
+      await fs.copy(claudeMdPath, path.join(workspacePath, 'CLAUDE.md'), { overwrite: true })
+    }
+
+    // Write version marker
+    const version = app.getVersion()
+    await this.writeVersionFile(claudeDir, version)
+
+    // Mark workspace as harness-applied
+    const ws = this.workspaces.find((w) => w.path === workspacePath)
+    if (ws) {
+      ws.harnessApplied = true
+      this.save()
+    }
+
+    return { backupPath, version }
+  }
 }
