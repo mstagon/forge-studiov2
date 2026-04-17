@@ -60,6 +60,7 @@ export class WorkspaceManager {
         },
       })
       await this.writeVersionFile(destClaude, app.getVersion())
+      await this.ensureMcpRootLink(projectPath)
     }
 
     // Copy CLAUDE.md
@@ -150,6 +151,35 @@ export class WorkspaceManager {
   }
 
   /**
+   * Claude Code only auto-discovers project MCP servers from <project>/.mcp.json
+   * (root). Our harness convention puts it at .claude/mcp.json, so workspaces
+   * miss the project-scoped servers (serena, context7, supabase, …) until the
+   * user wires them by hand.
+   *
+   * Drop a relative symlink at <project>/.mcp.json -> .claude/mcp.json so the
+   * harness file becomes the single source of truth. Idempotent: if a regular
+   * file is already there, leave it alone (the user knows what they're doing);
+   * if a stale symlink points elsewhere, re-point it.
+   */
+  private async ensureMcpRootLink(projectPath: string): Promise<void> {
+    const claudeMcp = path.join(projectPath, '.claude', 'mcp.json')
+    const rootMcp = path.join(projectPath, '.mcp.json')
+    try {
+      if (!(await fs.pathExists(claudeMcp))) return
+      const existing = await fs.lstat(rootMcp).catch(() => null)
+      if (existing) {
+        if (!existing.isSymbolicLink()) return // user file — don't clobber
+        const current = await fs.readlink(rootMcp).catch(() => null)
+        if (current === '.claude/mcp.json') return // already correct
+        await fs.unlink(rootMcp)
+      }
+      await fs.symlink('.claude/mcp.json', rootMcp)
+    } catch {
+      // Symlink failure shouldn't break workspace creation/update.
+    }
+  }
+
+  /**
    * Update a workspace's harness from the bundled template.
    * Preserves: agent-memory/, settings.local.json, .pdca-* files.
    * Backs up the existing .claude/ as .claude.bak.<timestamp>.
@@ -223,6 +253,9 @@ export class WorkspaceManager {
     // Write version marker
     const version = app.getVersion()
     await this.writeVersionFile(claudeDir, version)
+
+    // Ensure root .mcp.json symlink for Claude Code MCP auto-discovery
+    await this.ensureMcpRootLink(workspacePath)
 
     // Mark workspace as harness-applied
     const ws = this.workspaces.find((w) => w.path === workspacePath)
