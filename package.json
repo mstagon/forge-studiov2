@@ -14,7 +14,7 @@
     "electron:build": "npm run sync-harness && npm run build:renderer && electron-builder",
     "lint": "eslint src/ electron/ --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "postinstall": "electron-rebuild"
+    "postinstall": "electron-rebuild && node scripts/patch-isbinaryfile.js"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
