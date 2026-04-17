@@ -276,6 +276,31 @@ ipcMain.handle('harness:getMcpStatus', async (_event, workspacePath: string) => 
   return harnessScanner.getMcpStatus(workspacePath)
 })
 
+ipcMain.handle('harness:getBundledVersion', () => app.getVersion())
+
+ipcMain.handle('harness:getInstalledVersion', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return null
+  return workspaceManager.getInstalledVersion(workspacePath)
+})
+
+ipcMain.handle('harness:update', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    throw new Error('workspacePath is required')
+  }
+  // Verify the workspace is one we track to avoid arbitrary FS writes
+  const tracked = workspaceManager.list().some((w) => w.path === workspacePath)
+  if (!tracked) {
+    throw new Error('Workspace is not tracked by Forge Studio')
+  }
+  const templatePath = app.isPackaged
+    ? path.join(process.resourcesPath, 'harness-template', '.claude')
+    : path.join(path.resolve(__dirname, '../..'), '.claude')
+  const claudeMdPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
+    : path.resolve(__dirname, '../../CLAUDE.md')
+  return workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
+})
+
 // ─── IPC Handlers: Git ─────────────────────────────────────────────
 
 ipcMain.handle('git:status', async (_event, cwd: string) => {

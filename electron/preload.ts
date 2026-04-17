@@ -51,6 +51,12 @@ const api = {
       ipcRenderer.invoke('harness:readFile', filePath),
     getMcpStatus: (workspacePath: string) =>
       ipcRenderer.invoke('harness:getMcpStatus', workspacePath),
+    getBundledVersion: (): Promise<string> =>
+      ipcRenderer.invoke('harness:getBundledVersion'),
+    getInstalledVersion: (workspacePath: string): Promise<string | null> =>
+      ipcRenderer.invoke('harness:getInstalledVersion', workspacePath),
+    update: (workspacePath: string): Promise<{ backupPath: string; version: string }> =>
+      ipcRenderer.invoke('harness:update', workspacePath),
   },
 
   // ─── Git ─────────────────────────────────────────────────────────
