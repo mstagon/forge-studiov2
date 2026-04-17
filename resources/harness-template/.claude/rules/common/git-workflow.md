@@ -72,6 +72,9 @@ prd 머지 → 각 원격 레포 prd로 subtree push → 프로덕션 배포
 - conventional commits 형식: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 - 커밋 메시지는 한글 또는 영어 (혼용 OK)
 - 하나의 커밋에 하나의 논리적 변경
+- **세부 단위로 커밋한다** — 여러 기능/수정을 하나로 묶지 마라.
+  `git add -A && git commit` 한 방 금지. 파일/관심사별로 stage 나눠서 commit n개로 분리.
+  예: 신규 기능 + 리팩토링 + docs 수정 → 최소 3개 커밋. revert/리뷰/bisect 가능성을 항상 우선.
 - 코드젠 파일(.g.dart, .freezed.dart)은 별도 커밋
 - .env, 시크릿 파일 절대 커밋 금지
 - 크로스 스택 변경 시 커밋 메시지에 영향 스택 명시: `feat(server,app): 로그인 API + UI`
