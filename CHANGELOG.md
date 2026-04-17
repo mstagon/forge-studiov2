@@ -4,6 +4,24 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] — 2026-04-17
+
+### Added
+- **In-app update notifier.** A tiny amber pill in the TopBar (`v0.2.4` etc.)
+  appears whenever GitHub has a newer release than the running app. Click it to
+  open the release notes in the default browser. The check runs once on
+  startup and every 60 minutes thereafter.
+- New IPC: `api.updates.check()` returns `{ current, latest, hasUpdate,
+  releaseUrl, publishedAt, notes, checkedAt, error }` and is backed by a
+  dedicated `UpdateChecker` service hitting GitHub's `/releases/latest`
+  endpoint with an 8s timeout.
+
+### Notes
+- This is the lightweight half of auto-update: surface the new release, let
+  the user grab the DMG. Fully background install via `electron-updater` is
+  blocked on restoring code signing + adding notarization, tracked
+  separately.
+
 ## [0.2.2] — 2026-04-17
 
 ### Added
