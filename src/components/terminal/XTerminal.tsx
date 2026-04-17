@@ -48,7 +48,7 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
         cursorStyle: 'bar',
         cursorWidth: 2,
         fontSize: 14,
-        fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Menlo, Monaco, monospace",
+        fontFamily: "'MesloLGS NF', 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Menlo, Monaco, monospace",
         fontWeight: '400',
         fontWeightBold: '600',
         lineHeight: 1.35,
