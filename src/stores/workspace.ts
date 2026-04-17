@@ -6,6 +6,9 @@ interface WorkspaceState {
   activeWorkspace: Workspace | null
   harnessInfo: HarnessInfo | null
   mcpStatus: McpStatus[]
+  bundledHarnessVersion: string | null
+  installedHarnessVersion: string | null
+  harnessUpdating: boolean
   sidebarView: SidebarView
   sidebarVisible: boolean
   dashboardVisible: boolean
@@ -19,6 +22,8 @@ interface WorkspaceState {
   removeWorkspace: (id: string) => void
   scanHarness: () => Promise<void>
   scanMcp: () => Promise<void>
+  refreshHarnessVersion: () => Promise<void>
+  updateHarness: () => Promise<{ backupPath: string; version: string } | null>
 
   setSidebarView: (view: SidebarView) => void
   toggleSidebar: () => void
@@ -32,6 +37,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeWorkspace: null,
   harnessInfo: null,
   mcpStatus: [],
+  bundledHarnessVersion: null,
+  installedHarnessVersion: null,
+  harnessUpdating: false,
   sidebarView: 'workspaces',
   sidebarVisible: true,
   dashboardVisible: false,
@@ -47,6 +55,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ activeWorkspace: workspace })
     get().scanHarness()
     get().scanMcp()
+    get().refreshHarnessVersion()
   },
 
   createWorkspace: async (name: string, dirPath: string) => {
@@ -61,6 +70,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     await get().loadWorkspaces()
     set({ activeWorkspace: workspace, newWorkspaceDialogVisible: false })
     get().scanHarness()
+    get().refreshHarnessVersion()
     return workspace
   },
 
@@ -70,6 +80,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ activeWorkspace: workspace })
     get().scanHarness()
     get().scanMcp()
+    get().refreshHarnessVersion()
     return workspace
   },
 
@@ -93,6 +104,37 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return
     const status = await window.api.harness.getMcpStatus(ws.path)
     set({ mcpStatus: status })
+  },
+
+  refreshHarnessVersion: async () => {
+    const ws = get().activeWorkspace
+    if (!ws) {
+      set({ installedHarnessVersion: null })
+      return
+    }
+    try {
+      const [bundled, installed] = await Promise.all([
+        window.api.harness.getBundledVersion(),
+        window.api.harness.getInstalledVersion(ws.path),
+      ])
+      set({ bundledHarnessVersion: bundled, installedHarnessVersion: installed })
+    } catch (err) {
+      console.error('Failed to read harness version:', err)
+    }
+  },
+
+  updateHarness: async () => {
+    const ws = get().activeWorkspace
+    if (!ws) return null
+    set({ harnessUpdating: true })
+    try {
+      const result = await window.api.harness.update(ws.path)
+      await get().refreshHarnessVersion()
+      await get().scanHarness()
+      return result
+    } finally {
+      set({ harnessUpdating: false })
+    }
   },
 
   setSidebarView: (view: SidebarView) => set({ sidebarView: view, sidebarVisible: true }),

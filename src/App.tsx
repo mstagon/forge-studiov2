@@ -6,6 +6,7 @@ import { TerminalPanel } from './components/terminal/TerminalPanel'
 import { DashboardPanel } from './components/dashboard/DashboardPanel'
 import { CommandPalette } from './components/dashboard/CommandPalette'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
+import { HarnessUpdateBanner } from './components/workspace/HarnessUpdateBanner'
 import { GitGraphPanel } from './components/git/GitGraphPanel'
 import { useWorkspaceStore } from './stores/workspace'
 import { useTerminalStore } from './stores/terminal'
@@ -113,8 +114,11 @@ export default function App() {
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         {sidebarVisible && <Sidebar />}
-        <div className="flex-1 overflow-hidden">
-          <TerminalPanel />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <HarnessUpdateBanner />
+          <div className="flex-1 overflow-hidden">
+            <TerminalPanel />
+          </div>
         </div>
         <DashboardPanel />
         <GitGraphPanel />
