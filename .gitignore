@@ -6,3 +6,21 @@ release/
 .DS_Store
 .env
 .env.*
+.vscode/
+.idea/
+*.swp
+*.swo
+coverage/
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+
+# Local harness backups (created by Update Harness)
+.claude.bak.*
+.claude.tmp.*
+
+# bkit / PDCA runtime artifacts
+docs/.pdca-*
+docs/.bkit-*
