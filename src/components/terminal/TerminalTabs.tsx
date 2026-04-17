@@ -1,5 +1,5 @@
 import { useTerminalStore } from '@/stores/terminal'
-import { VscClose, VscAdd, VscSplitHorizontal, VscTerminal } from 'react-icons/vsc'
+import { VscClose, VscAdd, VscSplitHorizontal, VscSplitVertical, VscTerminal } from 'react-icons/vsc'
 
 export function TerminalTabs() {
   const { tabs, activeTabId, addTab, removeTab, setActiveTab } = useTerminalStore()
@@ -55,9 +55,22 @@ export function TerminalTabs() {
               store.splitPane(tab.id, tab.activePaneId, 'horizontal')
             }
           }}
-          title="Split Pane (Cmd+Shift+H)"
+          title="Split Right (Cmd+Shift+H)"
         >
           <VscSplitHorizontal size={14} />
+        </button>
+        <button
+          className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors"
+          onClick={() => {
+            const tab = tabs.find((t) => t.id === activeTabId)
+            if (tab) {
+              const store = useTerminalStore.getState()
+              store.splitPane(tab.id, tab.activePaneId, 'vertical')
+            }
+          }}
+          title="Split Down (Cmd+Shift+V)"
+        >
+          <VscSplitVertical size={14} />
         </button>
       </div>
     </div>

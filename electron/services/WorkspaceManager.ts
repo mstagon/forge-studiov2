@@ -2,6 +2,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import { v4 as uuid } from 'uuid'
 import { app } from 'electron'
+import { execFileSync } from 'child_process'
 
 export interface Workspace {
   id: string
@@ -73,8 +74,7 @@ export class WorkspaceManager {
 
     // Initialize git
     try {
-      const { execSync } = require('child_process')
-      execSync('git init', { cwd: projectPath, stdio: 'ignore' })
+      execFileSync('git', ['init'], { cwd: projectPath, stdio: 'ignore' })
     } catch {
       // Git not available
     }

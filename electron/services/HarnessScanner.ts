@@ -1,5 +1,6 @@
 import fs from 'fs-extra'
 import path from 'path'
+import { execFileSync } from 'child_process'
 
 export interface HarnessInfo {
   agents: { name: string; file: string }[]
@@ -141,8 +142,7 @@ export class HarnessScanner {
         } else if (command) {
           // Check if command exists
           try {
-            const { execSync } = require('child_process')
-            execSync(`which ${command}`, { encoding: 'utf-8', timeout: 2000 })
+            execFileSync('which', [command], { encoding: 'utf-8', timeout: 2000 })
             results.push({ name, status: 'available', command })
           } catch {
             results.push({ name, status: 'unavailable', command })

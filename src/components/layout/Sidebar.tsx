@@ -1,7 +1,7 @@
 import { useWorkspaceStore } from '@/stores/workspace'
 import { VscFolder, VscExtensions, VscGear, VscAdd, VscTrash, VscCheck, VscCircleFilled, VscGitMerge } from 'react-icons/vsc'
 import { GitSidebar } from '@/components/git/GitSidebar'
-import type { SidebarView } from '@/types'
+import type { SidebarView, Workspace, HarnessInfo } from '@/types'
 
 const NAV_ITEMS: { view: SidebarView; icon: typeof VscFolder; label: string }[] = [
   { view: 'workspaces', icon: VscFolder, label: 'Workspaces' },
@@ -94,9 +94,9 @@ export function Sidebar() {
 }
 
 function WorkspaceList({ workspaces, activeId, onSelect, onRemove, onOpen }: {
-  workspaces: any[]
+  workspaces: Workspace[]
   activeId: string | null
-  onSelect: (ws: any) => void
+  onSelect: (ws: Workspace) => void
   onRemove: (id: string) => void
   onOpen: () => void
 }) {
@@ -140,7 +140,7 @@ function WorkspaceList({ workspaces, activeId, onSelect, onRemove, onOpen }: {
   )
 }
 
-function DashboardSummary({ info }: { info: any }) {
+function DashboardSummary({ info }: { info: HarnessInfo }) {
   const items = [
     { label: 'Agents', count: info.agents.length, color: 'text-blue-400' },
     { label: 'Skills', count: info.skills.length, color: 'text-green-400' },

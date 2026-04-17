@@ -51,9 +51,15 @@ export function CommandPalette() {
           category: 'Agent',
           icon: VscExtensions,
           action: async () => {
-            // Show agent details
-            const content = await window.api.harness.readFile(agent.file)
-            console.log(content)
+            // Type agent name into active terminal for quick reference
+            const store = useTerminalStore.getState()
+            const tab = store.tabs.find((t) => t.id === store.activeTabId)
+            if (tab) {
+              const pane = tab.panes.find((p) => p.id === tab.activePaneId)
+              if (pane?.ptyId) {
+                window.api.pty.write(pane.ptyId, `# Agent: ${agent.name}\n`)
+              }
+            }
             toggleCommandPalette()
           },
         })

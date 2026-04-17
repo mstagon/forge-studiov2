@@ -89,28 +89,48 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   stage: async (cwd, files) => {
-    await window.api.git.stage(cwd, files)
-    await get().refreshStatus(cwd)
+    try {
+      await window.api.git.stage(cwd, files)
+      await get().refreshStatus(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to stage files' })
+    }
   },
 
   stageAll: async (cwd) => {
-    await window.api.git.stageAll(cwd)
-    await get().refreshStatus(cwd)
+    try {
+      await window.api.git.stageAll(cwd)
+      await get().refreshStatus(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to stage all files' })
+    }
   },
 
   unstage: async (cwd, files) => {
-    await window.api.git.unstage(cwd, files)
-    await get().refreshStatus(cwd)
+    try {
+      await window.api.git.unstage(cwd, files)
+      await get().refreshStatus(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to unstage files' })
+    }
   },
 
   unstageAll: async (cwd) => {
-    await window.api.git.unstageAll(cwd)
-    await get().refreshStatus(cwd)
+    try {
+      await window.api.git.unstageAll(cwd)
+      await get().refreshStatus(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to unstage all files' })
+    }
   },
 
   discard: async (cwd, file) => {
-    await window.api.git.discard(cwd, file)
-    await get().refreshStatus(cwd)
+    try {
+      await window.api.git.discard(cwd, file)
+      await get().refreshStatus(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to discard changes' })
+    }
   },
 
   commit: async (cwd) => {
@@ -177,13 +197,21 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   createBranch: async (cwd, name) => {
-    await window.api.git.createBranch(cwd, name)
-    await get().refresh(cwd)
+    try {
+      await window.api.git.createBranch(cwd, name)
+      await get().refresh(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to create branch' })
+    }
   },
 
   deleteBranch: async (cwd, name) => {
-    await window.api.git.deleteBranch(cwd, name)
-    await get().refresh(cwd)
+    try {
+      await window.api.git.deleteBranch(cwd, name)
+      await get().refresh(cwd)
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : 'Failed to delete branch' })
+    }
   },
 
   selectCommit: async (cwd, commit) => {

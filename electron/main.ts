@@ -1,9 +1,14 @@
 import { app, BrowserWindow, ipcMain, Menu, shell, dialog, nativeTheme } from 'electron'
 import path from 'path'
+import fs from 'fs'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { PtyManager } from './services/PtyManager'
 import { WorkspaceManager } from './services/WorkspaceManager'
 import { HarnessScanner } from './services/HarnessScanner'
 import { GitManager } from './services/GitManager'
+
+const execFileAsync = promisify(execFile)
 
 process.env.DIST_ELECTRON = path.join(__dirname)
 process.env.DIST = path.join(process.env.DIST_ELECTRON, '../dist')
@@ -49,14 +54,22 @@ function createWindow() {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    try {
+      const parsed = new URL(url)
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        shell.openExternal(url)
+      }
+    } catch {
+      // Invalid URL, ignore
+    }
     return { action: 'deny' }
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
-    mainWindow.loadFile(path.join(process.env.DIST!, 'index.html'))
+    const distPath = process.env.DIST || path.join(__dirname, '../dist')
+    mainWindow.loadFile(path.join(distPath, 'index.html'))
   }
 }
 
@@ -146,7 +159,8 @@ function buildMenu() {
 }
 
 async function handleOpenWorkspace() {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  if (!mainWindow) return
+  const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
     title: 'Open Workspace',
   })
@@ -234,7 +248,28 @@ ipcMain.handle('harness:scan', async (_event, workspacePath: string) => {
 })
 
 ipcMain.handle('harness:readFile', async (_event, filePath: string) => {
-  return harnessScanner.readFile(filePath)
+  if (!filePath || typeof filePath !== 'string') return ''
+  // Resolve symlinks to prevent symlink traversal attacks
+  let realPath: string
+  try {
+    realPath = fs.realpathSync(path.resolve(filePath))
+  } catch {
+    return ''
+  }
+  // Only allow reading files within workspace .claude directories
+  const allWorkspaces = workspaceManager.list()
+  const isAllowed = allWorkspaces.some((ws) => {
+    try {
+      const claudeDir = fs.realpathSync(path.resolve(ws.path, '.claude'))
+      return realPath.startsWith(claudeDir + path.sep) || realPath === claudeDir
+    } catch {
+      return false
+    }
+  })
+  if (!isAllowed) {
+    throw new Error('Access denied: path must be within a workspace .claude directory')
+  }
+  return harnessScanner.readFile(realPath)
 })
 
 ipcMain.handle('harness:getMcpStatus', async (_event, workspacePath: string) => {
@@ -322,21 +357,33 @@ ipcMain.handle('git:remotes', async (_event, cwd: string) => {
 // ─── IPC Handlers: System ───────────────────────────────────────────
 
 ipcMain.handle('system:openExternal', (_event, url: string) => {
-  shell.openExternal(url)
+  if (!url || typeof url !== 'string') return
+  try {
+    const parsed = new URL(url)
+    if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+      shell.openExternal(url)
+    }
+  } catch {
+    // Invalid URL, ignore
+  }
 })
 
 ipcMain.handle('system:getHomePath', () => app.getPath('home'))
 
 ipcMain.handle('system:showOpenDialog', async (_event, options: Electron.OpenDialogOptions) => {
-  return dialog.showOpenDialog(mainWindow!, options)
+  if (!mainWindow) throw new Error('No active window')
+  return dialog.showOpenDialog(mainWindow, options)
 })
 
 ipcMain.handle('system:getTheme', () => nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
 
 ipcMain.handle('system:which', async (_event, cmd: string) => {
-  const { execSync } = require('child_process')
+  if (!cmd || typeof cmd !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(cmd)) {
+    return null
+  }
   try {
-    return execSync(`which ${cmd}`, { encoding: 'utf-8' }).trim()
+    const { stdout } = await execFileAsync('which', [cmd], { encoding: 'utf-8', timeout: 3000 })
+    return stdout.trim()
   } catch {
     return null
   }

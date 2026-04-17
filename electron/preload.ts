@@ -1,4 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+
+const ALLOWED_CHANNELS = new Set(['navigate', 'action', 'workspace-opened'])
 
 const api = {
   // ─── PTY ─────────────────────────────────────────────────────────
@@ -14,12 +16,12 @@ const api = {
     getCwd: (id: string) =>
       ipcRenderer.invoke('pty:getCwd', id),
     onData: (id: string, callback: (data: string) => void) => {
-      const handler = (_event: any, data: string) => callback(data)
+      const handler = (_event: IpcRendererEvent, data: string) => callback(data)
       ipcRenderer.on(`pty:data:${id}`, handler)
       return () => ipcRenderer.removeListener(`pty:data:${id}`, handler)
     },
     onExit: (id: string, callback: (exitCode: number) => void) => {
-      const handler = (_event: any, exitCode: number) => callback(exitCode)
+      const handler = (_event: IpcRendererEvent, exitCode: number) => callback(exitCode)
       ipcRenderer.on(`pty:exit:${id}`, handler)
       return () => ipcRenderer.removeListener(`pty:exit:${id}`, handler)
     },
@@ -80,7 +82,7 @@ const api = {
       ipcRenderer.invoke('system:openExternal', url),
     getHomePath: () =>
       ipcRenderer.invoke('system:getHomePath'),
-    showOpenDialog: (options: any) =>
+    showOpenDialog: (options: Electron.OpenDialogOptions) =>
       ipcRenderer.invoke('system:showOpenDialog', options),
     getTheme: () =>
       ipcRenderer.invoke('system:getTheme'),
@@ -89,8 +91,12 @@ const api = {
   },
 
   // ─── Events ──────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on: (channel: string, callback: (...args: any[]) => void) => {
-    const handler = (_event: any, ...args: any[]) => callback(...args)
+    if (!ALLOWED_CHANNELS.has(channel)) {
+      throw new Error(`IPC channel "${channel}" is not allowed`)
+    }
+    const handler = (_event: IpcRendererEvent, ...args: unknown[]) => callback(...args)
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },

@@ -55,7 +55,11 @@ function FileItem({ file, staged, cwd }: { file: GitFileChange | string; staged:
             {!isUntracked && (
               <button
                 className="p-0.5 hover:bg-surface-3 rounded text-text-muted hover:text-red-400"
-                onClick={() => discard(cwd, path)}
+                onClick={() => {
+                  if (window.confirm(`Discard changes to ${path.split('/').pop()}? This cannot be undone.`)) {
+                    discard(cwd, path)
+                  }
+                }}
                 title="Discard changes"
               >
                 <VscDiscard size={14} />

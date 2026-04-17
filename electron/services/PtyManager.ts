@@ -1,6 +1,7 @@
 import * as pty from 'node-pty'
 import { v4 as uuid } from 'uuid'
 import os from 'os'
+import { execFileSync } from 'child_process'
 
 interface PtyInstance {
   process: pty.IPty
@@ -10,9 +11,19 @@ interface PtyInstance {
 export class PtyManager {
   private instances = new Map<string, PtyInstance>()
 
+  private static readonly ALLOWED_SHELLS = new Set([
+    '/bin/bash', '/bin/zsh', '/bin/sh', '/usr/bin/fish', '/usr/local/bin/bash',
+    '/usr/local/bin/zsh', '/usr/local/bin/fish', '/opt/homebrew/bin/bash',
+    '/opt/homebrew/bin/zsh', '/opt/homebrew/bin/fish',
+    'powershell.exe', 'cmd.exe',
+  ])
+
   create(options: { cols: number; rows: number; cwd: string; shell?: string }): string {
     const id = uuid()
-    const defaultShell = options.shell || process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : '/bin/zsh')
+    const systemShell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : '/bin/zsh')
+    const defaultShell = (options.shell && PtyManager.ALLOWED_SHELLS.has(options.shell))
+      ? options.shell
+      : systemShell
 
     const ptyProcess = pty.spawn(defaultShell, [], {
       name: 'xterm-256color',
@@ -66,14 +77,20 @@ export class PtyManager {
     // Try to get the real CWD from the process
     try {
       const pid = instance.process.pid
-      const { execSync } = require('child_process')
-      const cwd = execSync(`lsof -p ${pid} | grep cwd | awk '{print $NF}'`, {
+      const lsofOutput = execFileSync('lsof', ['-p', String(pid), '-Fn'], {
         encoding: 'utf-8',
         timeout: 1000,
-      }).trim()
-      if (cwd) {
-        instance.cwd = cwd
-        return cwd
+      })
+      // Parse lsof -Fn output: lines starting with 'n' after 'fcwd' line
+      const lines = lsofOutput.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i] === 'fcwd' && i + 1 < lines.length && lines[i + 1].startsWith('n')) {
+          const cwd = lines[i + 1].slice(1)
+          if (cwd) {
+            instance.cwd = cwd
+            return cwd
+          }
+        }
       }
     } catch {
       // Fallback to stored cwd
