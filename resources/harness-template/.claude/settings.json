@@ -1,0 +1,238 @@
+{
+  "model": "claude-opus-4-6",
+  "effortLevel": "high",
+  "permissions": {
+    "allowedTools": [
+      "Read",
+      "Write(lib/**)",
+      "Write(test/**)",
+      "Write(integration_test/**)",
+      "Write(docs/**)",
+      "Write(pubspec.yaml)",
+      "Write(build.yaml)",
+      "Write(l10n.yaml)",
+      "Write(.claude/**)",
+      "Write(server/src/**)",
+      "Write(server/test/**)",
+      "Write(prisma/**)",
+      "Write(cms/app/**)",
+      "Write(cms/lib/**)",
+      "Write(cms/components/**)",
+      "Write(cms/public/**)",
+      "Bash(flutter *)",
+      "Bash(dart *)",
+      "Bash(git *)",
+      "Bash(cd ios && pod install*)",
+      "Bash(ls *)",
+      "Bash(which *)",
+      "Bash(npx *)",
+      "Bash(uvx *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(cd server *)",
+      "Bash(cd cms *)",
+      "Bash(git subtree *)",
+      "Bash(git remote *)"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Read(.env.dev)",
+      "Read(.env.stg)",
+      "Read(.env.prd)",
+      "Write(.env*)",
+      "Write(**.g.dart)",
+      "Write(**.freezed.dart)",
+      "Write(analysis_options.yaml)",
+      "Write(pubspec.lock)",
+      "Write(package-lock.json)",
+      "Write(tsconfig.json)",
+      "Write(.eslintrc*)",
+      "Write(next.config.*)",
+      "Write(nest-cli.json)",
+      "Write(ios/Runner/GoogleService-Info.plist)",
+      "Write(android/app/google-services.json)",
+      "Write(prisma/migrations/**)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(flutter build release*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard*)",
+      "Bash(git commit*--no-verify*)",
+      "Bash(npx prisma migrate reset*)",
+      "Bash(npx prisma db push*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🚀 Fullstack Dev Harness' && echo '─────────────────────────' && echo '📱 Flutter: '$(flutter --version 2>&1 | head -1 || echo 'N/A') && echo '🟢 Node: '$(node --version 2>/dev/null || echo 'N/A') && echo '🔍 브랜치: '$(git branch --show-current 2>/dev/null || echo 'N/A') && echo '📝 마지막 커밋: '$(git log --oneline -1 2>/dev/null || echo 'N/A') && echo '📋 TODO/FIXME: '$(grep -rn 'TODO\\|FIXME\\|HACK' lib/ server/src/ cms/app/ 2>/dev/null | wc -l | tr -d ' ')'건'"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/mcp-health.sh 2>&1 | head -20",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/auto-profile.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // empty' 2>/dev/null); [ -z \"$CMD\" ] && exit 0; if echo \"$CMD\" | grep -qE 'rm -rf|sudo|flutter build release|drop table|delete from|push --force|push -f |reset --hard|--no-verify|prisma migrate reset|prisma db push'; then echo '🚫 BLOCKED: 위험한 명령어 감지' >&2; exit 1; fi; if echo \"$CMD\" | grep -qE '^git commit'; then staged=$(git diff --cached --name-only 2>/dev/null); if [ -n \"$staged\" ]; then secrets=$(git diff --cached -U0 2>/dev/null | grep -iE 'AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{48}|api_key\\s*=|secret_key\\s*=|password\\s*=' | head -5); if [ -n \"$secrets\" ]; then echo '🚫 BLOCKED: staged 파일에 시크릿/API 키 패턴 감지' >&2; echo \"$secrets\" >&2; exit 1; fi; fi; fi; exit 0"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/tmux-dev.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); [ -z \"$FILE\" ] && exit 0; if echo \"$FILE\" | grep -qE '\\.g\\.dart$|\\.freezed\\.dart$'; then echo '🚫 BLOCKED: 코드젠 파일 직접 수정 금지' >&2; exit 1; fi; if echo \"$FILE\" | grep -qE 'prisma/migrations/'; then echo '🚫 BLOCKED: 마이그레이션 파일 직접 수정 금지' >&2; exit 1; fi; exit 0"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/skill-injector.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/gateguard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); [ -z \"$FILE\" ] && exit 0; if echo \"$FILE\" | grep -q '\\.dart$' && ! echo \"$FILE\" | grep -qE '\\.g\\.dart$|\\.freezed\\.dart$'; then dart format \"$FILE\" 2>/dev/null; fi; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write(pubspec.yaml)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "flutter pub get 2>&1 | tail -3"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(dart run build_runner*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ 코드젠 완료 — .g.dart / .freezed.dart 파일 갱신됨'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(npx prisma migrate*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ Prisma 마이그레이션 완료 — npx prisma generate 자동 실행됨'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(npx prisma generate*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ Prisma Client 재생성 완료'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/pre-compact.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "changed_dart=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.dart$' | grep -vE '\\.g\\.dart$|\\.freezed\\.dart$' | head -20); changed_ts=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.tsx\\?$' | head -20); if [ -n \"$changed_dart\" ]; then echo \"$changed_dart\" | xargs dart format 2>/dev/null; flutter analyze --no-pub lib/ 2>&1 | tail -5; fi; if [ -n \"$changed_ts\" ] && [ -d server ]; then cd server && npx eslint --fix $(echo \"$changed_ts\" | tr '\\n' ' ') 2>/dev/null; cd ..; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/learn.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/cost-tracker.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/scripts/evaluate-session.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"작업 완료\" with title \"Fullstack Dev\" sound name \"Glass\"' 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "MSG=$(jq -r '.message // empty' 2>/dev/null); if echo \"$MSG\" | grep -qiE 'error|fail|exception'; then osascript -e 'display notification \"에러 발생\" with title \"Fullstack Dev\" sound name \"Basso\"' 2>/dev/null; fi; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
