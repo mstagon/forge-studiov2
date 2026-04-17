@@ -55,6 +55,7 @@
   "build": {
     "appId": "com.forge.studio",
     "productName": "Forge Studio",
+    "afterPack": "scripts/after-pack.js",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
