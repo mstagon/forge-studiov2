@@ -4,6 +4,28 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] — 2026-04-17
+
+### Fixed
+- **"App is damaged and can't be opened" Gatekeeper error.** macOS Sequoia +
+  Apple Silicon refuses to load entirely-unsigned bundles and surfaces the
+  failure as a damaged-app dialog that not even right-click → Open recovers
+  from. `scripts/after-pack.js` now invokes `codesign --sign - --deep --force`
+  on the bundle when no Developer ID is configured, so installed `.app`s carry
+  an ad-hoc signature. Gatekeeper will still show "unidentified developer" on
+  first launch, but right-click → Open works as expected.
+- The ad-hoc signing step is skipped automatically when `CSC_LINK`, `CSC_NAME`,
+  or `CSC_IDENTITY_AUTO_DISCOVERY=true` is set — those builds get real
+  Developer ID signing from electron-builder later in the pipeline.
+
+### Workaround for 0.2.0 – 0.2.3 installs
+If you already installed an earlier release and hit the damaged-app dialog,
+run once and the app is healthy again:
+```bash
+xattr -cr "/Applications/Forge Studio.app"
+codesign --sign - --deep --force "/Applications/Forge Studio.app"
+```
+
 ## [0.2.3] — 2026-04-17
 
 ### Added
