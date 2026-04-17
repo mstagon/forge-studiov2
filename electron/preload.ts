@@ -82,6 +82,20 @@ const api = {
     remotes: (cwd: string) => ipcRenderer.invoke('git:remotes', cwd),
   },
 
+  // ─── Updates ─────────────────────────────────────────────────────
+  updates: {
+    check: (): Promise<{
+      current: string
+      latest: string | null
+      hasUpdate: boolean
+      releaseUrl: string | null
+      publishedAt: string | null
+      notes: string | null
+      checkedAt: string
+      error: string | null
+    }> => ipcRenderer.invoke('updates:check'),
+  },
+
   // ─── System ──────────────────────────────────────────────────────
   system: {
     openExternal: (url: string) =>

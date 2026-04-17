@@ -7,6 +7,7 @@ import { PtyManager } from './services/PtyManager'
 import { WorkspaceManager } from './services/WorkspaceManager'
 import { HarnessScanner } from './services/HarnessScanner'
 import { GitManager } from './services/GitManager'
+import { UpdateChecker } from './services/UpdateChecker'
 
 const execFileAsync = promisify(execFile)
 
@@ -21,6 +22,7 @@ const ptyManager = new PtyManager()
 const workspaceManager = new WorkspaceManager()
 const harnessScanner = new HarnessScanner()
 const gitManager = new GitManager()
+const updateChecker = new UpdateChecker()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -413,6 +415,10 @@ ipcMain.handle('system:which', async (_event, cmd: string) => {
     return null
   }
 })
+
+// ─── IPC Handlers: Updates ──────────────────────────────────────────
+
+ipcMain.handle('updates:check', () => updateChecker.check())
 
 // ─── App Lifecycle ──────────────────────────────────────────────────
 
