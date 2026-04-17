@@ -10,6 +10,7 @@ import { HarnessUpdateBanner } from './components/workspace/HarnessUpdateBanner'
 import { GitGraphPanel } from './components/git/GitGraphPanel'
 import { useWorkspaceStore } from './stores/workspace'
 import { useTerminalStore } from './stores/terminal'
+import { useAppUpdateStore } from './stores/appUpdate'
 
 export default function App() {
   const {
@@ -24,6 +25,14 @@ export default function App() {
   useEffect(() => {
     loadWorkspaces()
   }, [loadWorkspaces])
+
+  // App update polling: check on startup, then every 60 minutes.
+  useEffect(() => {
+    const checkUpdates = useAppUpdateStore.getState().check
+    checkUpdates()
+    const id = setInterval(checkUpdates, 60 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   // Create initial terminal when workspace is set
   useEffect(() => {

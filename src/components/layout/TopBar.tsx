@@ -1,5 +1,6 @@
 import { useWorkspaceStore } from '@/stores/workspace'
 import { VscMenu, VscSearch, VscSettingsGear } from 'react-icons/vsc'
+import { AppUpdateBadge } from './AppUpdateBadge'
 
 export function TopBar() {
   const { activeWorkspace, toggleSidebar, toggleCommandPalette } = useWorkspaceStore()
@@ -33,6 +34,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-0.5 pr-3 app-no-drag">
+        <AppUpdateBadge />
         <button
           className="p-1.5 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary"
           onClick={toggleCommandPalette}
