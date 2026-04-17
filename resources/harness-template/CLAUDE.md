@@ -39,7 +39,9 @@ Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS 풀스택 프로젝트
 | 파일 패턴 | 스킬 |
 |-----------|------|
 | `lib/domain/entity/**`, `lib/data/**/dto/**` | `freezed-models` |
-| `lib/presentation/**` | `riverpod-patterns`, `go-router` |
+| `lib/presentation/**` | `riverpod-patterns`, `go-router`, `mobile-design`, `mobile-touch` |
+| 모바일 화면/UX 설계, 새 화면/위젯, 네비게이션, 컬러/타이포 결정 | `mobile-design` |
+| 제스처, 햅틱, 터치 피드백, 애니메이션, 트랜지션, 스크롤 모션 | `mobile-touch` |
 | `lib/data/remote/**`, `lib/core/network/**` | `dio-retrofit` |
 | `lib/core/utils/result.dart` | `error-handling` |
 | `lib/core/logger/**` | `logging` |
@@ -163,7 +165,8 @@ Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS 풀스택 프로젝트
 | "설계/아키텍처" | tech-architect → planner 체이닝 |
 | DB/스키마/테이블 관련 | prisma-data → nestjs-backend 자동 체이닝 |
 | API/엔드포인트 관련 | nestjs-backend → api-sync → flutter DTO 자동 체이닝 |
-| UI/화면/위젯 관련 | pencil 확인 → flutter-ui → riverpod-logic |
+| UI/화면/위젯 관련 | pencil 확인 → mobile-design (MFRI) → flutter-ui → riverpod-logic |
+| 제스처/햅틱/모션/애니메이션/트랜지션 | mobile-touch → flutter-ui (애니메이션 컨트롤러 + 스프링/이징 적용) |
 | CMS/어드민 관련 | nextjs-cms 독립 실행 |
 
 ### 팀 에이전트 병렬 파견
@@ -187,6 +190,9 @@ Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS 풀스택 프로젝트
 
 skill-injector.sh 훅이 파일 패턴을 감지하고, 나(Claude)는 해당 스킬을 **읽고 적용**한다:
 - `lib/domain/entity/` 편집 → freezed-models 스킬 → freezed 패턴, build_runner 후처리
+- `lib/presentation/` 편집 → riverpod-patterns + go-router + **mobile-design** + **mobile-touch**
+  - mobile-design: MFRI(Mobile Feasibility & Risk Index) 평가 → 화면 구조/네비/컬러/타이포 의사결정
+  - mobile-touch: Disney 12 원칙 → 제스처/햅틱/스프링/이징/오버스크롤 모션
 - `server/src/auth/` 편집 → nestjs-auth 스킬 → JWT, Passport, Guard 패턴
 - `server/src/**/dto/` 편집 → api-contract 스킬 → NestJS↔Flutter DTO 동기화
 - `prisma/schema.prisma` 편집 → prisma-patterns + postgres-patterns 스킬
