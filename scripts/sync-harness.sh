@@ -11,6 +11,17 @@ echo "Syncing harness template..."
 echo "  From: $HARNESS_ROOT"
 echo "  To:   $TEMPLATE_DIR"
 
+# Safety: if there's no source harness in the parent dir, do NOT wipe what we
+# already have committed in resources/harness-template. This script is meant for
+# dev machines where the parent dir IS the harness mono-repo; on clean builds
+# (CI, fresh clone, downloaded zip) the parent has nothing and the committed
+# template is the source of truth.
+if [ ! -d "$HARNESS_ROOT/.claude" ]; then
+  echo "  ⚠ No .claude/ at $HARNESS_ROOT — keeping committed template as-is."
+  echo "  (Run sync-harness only in the harness mono-repo where the parent has .claude/)"
+  exit 0
+fi
+
 # Clean previous
 rm -rf "$TEMPLATE_DIR/.claude" "$TEMPLATE_DIR/CLAUDE.md"
 
