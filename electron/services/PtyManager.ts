@@ -25,6 +25,13 @@ export class PtyManager {
       ? options.shell
       : systemShell
 
+    // GUI-launched apps on macOS often miss /opt/homebrew/bin and /usr/local/bin
+    // in PATH, breaking rbenv/nvm/pyenv/fvm/etc. Prepend them on darwin.
+    const basePath = process.env.PATH || ''
+    const augmentedPath = os.platform() === 'darwin'
+      ? ['/opt/homebrew/bin', '/usr/local/bin', basePath].filter(Boolean).join(':')
+      : basePath
+
     const ptyProcess = pty.spawn(defaultShell, [], {
       name: 'xterm-256color',
       cols: options.cols,
@@ -32,6 +39,7 @@ export class PtyManager {
       cwd: options.cwd,
       env: {
         ...process.env,
+        PATH: augmentedPath,
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
         TERM_PROGRAM: 'ForgeStudio',
