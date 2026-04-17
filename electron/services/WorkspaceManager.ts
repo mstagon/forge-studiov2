@@ -59,6 +59,7 @@ export class WorkspaceManager {
           return !rel.includes('settings.local.json') && !rel.includes('.pdca-')
         },
       })
+      await this.writeVersionFile(destClaude, app.getVersion())
     }
 
     // Copy CLAUDE.md
@@ -126,5 +127,25 @@ export class WorkspaceManager {
   remove(id: string): void {
     this.workspaces = this.workspaces.filter((w) => w.id !== id)
     this.save()
+  }
+
+  async getInstalledVersion(workspacePath: string): Promise<string | null> {
+    const versionFile = path.join(workspacePath, '.claude', '.harness-version')
+    try {
+      if (await fs.pathExists(versionFile)) {
+        return (await fs.readFile(versionFile, 'utf-8')).trim()
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  }
+
+  private async writeVersionFile(claudeDir: string, version: string): Promise<void> {
+    try {
+      await fs.writeFile(path.join(claudeDir, '.harness-version'), version, 'utf-8')
+    } catch {
+      // non-fatal
+    }
   }
 }
