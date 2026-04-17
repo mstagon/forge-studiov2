@@ -4,6 +4,28 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] — 2026-04-17
+
+### Fixed
+- **Project MCP servers now actually load.** Claude Code only auto-discovers
+  MCP from `<project>/.mcp.json` (root), but our harness convention puts it at
+  `<project>/.claude/mcp.json` — so workspaces silently lost every project-
+  scoped server (serena, context7, supabase, …) defined in the bundled
+  harness. `WorkspaceManager.create` and `.updateHarness` now drop a relative
+  symlink at `<project>/.mcp.json -> .claude/mcp.json` so the harness file
+  becomes the single source of truth, and Claude Code picks the servers up
+  with no manual wiring.
+- The symlink is idempotent: a regular file at `.mcp.json` is left alone
+  (user-authored), a stale symlink is re-pointed.
+
+### Workaround for existing workspaces (one-liner)
+```bash
+cd <workspace>
+ln -sf .claude/mcp.json .mcp.json
+```
+Or just hit *Update* on the harness banner after installing 0.2.5 — the
+symlink will be created during the update flow.
+
 ## [0.2.4] — 2026-04-17
 
 ### Fixed
