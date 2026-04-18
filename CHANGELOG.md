@@ -4,6 +4,34 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] — 2026-04-18
+
+### Changed
+- **Bundled `CLAUDE.md` is now a lean, ROLE-first delegation hub (505 → 146
+  lines, 71% shorter).** Prior CLAUDE.md buried the manager directive under
+  tech-stack tables and 10-step orchestration flows; model sometimes drifted
+  into implementer mode before it ever parsed the routing rules. New layout,
+  top to bottom: ROLE: MANAGER → STOP-THE-LINE → YOU MUST DO / MUST NOT DO →
+  per-response self-check → Agent/Skill routing tables → pipeline one-liner
+  → ask-user list → pointers table.
+- Operational detail split into dedicated rule files so the model pulls them
+  on demand instead of burning context every turn:
+  - `rules/common/orchestration.md` — full dispatch flow, chaining, parallel
+    rules, verification automation, TDD loop
+  - `rules/common/automation.md` — hooks, profiles, continuous learning,
+    verification loop, checkpoint
+  - `rules/common/mcp.md` — MCP server inventory + usage rules
+  - `contexts/tech-stack.md` — Flutter / NestJS / Prisma / Next.js versions
+    + build commands
+  - `rules/common/architecture.md` — appended with monorepo + lib/ +
+    server/src/ directory layouts
+
+### Upgrade behavior
+Existing workspaces see the harness update banner (0.3.1 → 0.3.2). Clicking
+*Update* swaps in the lean CLAUDE.md and new rule files; your local
+`agent-memory/`, `settings.local.json`, and `.pdca-*` are preserved as
+always.
+
 ## [0.3.1] — 2026-04-18
 
 ### Changed
