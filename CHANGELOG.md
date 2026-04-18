@@ -4,6 +4,21 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8] — 2026-04-18
+
+### Fixed (critical — please upgrade)
+- **0.2.7 startup crash:** `Error: Cannot find module 'node-pty'`. Fix to
+  the build pipeline introduced a `beforeBuild` hook that returned `false`
+  to tell electron-builder "we already ran our build step, skip your dep
+  install". Per electron-builder docs, that return value also skips packing
+  `node_modules` into `app.asar.unpacked`, which is exactly where native
+  modules like node-pty live. Result: `app.asar.unpacked` was empty and
+  the main process crashed before the window even appeared.
+- `scripts/before-build.js` now returns `undefined` so electron-builder
+  performs its normal native-module detection and packaging after our
+  vite build step. The 0.2.8 DMG is verified to contain
+  `app.asar.unpacked/node_modules/node-pty/` again.
+
 ## [0.2.7] — 2026-04-18
 
 ### Fixed (critical — please upgrade)
