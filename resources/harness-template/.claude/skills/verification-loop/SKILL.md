@@ -7,7 +7,7 @@
 ### 1. 빌드 체크
 ```bash
 # Flutter
-flutter analyze --no-pub lib/
+flutter analyze --no-pub client/
 dart run build_runner build -d  # freezed/json_serializable 동기화
 
 # NestJS

@@ -44,7 +44,7 @@
 
 ```
 <project>/                 # 로컬 모노레포
-├── lib/        → app repo  (Flutter)
+├── client/        → app repo  (Flutter)
 ├── server/     → server repo (NestJS + Prisma)
 ├── cms/        → cms repo   (Next.js)
 └── docs/       → 모노레포 전용
@@ -79,18 +79,18 @@
 
 | 파일 패턴 | 스킬 |
 |-----------|------|
-| `lib/domain/entity/**`, `lib/data/**/dto/**` | `freezed-models` |
-| `lib/presentation/**` | `riverpod-patterns`, `go-router`, `mobile-design`, `mobile-touch` |
+| `client/domain/entity/**`, `client/data/**/dto/**` | `freezed-models` |
+| `client/presentation/**` | `riverpod-patterns`, `go-router`, `mobile-design`, `mobile-touch` |
 | 모바일 화면/UX 설계, 네비게이션, 컬러/타이포 결정 | `mobile-design` |
 | 제스처, 햅틱, 터치 피드백, 애니메이션, 트랜지션 | `mobile-touch` |
-| `lib/data/remote/**`, `lib/core/network/**` | `dio-retrofit` |
-| `lib/core/utils/result.dart` | `error-handling` |
-| `lib/core/logger/**` | `logging` |
+| `client/data/remote/**`, `client/core/network/**` | `dio-retrofit` |
+| `client/core/utils/result.dart` | `error-handling` |
+| `client/core/logger/**` | `logging` |
 | `server/src/**/*.module.ts` | `nestjs-module` |
 | `server/src/auth/**` | `nestjs-auth` |
 | `prisma/schema.prisma` | `prisma-patterns`, `postgres-patterns` |
 | `cms/app/**` | `nextjs-patterns` |
-| `server/src/**/dto/**` ↔ `lib/data/**/dto/**` | `api-contract` |
+| `server/src/**/dto/**` ↔ `client/data/**/dto/**` | `api-contract` |
 | `test/**`, `server/test/**` | `tdd-workflow` |
 | `Dockerfile`, `docker-compose.*` | `deployment-patterns` |
 

@@ -1,7 +1,7 @@
 ---
 name: dio-retrofit
 description: Dio+Retrofit API 통신 패턴. API 클라이언트, 인터셉터 작성 시 자동 참조.
-globs: lib/**/remote/**, lib/**/network/**, lib/**/api/**
+globs: client/**/remote/**, client/**/network/**, client/**/api/**
 ---
 
 ## Dio + Retrofit 패턴 가이드

@@ -29,8 +29,8 @@ cd server && npm run test -- --coverage
 ### Flutter
 - 전체: 72% (목표: 80%)
 - 미커버: 5개 파일
-  - lib/domain/usecase/buy_land.dart (0%)
-  - lib/data/repository/game_repo_impl.dart (30%)
+  - client/domain/usecase/buy_land.dart (0%)
+  - client/data/repository/game_repo_impl.dart (30%)
 
 ### NestJS
 - 전체: 85% (목표: 80%)

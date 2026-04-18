@@ -31,7 +31,7 @@
 ```
 /agent-team "test all"
 
-→ Agent A: flutter test (lib/)
+→ Agent A: flutter test (client/)
 → Agent B: npm test (server/)
 → Agent C: npm run build (cms/)
 → 결과 취합

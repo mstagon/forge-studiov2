@@ -2,16 +2,16 @@
 
 변경된 파일의 스택을 자동 판별하여 해당 스택만 검증.
 
-## Flutter (lib/, test/ 변경 시)
+## Flutter (client/, test/ 변경 시)
 
 1. `dart format --set-exit-if-changed .` → 포맷 체크
 2. `flutter analyze` → 정적 분석
 3. `flutter test` → 전체 테스트
 4. `dart run build_runner build --delete-conflicting-outputs` → 코드젠 최신 확인
 5. CLAUDE.md 금지 패턴 위반 검사:
-   - `grep -rn 'print(' lib/` → print() 사용
-   - `grep -rn 'dynamic\|: any' lib/` → any/dynamic 사용
-   - `grep -rn '!;$\|!\.' lib/ | grep -v '!='` → 강제 ! 사용
+   - `grep -rn 'print(' client/` → print() 사용
+   - `grep -rn 'dynamic\|: any' client/` → any/dynamic 사용
+   - `grep -rn '!;$\|!\.' client/ | grep -v '!='` → 강제 ! 사용
 
 ## NestJS (server/ 변경 시)
 

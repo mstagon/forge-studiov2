@@ -99,8 +99,8 @@
 
 skill-injector.sh 훅이 파일 패턴을 감지하고, 나(Claude)는 해당 스킬을 **읽고 적용**한다:
 
-- `lib/domain/entity/` 편집 → freezed-models 스킬 → freezed 패턴, build_runner 후처리
-- `lib/presentation/` 편집 → riverpod-patterns + go-router + **mobile-design** + **mobile-touch**
+- `client/domain/entity/` 편집 → freezed-models 스킬 → freezed 패턴, build_runner 후처리
+- `client/presentation/` 편집 → riverpod-patterns + go-router + **mobile-design** + **mobile-touch**
   - mobile-design: MFRI(Mobile Feasibility & Risk Index) 평가 → 화면 구조/네비/컬러/타이포 의사결정
   - mobile-touch: Disney 12 원칙 → 제스처/햅틱/스프링/이징/오버스크롤 모션
 - `server/src/auth/` 편집 → nestjs-auth 스킬 → JWT, Passport, Guard 패턴

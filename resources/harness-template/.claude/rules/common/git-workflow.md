@@ -6,7 +6,7 @@
 
 ```
 <project>/ (로컬 모노레포)
-├── lib/        → 원격: app repo (Flutter)
+├── client/        → 원격: app repo (Flutter)
 ├── server/     → 원격: server repo (NestJS)
 ├── prisma/     → 원격: server repo에 포함 또는 독립
 ├── cms/        → 원격: cms repo (Next.js)
@@ -22,12 +22,12 @@ git remote add origin-server <server-repo-url>
 git remote add origin-cms <cms-repo-url>
 
 # 서브트리 push (스택별 원격 레포로)
-git subtree push --prefix=lib origin-app <branch>
+git subtree push --prefix=client origin-app <branch>
 git subtree push --prefix=server origin-server <branch>
 git subtree push --prefix=cms origin-cms <branch>
 
 # 서브트리 pull (원격에서 가져오기)
-git subtree pull --prefix=lib origin-app <branch> --squash
+git subtree pull --prefix=client origin-app <branch> --squash
 git subtree pull --prefix=server origin-server <branch> --squash
 git subtree pull --prefix=cms origin-cms <branch> --squash
 ```
@@ -60,7 +60,7 @@ git subtree pull --prefix=cms origin-cms <branch> --squash
 feat/xxx → dev → stg → prd
 
 [서브트리 push — 머지 후 각 원격 레포로]
-dev 머지 → git subtree push --prefix=lib origin-app dev
+dev 머지 → git subtree push --prefix=client origin-app dev
            git subtree push --prefix=server origin-server dev
            git subtree push --prefix=cms origin-cms dev
 

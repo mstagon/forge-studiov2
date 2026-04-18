@@ -8,19 +8,19 @@ FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null)
 SKILLS=""
 
 # Flutter 스킬 매칭
-if echo "$FILE" | grep -qE 'lib/domain/entity/|lib/data/.*/dto/'; then
+if echo "$FILE" | grep -qE 'client/domain/entity/|client/data/.*/dto/'; then
   SKILLS="$SKILLS freezed-models"
 fi
-if echo "$FILE" | grep -qE 'lib/presentation/'; then
+if echo "$FILE" | grep -qE 'client/presentation/'; then
   SKILLS="$SKILLS riverpod-patterns go-router"
 fi
-if echo "$FILE" | grep -qE 'lib/data/remote/|lib/core/network/'; then
+if echo "$FILE" | grep -qE 'client/data/remote/|client/core/network/'; then
   SKILLS="$SKILLS dio-retrofit"
 fi
-if echo "$FILE" | grep -qE 'lib/core/utils/result'; then
+if echo "$FILE" | grep -qE 'client/core/utils/result'; then
   SKILLS="$SKILLS error-handling"
 fi
-if echo "$FILE" | grep -qE 'lib/core/logger/'; then
+if echo "$FILE" | grep -qE 'client/core/logger/'; then
   SKILLS="$SKILLS logging"
 fi
 

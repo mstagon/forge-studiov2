@@ -36,7 +36,7 @@
 
 ```
 <project>/ (로컬 모노레포)
-├── lib/        → 원격: app repo (Flutter)
+├── client/        → 원격: app repo (Flutter)
 ├── server/     → 원격: server repo (NestJS + Prisma)
 ├── prisma/     → server repo에 포함 또는 독립
 ├── cms/        → 원격: cms repo (Next.js)
@@ -46,7 +46,7 @@
 ## 앱 디렉터리 레이아웃 (Clean Architecture)
 
 ```
-lib/
+client/
 ├── core/           # config, network, theme, logger, utils
 ├── data/           # remote (API), local (cache), repository (구현체)
 ├── domain/         # entity, repository (추상), usecase

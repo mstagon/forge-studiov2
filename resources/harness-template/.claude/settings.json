@@ -4,7 +4,7 @@
   "permissions": {
     "allowedTools": [
       "Read",
-      "Write(lib/**)",
+      "Write(client/**)",
       "Write(test/**)",
       "Write(integration_test/**)",
       "Write(docs/**)",
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '🚀 Fullstack Dev Harness' && echo '─────────────────────────' && echo '📱 Flutter: '$(flutter --version 2>&1 | head -1 || echo 'N/A') && echo '🟢 Node: '$(node --version 2>/dev/null || echo 'N/A') && echo '🔍 브랜치: '$(git branch --show-current 2>/dev/null || echo 'N/A') && echo '📝 마지막 커밋: '$(git log --oneline -1 2>/dev/null || echo 'N/A') && echo '📋 TODO/FIXME: '$(grep -rn 'TODO\\|FIXME\\|HACK' lib/ server/src/ cms/app/ 2>/dev/null | wc -l | tr -d ' ')'건'"
+            "command": "echo '🚀 Fullstack Dev Harness' && echo '─────────────────────────' && echo '📱 Flutter: '$(flutter --version 2>&1 | head -1 || echo 'N/A') && echo '🟢 Node: '$(node --version 2>/dev/null || echo 'N/A') && echo '🔍 브랜치: '$(git branch --show-current 2>/dev/null || echo 'N/A') && echo '📝 마지막 커밋: '$(git log --oneline -1 2>/dev/null || echo 'N/A') && echo '📋 TODO/FIXME: '$(grep -rn 'TODO\\|FIXME\\|HACK' client/ server/src/ cms/app/ 2>/dev/null | wc -l | tr -d ' ')'건'"
           }
         ]
       },
@@ -187,7 +187,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "changed_dart=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.dart$' | grep -vE '\\.g\\.dart$|\\.freezed\\.dart$' | head -20); changed_ts=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.tsx\\?$' | head -20); if [ -n \"$changed_dart\" ]; then echo \"$changed_dart\" | xargs dart format 2>/dev/null; flutter analyze --no-pub lib/ 2>&1 | tail -5; fi; if [ -n \"$changed_ts\" ] && [ -d server ]; then cd server && npx eslint --fix $(echo \"$changed_ts\" | tr '\\n' ' ') 2>/dev/null; cd ..; fi"
+            "command": "changed_dart=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.dart$' | grep -vE '\\.g\\.dart$|\\.freezed\\.dart$' | head -20); changed_ts=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.tsx\\?$' | head -20); if [ -n \"$changed_dart\" ]; then echo \"$changed_dart\" | xargs dart format 2>/dev/null; flutter analyze --no-pub client/ 2>&1 | tail -5; fi; if [ -n \"$changed_ts\" ] && [ -d server ]; then cd server && npx eslint --fix $(echo \"$changed_ts\" | tr '\\n' ' ') 2>/dev/null; cd ..; fi"
           }
         ]
       },

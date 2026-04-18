@@ -1,7 +1,7 @@
 ---
 name: error-handling
 description: 상용 에러 핸들링 패턴. Result 타입, AppError 계층, ErrorBoundary, 사용자 에러 표시.
-globs: lib/**/error/**, lib/**/result/**, lib/**/utils/result.dart, lib/**/core/**
+globs: client/**/error/**, client/**/result/**, client/**/utils/result.dart, client/**/core/**
 ---
 
 ## 에러 핸들링 패턴 (상용 서비스)

@@ -1,7 +1,7 @@
 ---
 name: logging
 description: 상용 로깅 패턴. 구조화된 로그, 레벨별 처리, Crashlytics 연동.
-globs: lib/**/logger/**, lib/**/core/logger.dart, lib/**/core/logging/**
+globs: client/**/logger/**, client/**/core/logger.dart, client/**/core/logging/**
 ---
 
 ## 로깅 패턴 (상용 서비스)

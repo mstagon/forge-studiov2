@@ -1,7 +1,7 @@
 ---
 name: go-router
 description: go_router 라우팅 패턴. 화면 추가, 딥링크, ShellRoute 작성 시 자동 참조.
-globs: lib/**/router/**, lib/**/app.dart, lib/**/routes/**
+globs: client/**/router/**, client/**/app.dart, client/**/routes/**
 ---
 
 ## go_router 패턴 가이드

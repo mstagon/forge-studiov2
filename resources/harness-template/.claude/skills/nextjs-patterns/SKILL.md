@@ -76,7 +76,7 @@ export function BanUserButton({ userId }: { userId: string }) {
 
 ### Server Action
 ```typescript
-// lib/actions/user-actions.ts
+// client/actions/user-actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -115,7 +115,7 @@ export async function banUser(userId: string, _prev: unknown, formData: FormData
 
 ### Prisma 싱글턴 (Next.js용)
 ```typescript
-// lib/prisma.ts
+// client/prisma.ts
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

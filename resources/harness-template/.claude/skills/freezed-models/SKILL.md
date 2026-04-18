@@ -1,7 +1,7 @@
 ---
 name: freezed-models
 description: Freezed Entity/DTO 패턴. 데이터 모델 작성 시 자동 참조.
-globs: lib/**/models/**, lib/**/entities/**, lib/**/entity/**, lib/**/dto/**
+globs: client/**/models/**, client/**/entities/**, client/**/entity/**, client/**/dto/**
 ---
 
 ## Freezed 모델 규칙

@@ -1,7 +1,7 @@
 ---
 name: api-contract
 description: Cross-stack API 계약 동기화. NestJS DTO ↔ Flutter DTO 일치성 관리.
-globs: server/src/**/dto/**, lib/data/remote/**, lib/data/dto/**, lib/domain/entity/**, docs/api/**
+globs: server/src/**/dto/**, client/data/remote/**, client/data/dto/**, client/domain/entity/**, docs/api/**
 ---
 
 ## API 계약 동기화 패턴
@@ -49,7 +49,7 @@ export class RollDiceResponseDto {
 
 ### Flutter DTO (서버 응답 매핑)
 ```dart
-// lib/data/remote/dto/roll_dice_response_dto.dart
+// client/data/remote/dto/roll_dice_response_dto.dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'roll_dice_response_dto.freezed.dart';
@@ -84,7 +84,7 @@ class TileEventDto with _$TileEventDto {
 
 ### Flutter Entity (도메인 모델)
 ```dart
-// lib/domain/entity/roll_result.dart
+// client/domain/entity/roll_result.dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'roll_result.freezed.dart';
@@ -104,7 +104,7 @@ class RollResult with _$RollResult {
 
 ### DTO → Entity 변환
 ```dart
-// lib/data/remote/dto/roll_dice_response_dto.dart (extension)
+// client/data/remote/dto/roll_dice_response_dto.dart (extension)
 extension RollDiceResponseDtoX on RollDiceResponseDto {
   RollResult toEntity() => RollResult(
     dice: dice,

@@ -6,7 +6,7 @@
 
 ## 2. Flutter DTO 확인
 
-`lib/data/remote/dto/` 또는 `lib/data/dto/` 에서 대응하는 freezed DTO 찾아 필드 목록 추출.
+`client/data/remote/dto/` 또는 `client/data/dto/` 에서 대응하는 freezed DTO 찾아 필드 목록 추출.
 
 ## 3. 대조
 

@@ -18,6 +18,6 @@
 
 ## 스택 감지
 
-- `lib/` 관련 → Flutter 테스트 (`test/`)
+- `client/` 관련 → Flutter 테스트 (`test/`)
 - `server/` 관련 → NestJS 테스트 (`server/test/`)
 - 둘 다 → 각각 TDD 진행

@@ -12,7 +12,7 @@
 1. **현재 브랜치 확인** (dev/stg/prd)
 2. **해당 스택 빌드/테스트 통과 확인** (push 전 검증)
 3. **서브트리 push 실행**:
-   - app: `git subtree push --prefix=lib origin-app {branch}`
+   - app: `git subtree push --prefix=client origin-app {branch}`
    - server: `git subtree push --prefix=server origin-server {branch}`
    - cms: `git subtree push --prefix=cms origin-cms {branch}`
 4. **결과 보고**
@@ -21,7 +21,7 @@
 
 전체 스택 순차 push:
 ```
-1. git subtree push --prefix=lib origin-app {branch}
+1. git subtree push --prefix=client origin-app {branch}
 2. git subtree push --prefix=server origin-server {branch}
 3. git subtree push --prefix=cms origin-cms {branch}
 ```

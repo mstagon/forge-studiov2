@@ -1,7 +1,7 @@
 ---
 name: riverpod-patterns
 description: Riverpod 상태관리 패턴. provider/controller 작성 시 자동 참조.
-globs: lib/**/controllers/**, lib/**/providers/**
+globs: client/**/controllers/**, client/**/providers/**
 ---
 
 ## Riverpod 패턴 가이드
