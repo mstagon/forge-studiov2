@@ -24,3 +24,10 @@ Icon
 # bkit / PDCA runtime artifacts
 docs/.pdca-*
 docs/.bkit-*
+
+# Stray vite/electron build outputs that occasionally land at root
+/main.js
+/preload.js
+
+# Local Claude Code project state
+.claude/
