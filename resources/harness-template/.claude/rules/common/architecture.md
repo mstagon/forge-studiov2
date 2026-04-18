@@ -29,3 +29,41 @@
 - Flutter DTO는 NestJS DTO를 따름
 - JSON key는 camelCase 통일
 - API 변경 시 `/api-sync`로 동기화
+
+## 레포 구조 (모노레포 + 서브트리)
+
+로컬은 **모노레포**로 작업하고, 원격은 **git subtree**로 각 스택별 독립 레포로 관리.
+
+```
+<project>/ (로컬 모노레포)
+├── lib/        → 원격: app repo (Flutter)
+├── server/     → 원격: server repo (NestJS + Prisma)
+├── prisma/     → server repo에 포함 또는 독립
+├── cms/        → 원격: cms repo (Next.js)
+└── docs/       → 모노레포 전용 (push 안 함)
+```
+
+## 앱 디렉터리 레이아웃 (Clean Architecture)
+
+```
+lib/
+├── core/           # config, network, theme, logger, utils
+├── data/           # remote (API), local (cache), repository (구현체)
+├── domain/         # entity, repository (추상), usecase
+├── presentation/   # 화면별 디렉터리 (위젯 + 컨트롤러)
+└── app.dart        # GoRouter, 전역 Provider
+```
+
+레이어 규칙: **presentation → domain → data 단방향**. domain은 순수 Dart.
+
+## 서버 디렉터리 레이아웃 (NestJS)
+
+```
+server/src/
+├── auth/           # Passport OAuth + JWT (strategies, guards, decorators)
+├── users/          # 유저 모듈
+├── [도메인]/       # 도메인별 모듈 (controller + service + dto)
+├── common/         # guards, interceptors, filters, pipes
+├── config/         # 환경변수, 밸런스 JSON
+└── prisma/         # PrismaService (싱글턴)
+```
