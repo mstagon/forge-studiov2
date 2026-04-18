@@ -4,6 +4,30 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-04-18
+
+### Added
+- **Agent Teams panel (Phase 1 of the team-agent visualization roadmap).**
+  New 'Teams' sidebar view groups Claude Code Agent Teams metadata
+  (`~/.claude/teams/<id>/config.json` + per-member `inboxes/<name>.json`)
+  by team, with:
+  - Coloured live status (running / idle / shutdown derived from
+    `idle_notification` and `shutdown_request` inbox events)
+  - Lead vs member distinction
+  - Model + agent type
+  - Unread message badge
+  - Last activity relative timestamp + last summary preview
+  - Hover-revealed terminal-launcher button that spawns a new terminal
+    tab in the member's worktree (`member.cwd`)
+- New `AgentTeamWatcher` service (chokidar) with debounced refresh and
+  push updates over `teams:update` IPC.
+- New IPC: `api.teams.list()` + `api.teams.onUpdate(callback)`.
+
+### Roadmap progress
+This is Phase 1 of the team agent visualization Roadmap item. Phase 2
+(inbox viewer + token sparkline from telemetry) and Phase 3 (auto-split
+on member spawn + inter-agent comms graph) come next.
+
 ## [0.2.9] — 2026-04-18
 
 ### Fixed (critical — please upgrade)
