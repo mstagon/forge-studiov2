@@ -142,7 +142,15 @@ function PaneView({ pane, tabId, cwd, activePaneId, activeTabId, searchVisible, 
 export function TerminalPanel() {
   const { tabs, activeTabId, searchVisible } = useTerminalStore()
   const { activeWorkspace } = useWorkspaceStore()
-  const activeTab = tabs.find((t) => t.id === activeTabId)
+  const candidate = tabs.find((t) => t.id === activeTabId)
+  // Only show the active tab if it belongs to the currently selected workspace
+  // (or is unattached). Tabs from other workspaces stay alive in the store
+  // but are hidden until the user switches back.
+  const activeTab =
+    candidate &&
+    (!candidate.workspaceId || candidate.workspaceId === activeWorkspace?.id)
+      ? candidate
+      : undefined
 
   return (
     <div className="flex flex-col h-full bg-surface-0">

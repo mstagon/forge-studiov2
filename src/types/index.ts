@@ -3,6 +3,10 @@ export interface TerminalTab {
   title: string
   ptyId: string | null
   cwd: string
+  /** Workspace this tab belongs to. Tabs are filtered by activeWorkspace.id in
+   *  the main TerminalPanel; tabs without a workspaceId (legacy / unattached)
+   *  show in every workspace as a fallback. */
+  workspaceId?: string
   panes: TerminalPane[]
   activePaneId: string
 }

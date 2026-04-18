@@ -1,13 +1,18 @@
 import { useTerminalStore } from '@/stores/terminal'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { VscClose, VscAdd, VscSplitHorizontal, VscSplitVertical, VscTerminal } from 'react-icons/vsc'
 
 export function TerminalTabs() {
   const { tabs, activeTabId, addTab, removeTab, setActiveTab } = useTerminalStore()
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
+  const visibleTabs = tabs.filter(
+    (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id
+  )
 
   return (
     <div className="flex items-center bg-surface-1 border-b border-border h-9 select-none">
       <div className="flex items-center flex-1 overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <div
             key={tab.id}
             className={`group flex items-center gap-1.5 px-3 h-full cursor-pointer border-r border-border text-xs transition-colors ${
@@ -41,7 +46,7 @@ export function TerminalTabs() {
       <div className="flex items-center px-1 gap-0.5 shrink-0">
         <button
           className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors"
-          onClick={() => addTab()}
+          onClick={() => addTab(activeWorkspace?.path, activeWorkspace?.id)}
           title="New Tab (Cmd+T)"
         >
           <VscAdd size={14} />

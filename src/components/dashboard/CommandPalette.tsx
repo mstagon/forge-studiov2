@@ -84,7 +84,7 @@ export function CommandPalette() {
       category: 'Action',
       icon: VscTerminal,
       action: () => {
-        useTerminalStore.getState().addTab(activeWorkspace?.path)
+        useTerminalStore.getState().addTab(activeWorkspace?.path, activeWorkspace?.id)
         toggleCommandPalette()
       },
     })

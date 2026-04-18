@@ -7,7 +7,7 @@ interface TerminalState {
   activeTabId: string | null
   searchVisible: boolean
 
-  addTab: (cwd?: string) => TerminalTab
+  addTab: (cwd?: string, workspaceId?: string) => TerminalTab
   removeTab: (id: string) => void
   setActiveTab: (id: string) => void
   updateTabTitle: (id: string, title: string) => void
@@ -116,7 +116,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   activeTabId: null,
   searchVisible: false,
 
-  addTab: (cwd?: string) => {
+  addTab: (cwd?: string, workspaceId?: string) => {
     const pane = createPane()
     pane.size = 100
     const tab: TerminalTab = {
@@ -124,6 +124,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       title: 'Terminal',
       ptyId: null,
       cwd: cwd || '',
+      workspaceId,
       panes: [pane],
       activePaneId: pane.id,
     }
@@ -270,17 +271,25 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   nextTab: () => {
     const { tabs, activeTabId } = get()
-    if (tabs.length < 2) return
-    const idx = tabs.findIndex((t) => t.id === activeTabId)
-    const next = tabs[(idx + 1) % tabs.length]
+    const active = tabs.find((t) => t.id === activeTabId)
+    const ws = active?.workspaceId
+    // Only navigate within the same workspace's tab group (or among
+    // unattached tabs if the current active is unattached).
+    const visible = tabs.filter((t) => t.workspaceId === ws)
+    if (visible.length < 2) return
+    const idx = visible.findIndex((t) => t.id === activeTabId)
+    const next = visible[(idx + 1) % visible.length]
     set({ activeTabId: next.id })
   },
 
   prevTab: () => {
     const { tabs, activeTabId } = get()
-    if (tabs.length < 2) return
-    const idx = tabs.findIndex((t) => t.id === activeTabId)
-    const prev = tabs[(idx - 1 + tabs.length) % tabs.length]
+    const active = tabs.find((t) => t.id === activeTabId)
+    const ws = active?.workspaceId
+    const visible = tabs.filter((t) => t.workspaceId === ws)
+    if (visible.length < 2) return
+    const idx = visible.findIndex((t) => t.id === activeTabId)
+    const prev = visible[(idx - 1 + visible.length) % visible.length]
     set({ activeTabId: prev.id })
   },
 

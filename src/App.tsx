@@ -34,10 +34,21 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  // Create initial terminal when workspace is set
+  // Per-workspace terminal management:
+  // When the active workspace changes, ensure (a) at least one tab exists for
+  // that workspace, and (b) the active tab id points to one of *its* tabs
+  // (not a stale tab from the previous workspace).
   useEffect(() => {
-    if (activeWorkspace && tabs.length === 0) {
-      addTab(activeWorkspace.path)
+    if (!activeWorkspace) return
+    const store = useTerminalStore.getState()
+    const ownTabs = store.tabs.filter((t) => t.workspaceId === activeWorkspace.id)
+    if (ownTabs.length === 0) {
+      addTab(activeWorkspace.path, activeWorkspace.id)
+      return
+    }
+    const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
+    if (!activeTab || activeTab.workspaceId !== activeWorkspace.id) {
+      store.setActiveTab(ownTabs[ownTabs.length - 1].id)
     }
   }, [activeWorkspace, tabs.length, addTab])
 
@@ -46,7 +57,7 @@ export default function App() {
     const cleanups = [
       window.api.on('action', (action: string) => {
         switch (action) {
-          case 'new-tab': addTab(activeWorkspace?.path); break
+          case 'new-tab': addTab(activeWorkspace?.path, activeWorkspace?.id); break
           case 'new-workspace': setNewWorkspaceDialog(true); break
           case 'toggle-sidebar': toggleSidebar(); break
           case 'toggle-dashboard': toggleDashboard(); break
