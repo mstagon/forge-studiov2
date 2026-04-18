@@ -4,6 +4,20 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] — 2026-04-18
+
+### Fixed
+- **Terminal didn't scroll.** xterm.js + the WebGL renderer on macOS
+  trackpads occasionally swallow wheel events at the canvas layer, so the
+  viewport stays pinned at the bottom no matter how much you scroll.
+  XTerminal now installs an explicit `wheel` listener on the container that
+  normalises pixel / line / page deltas into line counts and feeds them
+  straight into `terminal.scrollLines()`. Shift-wheel scrolls 5× faster
+  (matches xterm's "fast scroll" convention).
+- Bumped `scrollSensitivity` to 3 and `fastScrollSensitivity` to 5 so even
+  the built-in xterm wheel handler — when it does fire — moves a useful
+  amount per tick.
+
 ## [0.2.5] — 2026-04-17
 
 ### Fixed
