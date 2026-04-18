@@ -4,6 +4,28 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7] — 2026-04-18
+
+### Fixed (critical — please upgrade)
+- **Releases 0.2.0 → 0.2.6 silently shipped stale renderer + main bundles.**
+  The dev shortcut of invoking `npx electron-builder` directly skipped the
+  `tsc && vite build` chain, so electron-builder packaged whatever was last in
+  `dist/` and `dist-electron/` — which happened to be the pre-0.2.3 build.
+  Symptoms users saw:
+  - In-app update notifier (added in 0.2.3) never appeared in any installed
+    DMG, including 0.2.6.
+  - Terminal scroll wheel handler (added in 0.2.6) never reached users.
+  - Harness `update` IPC handler shape variations (0.2.5 `.mcp.json` symlink
+    logic, etc.) likewise weren't actually inside the installed app.
+  - The Info.plist / `app.getVersion()` was correctly bumped, masking the bug.
+- `electron-builder` now runs `scripts/before-build.js`, which executes
+  `npx vite build` before packaging. This guarantees `dist/` + `dist-electron/`
+  are fresh no matter how the build is invoked (full npm script chain or
+  direct `electron-builder`).
+
+If you're on **anything 0.2.0 through 0.2.6**, install 0.2.7 manually — the
+in-app update notifier in those builds doesn't actually exist to tell you.
+
 ## [0.2.6] — 2026-04-18
 
 ### Fixed
