@@ -4,6 +4,32 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] — 2026-04-18
+
+### Changed (BREAKING for new workspaces — existing workspaces unaffected)
+- **Flutter app directory renamed `lib/` → `client/`** across the bundled
+  harness so the monorepo tree reads `client/ + server/ + cms/ + docs/`
+  instead of the cryptic `lib/` that visually collided with Next.js's
+  `lib/` utility folder.
+- Renamed everywhere: CLAUDE.md tree + Skill Routing patterns,
+  `rules/common/architecture.md` + `orchestration.md` + `git-workflow.md`,
+  every `commands/*.md` that referenced Flutter paths, every
+  `skills/*/SKILL.md` Flutter pattern, `scripts/skill-injector.sh` regexes,
+  `settings.json` Write permission glob and post-edit `flutter analyze`.
+- `WorkspaceManager.create` now scaffolds `client/` instead of `lib/`.
+- `cms/lib/` (Next.js convention) and `@/lib/...` import paths inside the
+  CMS are intentionally preserved.
+
+### Migration for existing workspaces
+Update Harness will pull the new template, but **your existing `lib/`
+directory keeps its old name** — the rename only changes the docs/rules
+that point at it. If you want to align an existing project, do the move
+yourself:
+```bash
+git mv lib client
+# then update pubspec.yaml, build.yaml, import paths if any reference lib/
+```
+
 ## [0.3.2] — 2026-04-18
 
 ### Changed
