@@ -69,7 +69,7 @@ export class WorkspaceManager {
     }
 
     // Create standard directories
-    await fs.ensureDir(path.join(projectPath, 'lib'))
+    await fs.ensureDir(path.join(projectPath, 'client'))
     await fs.ensureDir(path.join(projectPath, 'server'))
     await fs.ensureDir(path.join(projectPath, 'cms'))
     await fs.ensureDir(path.join(projectPath, 'docs'))
