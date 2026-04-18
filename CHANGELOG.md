@@ -4,6 +4,24 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.9] — 2026-04-18
+
+### Fixed (critical — please upgrade)
+- **0.2.8 also crashed at startup** with `Cannot find module 'node-pty'`.
+  Removing the explicit `return false` from beforeBuild was not enough —
+  providing a beforeBuild hook at all overrides electron-builder's
+  default `install-app-deps` step, which is what runs `@electron/rebuild`
+  on native modules (node-pty) and decides which deps land in
+  `app.asar.unpacked`. Both 0.2.7 and 0.2.8 shipped with no
+  `app.asar.unpacked` directory at all.
+- `scripts/before-build.js` now explicitly invokes
+  `electron-builder install-app-deps` after the `vite build` step. Verified
+  the 0.2.9 DMG contains
+  `app.asar.unpacked/node_modules/node-pty/build/Release/spawn-helper`.
+
+If you installed 0.2.7 or 0.2.8 and saw "A JavaScript error occurred in
+the main process: Cannot find module 'node-pty'" — install 0.2.9 to fix.
+
 ## [0.2.8] — 2026-04-18
 
 ### Fixed (critical — please upgrade)
