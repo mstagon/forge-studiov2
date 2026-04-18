@@ -7,17 +7,22 @@ to [Semantic Versioning](https://semver.org/).
 ## [0.2.9] — 2026-04-18
 
 ### Fixed (critical — please upgrade)
-- **0.2.8 also crashed at startup** with `Cannot find module 'node-pty'`.
-  Removing the explicit `return false` from beforeBuild was not enough —
-  providing a beforeBuild hook at all overrides electron-builder's
-  default `install-app-deps` step, which is what runs `@electron/rebuild`
-  on native modules (node-pty) and decides which deps land in
-  `app.asar.unpacked`. Both 0.2.7 and 0.2.8 shipped with no
-  `app.asar.unpacked` directory at all.
-- `scripts/before-build.js` now explicitly invokes
-  `electron-builder install-app-deps` after the `vite build` step. Verified
-  the 0.2.9 DMG contains
-  `app.asar.unpacked/node_modules/node-pty/build/Release/spawn-helper`.
+- **0.2.7 + 0.2.8 crashed at startup** with `Cannot find module 'node-pty'`.
+  Root cause: the `beforeBuild` hook we added in 0.2.7 (to force a fresh
+  `vite build` before packaging) silently overrode electron-builder's own
+  native-module detection / unpack pipeline. Even after we made the hook
+  call `electron-builder install-app-deps` itself, the unpack step that
+  creates `app.asar.unpacked/node_modules/node-pty/` never fired.
+- Fix: removed the `beforeBuild` hook entirely. Added a
+  `npm run release:dmg` script that does
+  `npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder ...`
+  in one shot. The renderer is rebuilt first via the npm chain (so dist/ +
+  dist-electron/ are fresh), then electron-builder runs unmodified and its
+  default install-app-deps flow correctly populates app.asar.unpacked.
+- Verified the 0.2.9 DMG contains
+  `app.asar.unpacked/node_modules/node-pty/build/Release/spawn-helper`
+  AND `updates:check` IPC in main.js AND `appUpdate` strings in the
+  renderer bundle.
 
 If you installed 0.2.7 or 0.2.8 and saw "A JavaScript error occurred in
 the main process: Cannot find module 'node-pty'" — install 0.2.9 to fix.
