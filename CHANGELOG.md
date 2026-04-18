@@ -4,6 +4,21 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-04-18
+
+### Changed
+- **Terminal tabs are now scoped per workspace.** Tabs carry a
+  `workspaceId` set when they're created from a workspace context. The
+  main terminal panel only shows tabs belonging to the active workspace;
+  switching workspaces hides the previous workspace's tabs (kept alive
+  in the store) and surfaces the new workspace's group, creating an
+  initial tab if it has none. `nextTab` / `prevTab` cycle within the
+  same workspace's group.
+- **Teams panel is now read-only.** Removed the per-member terminal
+  launcher button; Teams is a live status board, terminals belong to
+  the main panel. Spawning terminals in an agent's worktree moves to
+  Phase 3 (auto-split on member join).
+
 ## [0.3.0] — 2026-04-18
 
 ### Added
