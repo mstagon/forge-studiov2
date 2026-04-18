@@ -1,6 +1,6 @@
 {
   "name": "forge-studio",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Forge Studio — Claude Code GUI Wrapper",
   "license": "GPL-3.0-or-later",
   "main": "dist-electron/main.js",
@@ -56,6 +56,7 @@
   "build": {
     "appId": "com.forge.studio",
     "productName": "Forge Studio",
+    "beforeBuild": "scripts/before-build.js",
     "afterPack": "scripts/after-pack.js",
     "mac": {
       "category": "public.app-category.developer-tools",
