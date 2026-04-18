@@ -54,6 +54,8 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
         lineHeight: 1.35,
         letterSpacing: 0,
         scrollback: 10000,
+        scrollSensitivity: 3,
+        fastScrollSensitivity: 5,
         allowProposedApi: true,
         macOptionIsMeta: true,
         macOptionClickForcesSelection: true,
@@ -180,6 +182,29 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
         })
       })
       resizeObserver.observe(container)
+
+      // Explicit wheel fallback. WebGL canvas on macOS sometimes fails to
+      // forward wheel events to xterm's internal handler (especially with
+      // trackpad momentum scroll), so the viewport silently doesn't move.
+      // Translate pixel deltas into line scrolls and feed terminal.scrollLines
+      // directly. preventDefault to avoid the page also scrolling.
+      const onWheel = (e: WheelEvent) => {
+        if (!terminal) return
+        e.preventDefault()
+        // deltaMode 0 = pixels, 1 = lines, 2 = pages — normalise to lines.
+        const lineHeightPx = 14 * 1.35
+        let lines: number
+        if (e.deltaMode === 1) lines = e.deltaY
+        else if (e.deltaMode === 2) lines = e.deltaY * terminal.rows
+        else lines = e.deltaY / lineHeightPx
+        // Speed up when shift is held (xterm's "fast scroll" convention).
+        if (e.shiftKey) lines *= 5
+        if (lines !== 0) terminal.scrollLines(Math.trunc(lines) || (lines > 0 ? 1 : -1))
+      }
+      container.addEventListener('wheel', onWheel, { passive: false })
+      const detachWheel = () => container.removeEventListener('wheel', onWheel)
+      // Stash so the cleanup block can find it.
+      ;(terminal as unknown as { __detachWheel?: () => void }).__detachWheel = detachWheel
     }
 
     init()
@@ -189,6 +214,9 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
       cleanupData?.()
       cleanupExit?.()
       resizeObserver?.disconnect()
+      if (terminal) {
+        ;(terminal as unknown as { __detachWheel?: () => void }).__detachWheel?.()
+      }
       if (ptyId) window.api.pty.dispose(ptyId)
       if (terminal) terminal.dispose()
       terminalRef.current = null
