@@ -8,6 +8,7 @@ import { WorkspaceManager } from './services/WorkspaceManager'
 import { HarnessScanner } from './services/HarnessScanner'
 import { GitManager } from './services/GitManager'
 import { UpdateChecker } from './services/UpdateChecker'
+import { AgentTeamWatcher } from './services/AgentTeamWatcher'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,6 +24,7 @@ const workspaceManager = new WorkspaceManager()
 const harnessScanner = new HarnessScanner()
 const gitManager = new GitManager()
 const updateChecker = new UpdateChecker()
+const agentTeamWatcher = new AgentTeamWatcher()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -420,11 +422,22 @@ ipcMain.handle('system:which', async (_event, cmd: string) => {
 
 ipcMain.handle('updates:check', () => updateChecker.check())
 
+// ─── IPC Handlers: Agent Teams ──────────────────────────────────────
+
+ipcMain.handle('teams:list', () => agentTeamWatcher.list())
+
 // ─── App Lifecycle ──────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   buildMenu()
   createWindow()
+
+  agentTeamWatcher.start().catch((err) => {
+    console.error('[AgentTeamWatcher] start failed:', err)
+  })
+  agentTeamWatcher.on('teams', (teams) => {
+    mainWindow?.webContents.send('teams:update', teams)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -433,5 +446,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   ptyManager.disposeAll()
+  agentTeamWatcher.stop()
   if (process.platform !== 'darwin') app.quit()
 })

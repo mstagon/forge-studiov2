@@ -82,6 +82,16 @@ const api = {
     remotes: (cwd: string) => ipcRenderer.invoke('git:remotes', cwd),
   },
 
+  // ─── Agent Teams ─────────────────────────────────────────────────
+  teams: {
+    list: () => ipcRenderer.invoke('teams:list'),
+    onUpdate: (callback: (teams: unknown[]) => void) => {
+      const handler = (_event: IpcRendererEvent, teams: unknown[]) => callback(teams)
+      ipcRenderer.on('teams:update', handler)
+      return () => ipcRenderer.removeListener('teams:update', handler)
+    },
+  },
+
   // ─── Updates ─────────────────────────────────────────────────────
   updates: {
     check: (): Promise<{
