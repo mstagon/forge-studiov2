@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { useAgentTeamStore } from '@/stores/agentTeam'
-import { useTerminalStore } from '@/stores/terminal'
-import { VscOrganization, VscPerson, VscTerminalBash, VscCircleFilled, VscMail } from 'react-icons/vsc'
+import { VscOrganization, VscPerson, VscCircleFilled, VscMail } from 'react-icons/vsc'
 import type { Team, TeamMember, AgentStatus } from '@/types'
 
 const STATUS_COLOR: Record<AgentStatus, string> = {
@@ -90,15 +89,8 @@ function TeamCard({ team }: { team: Team }) {
 }
 
 function MemberRow({ member }: { member: TeamMember }) {
-  const addTab = useTerminalStore((s) => s.addTab)
-
-  const openTerminal = () => {
-    if (!member.cwd) return
-    addTab(member.cwd)
-  }
-
   return (
-    <div className="group px-3 py-2 hover:bg-surface-2 transition-colors">
+    <div className="px-3 py-2 hover:bg-surface-2 transition-colors">
       <div className="flex items-center gap-2">
         <VscCircleFilled size={8} className={`${STATUS_COLOR[member.status]} shrink-0`} title={STATUS_LABEL[member.status]} />
         {member.isLead ? (
@@ -107,15 +99,6 @@ function MemberRow({ member }: { member: TeamMember }) {
           <VscPerson size={12} className="text-text-muted shrink-0" />
         )}
         <span className="text-xs font-medium text-text-primary truncate flex-1">{member.name}</span>
-        {member.cwd && (
-          <button
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-3 text-text-muted hover:text-text-primary"
-            onClick={openTerminal}
-            title={`Open terminal at ${member.cwd}`}
-          >
-            <VscTerminalBash size={12} />
-          </button>
-        )}
       </div>
       <div className="ml-5 mt-0.5 flex items-center gap-2 text-2xs text-text-muted">
         <span className="font-mono">{member.model}</span>
