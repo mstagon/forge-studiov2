@@ -76,7 +76,37 @@ export interface GitBranch {
   lastCommitMsg: string
 }
 
-export type SidebarView = 'workspaces' | 'git' | 'dashboard' | 'settings'
+export type AgentStatus = 'running' | 'idle' | 'shutdown'
+
+export interface TeamMember {
+  agentId: string
+  name: string
+  agentType: string
+  model: string
+  cwd?: string
+  tmuxPaneId?: string
+  backendType?: string
+  joinedAt: number
+  color?: string
+  status: AgentStatus
+  lastActivityAt: string | null
+  lastSummary: string | null
+  messageCount: number
+  unreadCount: number
+  isLead: boolean
+}
+
+export interface Team {
+  id: string
+  name: string
+  description?: string
+  createdAt: number
+  leadAgentId: string
+  leadSessionId?: string
+  members: TeamMember[]
+}
+
+export type SidebarView = 'workspaces' | 'git' | 'teams' | 'dashboard' | 'settings'
 export type Theme = 'dark' | 'light'
 
 declare global {
