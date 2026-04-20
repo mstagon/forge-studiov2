@@ -4,6 +4,54 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.4] — 2026-04-20
+
+### Added
+- **Agent-team terminal attach.** Clicking an agent in the Teams sidebar
+  (or its new terminal icon) now opens a terminal tab that attaches to
+  that agent's tmux pane via `tmux select-pane + attach-session`, so you
+  can watch and drive the agent's session without leaving Forge.
+  Re-clicking a running agent re-focuses its existing tab instead of
+  spawning a duplicate attach. Splits are disabled on agent tabs (tmux
+  already handles panes), and workspace switches no longer steal focus
+  from an active agent tab.
+- `PtyManager.createTmuxAttach(paneId)` helper + new
+  `teams:openAgentTerminal` IPC, reusing the existing `pty:data:*` /
+  `pty:exit:*` channels so XTerminal stays uniform.
+
+### Fixed
+- **Terminals no longer die when you switch workspaces or tabs.**
+  `TerminalPanel` used to render only the active tab, so every other
+  XTerminal unmounted and its PTY got disposed — returning to a
+  workspace meant fresh shells with no history or running processes.
+  All workspace-matching tabs now stay mounted and inactive ones are
+  hidden with `display:none`; PTYs survive the switch and xterm refits
+  when the tab becomes visible again. Per-tab cwd is frozen at
+  creation so hidden tabs don't get rewritten when the user hops
+  folders.
+- **Dev-mode "hook files not found" at Claude Code startup.**
+  `workspace:getTemplatePath` / `getClaudeMdPath` resolved the dev
+  template to `<repo>/..`, which doesn't contain `.claude/`. Workspaces
+  created via `npm run dev` silently got a partial (or empty) harness,
+  so SessionStart / PreToolUse hooks complained about missing
+  `auto-profile.sh`, `skill-injector.sh`, `gateguard.sh`, etc. Both
+  handlers now point at `resources/harness-template`, matching the
+  packaged-build location.
+
+### Changed (harness template)
+- **Pinned model/effort to Opus 4.7 at max.** Bundled
+  `.claude/settings.json` now sets `model: claude-opus-4-7`,
+  `effortLevel: max`. Stripped the per-agent `model:` frontmatter from
+  all 18 agents (previously half were pinned to `sonnet`, silently
+  downgrading test-writer / flutter-ui / nextjs-cms / etc.) so every
+  agent inherits the workspace pin. `CLAUDE_CODE_EFFORT_LEVEL` env var
+  still wins if a user wants to temporarily override.
+
+### Migration
+Existing workspaces: click **Update Harness** to pick up the settings
+pin and any missing hook scripts. No manual steps required — preserved
+files (`agent-memory/`, `settings.local.json`, `.pdca-*`) are kept.
+
 ## [0.3.3] — 2026-04-18
 
 ### Changed (BREAKING for new workspaces — existing workspaces unaffected)
