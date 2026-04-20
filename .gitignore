@@ -31,3 +31,6 @@ docs/.bkit-*
 
 # Local Claude Code project state
 .claude/
+
+# Ad-hoc generic harness extraction (reference folder, not shipped)
+framework-agnostic-harness/
