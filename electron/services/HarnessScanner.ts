@@ -1,6 +1,28 @@
 import fs from 'fs-extra'
 import path from 'path'
+import os from 'os'
 import { execFileSync } from 'child_process'
+
+/**
+ * Electron apps launched from Finder / Dock on macOS inherit a minimal PATH
+ * (roughly `/usr/bin:/bin:/usr/sbin:/sbin`), which misses Homebrew, pyenv,
+ * nvm, uv, fvm, etc. MCP servers almost always use `npx`/`uvx`/`python3`/etc,
+ * so every `which` probe reports "unavailable" unless we augment PATH the
+ * same way PtyManager does before spawning the shell.
+ */
+function augmentedPathEnv(): NodeJS.ProcessEnv {
+  const basePath = process.env.PATH || ''
+  const extras: string[] = []
+  if (os.platform() === 'darwin') {
+    extras.push('/opt/homebrew/bin', '/usr/local/bin')
+    const home = process.env.HOME || ''
+    if (home) {
+      extras.push(`${home}/.local/bin`, `${home}/.cargo/bin`)
+    }
+  }
+  const augmented = [...extras, basePath].filter(Boolean).join(':')
+  return { ...process.env, PATH: augmented }
+}
 
 export interface HarnessInfo {
   agents: { name: string; file: string }[]
@@ -135,14 +157,19 @@ export class HarnessScanner {
       const servers = mcpConfig.mcpServers || {}
       const results: { name: string; status: string; command?: string }[] = []
 
+      const env = augmentedPathEnv()
       for (const [name, config] of Object.entries(servers) as [string, any][]) {
         const command = config.command
         if (config.type === 'http') {
           results.push({ name, status: 'http', command: config.url })
         } else if (command) {
-          // Check if command exists
+          // Check if command exists on PATH (augmented for GUI launches)
           try {
-            execFileSync('which', [command], { encoding: 'utf-8', timeout: 2000 })
+            execFileSync('/usr/bin/which', [command], {
+              encoding: 'utf-8',
+              timeout: 2000,
+              env,
+            })
             results.push({ name, status: 'available', command })
           } catch {
             results.push({ name, status: 'unavailable', command })
