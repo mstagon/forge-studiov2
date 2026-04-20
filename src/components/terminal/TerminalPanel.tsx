@@ -69,13 +69,15 @@ interface PaneViewProps {
   pane: TerminalPane
   tabId: string
   cwd: string
+  agent?: { teamId: string; agentName: string }
   activePaneId: string
   activeTabId: string | null
+  tabVisible: boolean
   searchVisible: boolean
   depth: number
 }
 
-function PaneView({ pane, tabId, cwd, activePaneId, activeTabId, searchVisible, depth }: PaneViewProps) {
+function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisible, searchVisible, depth }: PaneViewProps) {
   if (pane.children && pane.children.length > 0) {
     // Branch node: render children in a flex container
     const isHorizontal = pane.direction === 'horizontal'
@@ -99,8 +101,10 @@ function PaneView({ pane, tabId, cwd, activePaneId, activeTabId, searchVisible, 
                 pane={child}
                 tabId={tabId}
                 cwd={cwd}
+                agent={agent}
                 activePaneId={activePaneId}
                 activeTabId={activeTabId}
+                tabVisible={tabVisible}
                 searchVisible={searchVisible}
                 depth={depth + 1}
               />
@@ -126,8 +130,9 @@ function PaneView({ pane, tabId, cwd, activePaneId, activeTabId, searchVisible, 
         tabId={tabId}
         paneId={pane.id}
         cwd={cwd}
-        isActive={isActive && tabId === activeTabId}
-        searchVisible={searchVisible && isActive}
+        agent={agent}
+        isActive={isActive && tabVisible && tabId === activeTabId}
+        searchVisible={searchVisible && isActive && tabVisible}
         onTitleChange={(title) => {
           useTerminalStore.getState().updateTabTitle(tabId, title)
         }}
@@ -142,41 +147,51 @@ function PaneView({ pane, tabId, cwd, activePaneId, activeTabId, searchVisible, 
 export function TerminalPanel() {
   const { tabs, activeTabId, searchVisible } = useTerminalStore()
   const { activeWorkspace } = useWorkspaceStore()
-  const candidate = tabs.find((t) => t.id === activeTabId)
-  // Only show the active tab if it belongs to the currently selected workspace
-  // (or is unattached). Tabs from other workspaces stay alive in the store
-  // but are hidden until the user switches back.
-  const activeTab =
-    candidate &&
-    (!candidate.workspaceId || candidate.workspaceId === activeWorkspace?.id)
-      ? candidate
-      : undefined
+
+  // All tabs stay mounted so their PTYs survive workspace/tab switches; the
+  // non-active ones are hidden with `display:none`. Only tabs belonging to the
+  // current workspace (or unattached/agent tabs) render at all.
+  const renderableTabs = tabs.filter(
+    (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id
+  )
+  const activeCandidate = renderableTabs.find((t) => t.id === activeTabId)
+  const hasActiveRenderable = Boolean(activeCandidate)
 
   return (
     <div className="flex flex-col h-full bg-surface-0">
       <TerminalTabs />
       <div className="flex-1 relative">
-        {activeTab ? (
-          <div className="absolute inset-0 flex">
-            {activeTab.panes.map((pane) => (
-              <div
-                key={pane.id}
-                style={{ flexBasis: `${pane.size ?? 100}%` }}
-                className="flex-shrink-0 flex-grow-0 min-w-0 min-h-0 overflow-hidden"
-              >
-                <PaneView
-                  pane={pane}
-                  tabId={activeTab.id}
-                  cwd={activeWorkspace?.path || ''}
-                  activePaneId={activeTab.activePaneId}
-                  activeTabId={activeTabId}
-                  searchVisible={searchVisible}
-                  depth={0}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
+        {renderableTabs.map((tab) => {
+          const isActiveTab = tab.id === activeTabId
+          return (
+            <div
+              key={tab.id}
+              className={`absolute inset-0 flex ${isActiveTab ? '' : 'hidden'}`}
+              aria-hidden={!isActiveTab}
+            >
+              {tab.panes.map((pane) => (
+                <div
+                  key={pane.id}
+                  style={{ flexBasis: `${pane.size ?? 100}%` }}
+                  className="flex-shrink-0 flex-grow-0 min-w-0 min-h-0 overflow-hidden"
+                >
+                  <PaneView
+                    pane={pane}
+                    tabId={tab.id}
+                    cwd={tab.cwd || activeWorkspace?.path || ''}
+                    agent={tab.agent ? { teamId: tab.agent.teamId, agentName: tab.agent.agentName } : undefined}
+                    activePaneId={tab.activePaneId}
+                    activeTabId={activeTabId}
+                    tabVisible={isActiveTab}
+                    searchVisible={searchVisible}
+                    depth={0}
+                  />
+                </div>
+              ))}
+            </div>
+          )
+        })}
+        {!hasActiveRenderable && (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             No terminal open. Press Cmd+T to create one.
           </div>
