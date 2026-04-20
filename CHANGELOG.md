@@ -4,6 +4,25 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] — 2026-04-20
+
+### Fixed
+- **Terminals REALLY survive workspace switches now.** 0.3.4 only
+  kept tabs mounted for the *current* workspace, so hopping folders
+  still unmounted the other workspace's XTerminals and disposed their
+  PTYs. Every tab is now rendered unconditionally; visibility is
+  gated per-tab (active + belongs-here) with `display:none` hiding
+  everything else. Shell history and running processes persist
+  across any number of workspace switches.
+- **Status bar `MCP N/N` now reports reality.** macOS GUI launches
+  inherit a minimal PATH that misses Homebrew, pyenv, uv, cargo.
+  `HarnessScanner.getMcpStatus` was `execFileSync`ing `which npx` /
+  `which uvx` / `which python3` against that stripped PATH, so every
+  MCP was reported "unavailable" and the status bar showed `MCP 0/14`
+  even when everything was actually installed. Probe now uses the
+  same augmented PATH PtyManager injects (+ `~/.local/bin`,
+  `~/.cargo/bin`) and pins `/usr/bin/which` directly.
+
 ## [0.3.4] — 2026-04-20
 
 ### Added
