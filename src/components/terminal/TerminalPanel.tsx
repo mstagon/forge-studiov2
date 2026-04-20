@@ -148,21 +148,24 @@ export function TerminalPanel() {
   const { tabs, activeTabId, searchVisible } = useTerminalStore()
   const { activeWorkspace } = useWorkspaceStore()
 
-  // All tabs stay mounted so their PTYs survive workspace/tab switches; the
-  // non-active ones are hidden with `display:none`. Only tabs belonging to the
-  // current workspace (or unattached/agent tabs) render at all.
-  const renderableTabs = tabs.filter(
-    (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id
-  )
-  const activeCandidate = renderableTabs.find((t) => t.id === activeTabId)
-  const hasActiveRenderable = Boolean(activeCandidate)
+  // Keep *every* tab mounted — including tabs from workspaces other than the
+  // current one. Filtering the render list by workspace was the old bug: it
+  // unmounted the other workspaces' XTerminals and disposed their PTYs, so
+  // switching back gave the user fresh shells. Now we always render; only the
+  // active tab that belongs to the current workspace (or is unattached) is
+  // visible. Everything else sits behind `display:none` with its PTY alive.
+  const activeCandidate = tabs.find((t) => t.id === activeTabId)
+  const activeTabVisibleHere =
+    activeCandidate &&
+    (!activeCandidate.workspaceId || activeCandidate.workspaceId === activeWorkspace?.id)
 
   return (
     <div className="flex flex-col h-full bg-surface-0">
       <TerminalTabs />
       <div className="flex-1 relative">
-        {renderableTabs.map((tab) => {
-          const isActiveTab = tab.id === activeTabId
+        {tabs.map((tab) => {
+          const belongsHere = !tab.workspaceId || tab.workspaceId === activeWorkspace?.id
+          const isActiveTab = tab.id === activeTabId && belongsHere
           return (
             <div
               key={tab.id}
@@ -191,7 +194,7 @@ export function TerminalPanel() {
             </div>
           )
         })}
-        {!hasActiveRenderable && (
+        {!activeTabVisibleHere && (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             No terminal open. Press Cmd+T to create one.
           </div>
