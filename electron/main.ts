@@ -426,6 +426,33 @@ ipcMain.handle('updates:check', () => updateChecker.check())
 
 ipcMain.handle('teams:list', () => agentTeamWatcher.list())
 
+ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; agentName: string; cols: number; rows: number }) => {
+  const teams = agentTeamWatcher.list()
+  const team = teams.find((t) => t.id === options.teamId)
+  if (!team) throw new Error(`Team not found: ${options.teamId}`)
+  const member = team.members.find((m) => m.name === options.agentName)
+  if (!member) throw new Error(`Member not found: ${options.agentName}`)
+  if (!member.tmuxPaneId) {
+    throw new Error(`Agent ${options.agentName} has no tmux pane (backend may not be tmux)`)
+  }
+
+  const id = ptyManager.createTmuxAttach({
+    cols: options.cols,
+    rows: options.rows,
+    paneId: member.tmuxPaneId,
+  })
+
+  ptyManager.onData(id, (data) => {
+    mainWindow?.webContents.send(`pty:data:${id}`, data)
+  })
+
+  ptyManager.onExit(id, (exitCode) => {
+    mainWindow?.webContents.send(`pty:exit:${id}`, exitCode)
+  })
+
+  return id
+})
+
 // ─── App Lifecycle ──────────────────────────────────────────────────
 
 app.whenReady().then(() => {

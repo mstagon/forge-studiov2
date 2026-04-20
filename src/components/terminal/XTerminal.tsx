@@ -13,11 +13,13 @@ interface XTerminalProps {
   cwd: string
   isActive: boolean
   searchVisible?: boolean
+  /** If set, attach to an agent team's tmux pane instead of spawning a shell. */
+  agent?: { teamId: string; agentName: string }
   onTitleChange?: (title: string) => void
   onPtyCreated?: (ptyId: string) => void
 }
 
-export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitleChange, onPtyCreated }: XTerminalProps) {
+export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, onTitleChange, onPtyCreated }: XTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -30,6 +32,8 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
   onTitleChangeRef.current = onTitleChange
   const onPtyCreatedRef = useRef(onPtyCreated)
   onPtyCreatedRef.current = onPtyCreated
+  const agentRef = useRef(agent)
+  agentRef.current = agent
 
   useEffect(() => {
     const container = containerRef.current
@@ -129,13 +133,23 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, onTitle
         try { fitAddon.fit() } catch { /* container might be gone */ }
       })
 
-      // Create PTY
+      // Create PTY — agent tabs attach to a tmux pane, regular tabs spawn a shell.
       try {
-        ptyId = await window.api.pty.create({
-          cols: terminal.cols || 80,
-          rows: terminal.rows || 24,
-          cwd: cwd || undefined,
-        })
+        const agentBinding = agentRef.current
+        if (agentBinding) {
+          ptyId = await window.api.teams.openAgentTerminal({
+            teamId: agentBinding.teamId,
+            agentName: agentBinding.agentName,
+            cols: terminal.cols || 80,
+            rows: terminal.rows || 24,
+          })
+        } else {
+          ptyId = await window.api.pty.create({
+            cols: terminal.cols || 80,
+            rows: terminal.rows || 24,
+            cwd: cwd || undefined,
+          })
+        }
       } catch (err) {
         terminal.write(`\r\n\x1b[31mFailed to create terminal: ${err}\x1b[0m\r\n`)
         return

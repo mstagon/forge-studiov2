@@ -90,6 +90,8 @@ const api = {
       ipcRenderer.on('teams:update', handler)
       return () => ipcRenderer.removeListener('teams:update', handler)
     },
+    openAgentTerminal: (options: { teamId: string; agentName: string; cols: number; rows: number }): Promise<string> =>
+      ipcRenderer.invoke('teams:openAgentTerminal', options),
   },
 
   // ─── Updates ─────────────────────────────────────────────────────

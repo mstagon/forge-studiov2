@@ -47,7 +47,13 @@ export default function App() {
       return
     }
     const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
-    if (!activeTab || activeTab.workspaceId !== activeWorkspace.id) {
+    // Keep the current active tab if it belongs to this workspace OR is an
+    // unattached tab (no workspaceId) — e.g. agent-team terminals float across
+    // workspaces and shouldn't be stolen when the user switches folders.
+    const activeIsValidHere =
+      activeTab &&
+      (activeTab.workspaceId === activeWorkspace.id || !activeTab.workspaceId)
+    if (!activeIsValidHere) {
       store.setActiveTab(ownTabs[ownTabs.length - 1].id)
     }
   }, [activeWorkspace, tabs.length, addTab])
@@ -68,13 +74,13 @@ export default function App() {
           case 'split-horizontal': {
             const store = useTerminalStore.getState()
             const tab = store.tabs.find((t) => t.id === store.activeTabId)
-            if (tab) store.splitPane(tab.id, tab.activePaneId, 'horizontal')
+            if (tab && !tab.agent) store.splitPane(tab.id, tab.activePaneId, 'horizontal')
             break
           }
           case 'split-vertical': {
             const store = useTerminalStore.getState()
             const tab = store.tabs.find((t) => t.id === store.activeTabId)
-            if (tab) store.splitPane(tab.id, tab.activePaneId, 'vertical')
+            if (tab && !tab.agent) store.splitPane(tab.id, tab.activePaneId, 'vertical')
             break
           }
           case 'close-pane': {

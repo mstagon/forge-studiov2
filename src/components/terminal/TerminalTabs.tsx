@@ -52,27 +52,29 @@ export function TerminalTabs() {
           <VscAdd size={14} />
         </button>
         <button
-          className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors"
+          className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => {
             const tab = tabs.find((t) => t.id === activeTabId)
-            if (tab) {
+            if (tab && !tab.agent) {
               const store = useTerminalStore.getState()
               store.splitPane(tab.id, tab.activePaneId, 'horizontal')
             }
           }}
+          disabled={!!tabs.find((t) => t.id === activeTabId)?.agent}
           title="Split Right (Cmd+Shift+H)"
         >
           <VscSplitHorizontal size={14} />
         </button>
         <button
-          className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors"
+          className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => {
             const tab = tabs.find((t) => t.id === activeTabId)
-            if (tab) {
+            if (tab && !tab.agent) {
               const store = useTerminalStore.getState()
               store.splitPane(tab.id, tab.activePaneId, 'vertical')
             }
           }}
+          disabled={!!tabs.find((t) => t.id === activeTabId)?.agent}
           title="Split Down (Cmd+Shift+V)"
         >
           <VscSplitVertical size={14} />

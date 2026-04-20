@@ -7,8 +7,17 @@ export interface TerminalTab {
    *  the main TerminalPanel; tabs without a workspaceId (legacy / unattached)
    *  show in every workspace as a fallback. */
   workspaceId?: string
+  /** When set, this tab attaches to an agent team's tmux pane instead of
+   *  spawning a local shell. Splits are disabled for agent tabs. */
+  agent?: TerminalAgentBinding
   panes: TerminalPane[]
   activePaneId: string
+}
+
+export interface TerminalAgentBinding {
+  teamId: string
+  agentName: string
+  tmuxPaneId: string
 }
 
 export interface TerminalPane {

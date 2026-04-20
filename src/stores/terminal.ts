@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
-import type { TerminalTab, TerminalPane } from '@/types'
+import type { TerminalTab, TerminalPane, TerminalAgentBinding } from '@/types'
 
 interface TerminalState {
   tabs: TerminalTab[]
@@ -8,6 +8,7 @@ interface TerminalState {
   searchVisible: boolean
 
   addTab: (cwd?: string, workspaceId?: string) => TerminalTab
+  addAgentTab: (agent: TerminalAgentBinding, title: string) => TerminalTab
   removeTab: (id: string) => void
   setActiveTab: (id: string) => void
   updateTabTitle: (id: string, title: string) => void
@@ -125,6 +126,34 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       ptyId: null,
       cwd: cwd || '',
       workspaceId,
+      panes: [pane],
+      activePaneId: pane.id,
+    }
+    set((state) => ({
+      tabs: [...state.tabs, tab],
+      activeTabId: tab.id,
+    }))
+    return tab
+  },
+
+  addAgentTab: (agent: TerminalAgentBinding, title: string) => {
+    // Reuse an existing tab bound to the same tmux pane if it's still around,
+    // so double-clicking an agent doesn't spawn a zombie.
+    const existing = get().tabs.find(
+      (t) => t.agent && t.agent.teamId === agent.teamId && t.agent.agentName === agent.agentName
+    )
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return existing
+    }
+    const pane = createPane()
+    pane.size = 100
+    const tab: TerminalTab = {
+      id: uuid(),
+      title,
+      ptyId: null,
+      cwd: '',
+      agent,
       panes: [pane],
       activePaneId: pane.id,
     }
