@@ -18,6 +18,23 @@ export class PtyManager {
     'powershell.exe', 'cmd.exe',
   ])
 
+  private buildEnv(): Record<string, string> {
+    // GUI-launched apps on macOS often miss /opt/homebrew/bin and /usr/local/bin
+    // in PATH, breaking rbenv/nvm/pyenv/fvm/etc. Prepend them on darwin.
+    const basePath = process.env.PATH || ''
+    const augmentedPath = os.platform() === 'darwin'
+      ? ['/opt/homebrew/bin', '/usr/local/bin', basePath].filter(Boolean).join(':')
+      : basePath
+    return {
+      ...process.env,
+      PATH: augmentedPath,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      TERM_PROGRAM: 'ForgeStudio',
+      LANG: process.env.LANG || 'en_US.UTF-8',
+    } as Record<string, string>
+  }
+
   create(options: { cols: number; rows: number; cwd: string; shell?: string }): string {
     const id = uuid()
     const systemShell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : '/bin/zsh')
@@ -25,26 +42,12 @@ export class PtyManager {
       ? options.shell
       : systemShell
 
-    // GUI-launched apps on macOS often miss /opt/homebrew/bin and /usr/local/bin
-    // in PATH, breaking rbenv/nvm/pyenv/fvm/etc. Prepend them on darwin.
-    const basePath = process.env.PATH || ''
-    const augmentedPath = os.platform() === 'darwin'
-      ? ['/opt/homebrew/bin', '/usr/local/bin', basePath].filter(Boolean).join(':')
-      : basePath
-
     const ptyProcess = pty.spawn(defaultShell, [], {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd,
-      env: {
-        ...process.env,
-        PATH: augmentedPath,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        TERM_PROGRAM: 'ForgeStudio',
-        LANG: process.env.LANG || 'en_US.UTF-8',
-      } as Record<string, string>,
+      env: this.buildEnv(),
     })
 
     this.instances.set(id, {
@@ -52,6 +55,32 @@ export class PtyManager {
       cwd: options.cwd,
     })
 
+    return id
+  }
+
+  /**
+   * Spawn a PTY that attaches to an existing tmux pane. Used to surface
+   * agent-team tmux panes (Claude Code team backend) inside Forge's terminal.
+   * paneId must match tmux's `%N` / `@N` / `$N` format — validated to prevent
+   * shell injection since it's interpolated into the exec string.
+   */
+  createTmuxAttach(options: { cols: number; rows: number; paneId: string }): string {
+    if (!/^[%@$][A-Za-z0-9_-]+$/.test(options.paneId)) {
+      throw new Error(`Invalid tmux target: ${options.paneId}`)
+    }
+    const id = uuid()
+    // select-pane then attach-session: `-t <pane-id>` on attach resolves the
+    // pane's session automatically. The select-pane focuses the right pane so
+    // the user sees that agent's output, not whatever was last viewed.
+    const cmd = `tmux select-pane -t ${options.paneId} 2>/dev/null; exec tmux attach-session -t ${options.paneId}`
+    const ptyProcess = pty.spawn('/bin/sh', ['-c', cmd], {
+      name: 'xterm-256color',
+      cols: options.cols,
+      rows: options.rows,
+      cwd: process.env.HOME || '/',
+      env: this.buildEnv(),
+    })
+    this.instances.set(id, { process: ptyProcess, cwd: '' })
     return id
   }
 
