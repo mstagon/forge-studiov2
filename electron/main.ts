@@ -233,16 +233,16 @@ ipcMain.handle('workspace:getTemplatePath', () => {
     // Packaged: harness template bundled in resources/
     return path.join(process.resourcesPath, 'harness-template', '.claude')
   }
-  // Dev: harness is in parent directory
-  const harnessRoot = path.resolve(__dirname, '../..')
-  return path.join(harnessRoot, '.claude')
+  // Dev: template lives under resources/harness-template at the repo root.
+  // __dirname is <repo>/dist-electron in dev, so step up once.
+  return path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude')
 })
 
 ipcMain.handle('workspace:getClaudeMdPath', () => {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
   }
-  return path.resolve(__dirname, '../../CLAUDE.md')
+  return path.resolve(__dirname, '..', 'resources', 'harness-template', 'CLAUDE.md')
 })
 
 // ─── IPC Handlers: Harness Scanner ──────────────────────────────────
@@ -298,10 +298,10 @@ ipcMain.handle('harness:update', async (_event, workspacePath: string) => {
   }
   const templatePath = app.isPackaged
     ? path.join(process.resourcesPath, 'harness-template', '.claude')
-    : path.join(path.resolve(__dirname, '../..'), '.claude')
+    : path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude')
   const claudeMdPath = app.isPackaged
     ? path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
-    : path.resolve(__dirname, '../../CLAUDE.md')
+    : path.resolve(__dirname, '..', 'resources', 'harness-template', 'CLAUDE.md')
   return workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
 })
 
