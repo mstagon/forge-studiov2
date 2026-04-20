@@ -1,7 +1,6 @@
 ---
 name: doc-updater
 description: 코드 변경에 따른 문서 자동 동기화 에이전트
-model: sonnet
 tools:
   - Read
   - Write

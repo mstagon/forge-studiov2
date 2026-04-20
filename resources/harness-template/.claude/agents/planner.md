@@ -1,7 +1,6 @@
 ---
 name: planner
 description: 피처 기획 → 태스크 분해 전문 에이전트
-model: opus
 tools:
   - Read
   - Write

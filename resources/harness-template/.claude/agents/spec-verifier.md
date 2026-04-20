@@ -2,7 +2,6 @@
 name: spec-verifier
 description: 풀스택 스펙-코드 정합성 검증. Flutter/NestJS/Prisma/Next.js 구현이 스펙과 일치하는지 확인.
 tools: Read, Glob, Grep
-model: opus
 ---
 
 스펙 문서와 실제 풀스택 구현 코드를 대조하여 불일치를 찾는다.

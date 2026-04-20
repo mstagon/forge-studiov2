@@ -1,7 +1,6 @@
 ---
 name: docs-lookup
 description: 공식 문서 및 API 레퍼런스 검색 전용 에이전트
-model: sonnet
 tools:
   - Read
   - Glob

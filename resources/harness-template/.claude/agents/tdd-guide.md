@@ -1,7 +1,6 @@
 ---
 name: tdd-guide
 description: TDD 워크플로우 가이드 에이전트
-model: sonnet
 tools:
   - Read
   - Write

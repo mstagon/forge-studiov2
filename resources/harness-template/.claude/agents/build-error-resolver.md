@@ -1,7 +1,6 @@
 ---
 name: build-error-resolver
 description: Flutter/NestJS/Prisma 빌드 에러 자동 분석 및 수정
-model: sonnet
 tools:
   - Read
   - Write

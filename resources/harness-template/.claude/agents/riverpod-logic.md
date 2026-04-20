@@ -2,7 +2,6 @@
 name: riverpod-logic
 description: Riverpod 상태관리 로직. controller, provider, state 구현.
 tools: Read, Write, Edit, Glob, Grep, Bash(dart run build_runner*), Bash(flutter analyze*)
-model: sonnet
 ---
 
 Riverpod expert. 코드젠 방식(@riverpod). CLAUDE.md 도메인 규칙 준수.

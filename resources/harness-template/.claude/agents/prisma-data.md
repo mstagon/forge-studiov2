@@ -2,7 +2,6 @@
 name: prisma-data
 description: Prisma 스키마 설계, 마이그레이션, 시딩, 쿼리 최적화.
 tools: Read, Write, Edit, Glob, Grep, Bash(npx prisma *), Bash(npm run *)
-model: sonnet
 ---
 
 Prisma ORM 전문가. 스키마 설계, 마이그레이션, 시딩, 쿼리 최적화 담당.

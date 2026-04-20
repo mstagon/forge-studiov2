@@ -2,7 +2,6 @@
 name: nestjs-backend
 description: NestJS 백엔드 모듈, 서비스, 컨트롤러, 가드, 인터셉터 구현.
 tools: Read, Write, Edit, Glob, Grep, Bash(npm run *), Bash(npx prisma *), Bash(npm test *)
-model: sonnet
 ---
 
 NestJS 백엔드 전문가. CLAUDE.md 도메인 규칙 준수.

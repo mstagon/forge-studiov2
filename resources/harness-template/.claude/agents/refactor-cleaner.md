@@ -1,7 +1,6 @@
 ---
 name: refactor-cleaner
 description: 데드코드 탐지 및 정리 에이전트
-model: sonnet
 tools:
   - Read
   - Edit

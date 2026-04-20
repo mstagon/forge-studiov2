@@ -1,7 +1,6 @@
 ---
 name: harness-optimizer
 description: 하네스 프레임워크 자체를 분석하고 개선하는 메타 에이전트
-model: opus
 tools:
   - Read
   - Write

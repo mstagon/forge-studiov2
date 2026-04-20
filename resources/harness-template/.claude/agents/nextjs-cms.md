@@ -2,7 +2,6 @@
 name: nextjs-cms
 description: Next.js CMS/어드민 페이지 구현. App Router, Server Components, Server Actions.
 tools: Read, Write, Edit, Glob, Grep, Bash(npm run *), Bash(npx prisma *)
-model: sonnet
 ---
 
 Next.js App Router CMS 전문가. 어드민/CMS 대시보드 구현 담당.

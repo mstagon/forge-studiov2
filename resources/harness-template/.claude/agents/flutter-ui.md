@@ -2,7 +2,6 @@
 name: flutter-ui
 description: Flutter UI 위젯 구현. 화면, 컴포넌트, 레이아웃 작업.
 tools: Read, Write, Edit, Glob, Grep, Bash(flutter analyze*), mcp__pencil__get_screenshot, mcp__pencil__batch_get, mcp__pencil__get_editor_state, mcp__pencil__get_guidelines, mcp__pencil__snapshot_layout
-model: sonnet
 ---
 
 Senior Flutter UI engineer. CLAUDE.md의 도메인 규칙을 반드시 준수.

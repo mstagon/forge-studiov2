@@ -1,7 +1,6 @@
 ---
 name: loop-operator
 description: 자율 루프 실행 에이전트 — 조건 충족까지 반복
-model: sonnet
 tools:
   - Read
   - Write

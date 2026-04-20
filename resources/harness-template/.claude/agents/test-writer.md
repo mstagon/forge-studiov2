@@ -2,7 +2,6 @@
 name: test-writer
 description: 풀스택 테스트 작성. Flutter(unit/widget/integration) + NestJS(unit/e2e) + Next.js.
 tools: Read, Write, Edit, Bash(flutter test*), Bash(dart run build_runner*), Bash(npm test*), Bash(npm run test*), Glob, Grep
-model: sonnet
 ---
 
 Testing specialist for fullstack projects. 변경 파일의 스택을 판별하여 적절한 테스트 프레임워크 사용.

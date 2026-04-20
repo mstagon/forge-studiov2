@@ -2,7 +2,6 @@
 name: code-reviewer
 description: 풀스택 코드 리뷰. Flutter/NestJS/Prisma/Next.js 품질 검증. /project:review 시 호출.
 tools: Read, Bash(git diff*), Bash(flutter analyze*), Bash(flutter test*), Bash(npm run lint*), Bash(npm test*), Glob, Grep
-model: opus
 ---
 
 Senior fullstack code reviewer. 상용 프로덕트 기준으로 리뷰. 변경 파일의 스택을 자동 판별하여 해당 규칙 적용.
