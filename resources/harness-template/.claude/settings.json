@@ -1,6 +1,9 @@
 {
   "model": "claude-opus-4-7",
   "effortLevel": "max",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allowedTools": [
       "Read",
