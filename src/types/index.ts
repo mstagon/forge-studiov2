@@ -7,9 +7,12 @@ export interface TerminalTab {
    *  the main TerminalPanel; tabs without a workspaceId (legacy / unattached)
    *  show in every workspace as a fallback. */
   workspaceId?: string
-  /** When set, this tab attaches to an agent team's tmux pane instead of
-   *  spawning a local shell. Splits are disabled for agent tabs. */
+  /** When set, this tab attaches to a single agent team's tmux pane instead of
+   *  spawning a local shell. */
   agent?: TerminalAgentBinding
+  /** When set, this tab is a multi-agent split layout for the named team —
+   *  each leaf pane carries its own `pane.agent` binding. */
+  teamId?: string
   panes: TerminalPane[]
   activePaneId: string
 }
@@ -26,6 +29,9 @@ export interface TerminalPane {
   direction?: 'horizontal' | 'vertical'
   children?: TerminalPane[]
   size?: number // percentage
+  /** When set on a leaf pane, overrides the tab-level agent binding so each
+   *  pane in a split-team layout can attach to a different agent's tmux pane. */
+  agent?: TerminalAgentBinding
 }
 
 export interface Workspace {

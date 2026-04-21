@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useAgentTeamStore } from '@/stores/agentTeam'
 import { useTerminalStore } from '@/stores/terminal'
-import { VscOrganization, VscPerson, VscCircleFilled, VscMail, VscTerminal } from 'react-icons/vsc'
+import { VscOrganization, VscPerson, VscCircleFilled, VscMail, VscTerminal, VscSplitHorizontal } from 'react-icons/vsc'
 import type { Team, TeamMember, AgentStatus } from '@/types'
 
 const STATUS_COLOR: Record<AgentStatus, string> = {
@@ -66,12 +66,32 @@ export function TeamsPanel() {
 function TeamCard({ team }: { team: Team }) {
   const running = team.members.filter((m) => m.status === 'running').length
   const idle = team.members.filter((m) => m.status === 'idle').length
+  const createSplitTeamTab = useTerminalStore((s) => s.createSplitTeamTab)
+  const attachable = team.members.filter((m) => m.tmuxPaneId)
+  const canSplit = attachable.length >= 2
+  const openSplit = () => {
+    if (!canSplit) return
+    createSplitTeamTab(
+      team.id,
+      attachable.map((m) => ({ agentName: m.name, tmuxPaneId: m.tmuxPaneId! })),
+      `${team.name} (team split)`,
+    )
+  }
   return (
     <div className="border-b border-border">
       <div className="px-3 py-2 bg-surface-2/40">
         <div className="flex items-center gap-2">
           <VscOrganization size={14} className="text-text-secondary shrink-0" />
           <span className="text-xs font-semibold text-text-primary truncate">{team.name}</span>
+          {canSplit && (
+            <button
+              className="p-0.5 hover:bg-surface-3 rounded text-text-secondary hover:text-text-primary transition-colors"
+              onClick={(e) => { e.stopPropagation(); openSplit() }}
+              title={`Open all ${attachable.length} agents in a split tab`}
+            >
+              <VscSplitHorizontal size={12} />
+            </button>
+          )}
           <span className="ml-auto text-2xs text-text-muted shrink-0">
             {running}▶ {idle}◉ / {team.members.length}
           </span>

@@ -9,6 +9,11 @@ interface TerminalState {
 
   addTab: (cwd?: string, workspaceId?: string) => TerminalTab
   addAgentTab: (agent: TerminalAgentBinding, title: string) => TerminalTab
+  createSplitTeamTab: (
+    teamId: string,
+    members: Array<{ agentName: string; tmuxPaneId: string }>,
+    title: string,
+  ) => TerminalTab | null
   removeTab: (id: string) => void
   setActiveTab: (id: string) => void
   updateTabTitle: (id: string, title: string) => void
@@ -94,6 +99,49 @@ function getFirstLeaf(pane: TerminalPane): TerminalPane {
   return pane
 }
 
+/** Pick a tmux-style grid column count for N panes */
+function pickGridCols(n: number): number {
+  if (n <= 1) return 1
+  if (n <= 3) return n          // 2 → 1×2, 3 → 1×3
+  if (n === 4) return 2         // 2×2
+  if (n <= 6) return 3          // 2×3
+  if (n <= 9) return 3          // 3×3
+  return 3                      // 3×N for very large teams (scrolls)
+}
+
+/** Build a balanced grid pane tree from N leaf panes */
+function buildGridTree(leaves: TerminalPane[], cols: number): TerminalPane {
+  if (leaves.length === 1) {
+    return { ...leaves[0], size: 100 }
+  }
+  const rows: TerminalPane[][] = []
+  for (let i = 0; i < leaves.length; i += cols) {
+    rows.push(leaves.slice(i, i + cols))
+  }
+  const rowSize = 100 / rows.length
+  const rowNodes: TerminalPane[] = rows.map((rowLeaves) => {
+    if (rowLeaves.length === 1) {
+      return { ...rowLeaves[0], size: rowSize }
+    }
+    const colSize = 100 / rowLeaves.length
+    return {
+      id: uuid(),
+      ptyId: null,
+      direction: 'horizontal',
+      size: rowSize,
+      children: rowLeaves.map((p) => ({ ...p, size: colSize })),
+    }
+  })
+  if (rowNodes.length === 1) return rowNodes[0]
+  return {
+    id: uuid(),
+    ptyId: null,
+    direction: 'vertical',
+    size: 100,
+    children: rowNodes,
+  }
+}
+
 /** Check if a pane id exists anywhere in the tree */
 function paneExistsInTree(panes: TerminalPane[], id: string): boolean {
   return findPaneInTree(panes, id) !== null
@@ -156,6 +204,41 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       agent,
       panes: [pane],
       activePaneId: pane.id,
+    }
+    set((state) => ({
+      tabs: [...state.tabs, tab],
+      activeTabId: tab.id,
+    }))
+    return tab
+  },
+
+  createSplitTeamTab: (teamId, members, title) => {
+    const eligible = members.filter((m) => m.tmuxPaneId)
+    if (eligible.length === 0) return null
+
+    // Reuse an existing split-team tab for the same team if one is already open.
+    const existing = get().tabs.find((t) => t.title === title && t.teamId === teamId)
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return existing
+    }
+
+    const leaves: TerminalPane[] = eligible.map((m) => ({
+      id: uuid(),
+      ptyId: null,
+      agent: { teamId, agentName: m.agentName, tmuxPaneId: m.tmuxPaneId },
+    }))
+    const cols = pickGridCols(eligible.length)
+    const root = buildGridTree(leaves, cols)
+    const firstLeaf = getFirstLeaf(root)
+    const tab: TerminalTab = {
+      id: uuid(),
+      title,
+      ptyId: null,
+      cwd: '',
+      teamId,
+      panes: [root],
+      activePaneId: firstLeaf.id,
     }
     set((state) => ({
       tabs: [...state.tabs, tab],

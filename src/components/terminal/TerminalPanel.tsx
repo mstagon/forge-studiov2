@@ -115,8 +115,12 @@ function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisib
     )
   }
 
-  // Leaf node: render terminal
+  // Leaf node: render terminal. Pane-level agent (split-team layout) wins over
+  // tab-level agent (single-agent legacy tab).
   const isActive = pane.id === activePaneId
+  const effectiveAgent = pane.agent
+    ? { teamId: pane.agent.teamId, agentName: pane.agent.agentName }
+    : agent
   return (
     <div
       className={`h-full w-full border ${
@@ -130,7 +134,7 @@ function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisib
         tabId={tabId}
         paneId={pane.id}
         cwd={cwd}
-        agent={agent}
+        agent={effectiveAgent}
         isActive={isActive && tabVisible && tabId === activeTabId}
         searchVisible={searchVisible && isActive && tabVisible}
         onTitleChange={(title) => {
