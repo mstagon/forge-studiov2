@@ -50,6 +50,11 @@ if echo "$FILE" | grep -qE 'test/|server/test/|_test\.dart$|\.spec\.ts$'; then
   SKILLS="$SKILLS tdd-workflow"
 fi
 
+# E2E / integration_test 스킬 매칭 (flutter_driver + mcp__dart)
+if echo "$FILE" | grep -qE 'integration_test/|_e2e_test\.dart$|_driver\.dart$'; then
+  SKILLS="$SKILLS flutter-driver-e2e"
+fi
+
 # 배포 스킬 매칭
 if echo "$FILE" | grep -qiE 'dockerfile|docker-compose'; then
   SKILLS="$SKILLS deployment-patterns"

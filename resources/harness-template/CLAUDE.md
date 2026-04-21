@@ -92,6 +92,7 @@
 | `cms/app/**` | `nextjs-patterns` |
 | `server/src/**/dto/**` ↔ `client/data/**/dto/**` | `api-contract` |
 | `test/**`, `server/test/**` | `tdd-workflow` |
+| `integration_test/**`, `**_e2e_test.dart`, `**_driver.dart` | `flutter-driver-e2e` |
 | `Dockerfile`, `docker-compose.*` | `deployment-patterns` |
 
 ---
