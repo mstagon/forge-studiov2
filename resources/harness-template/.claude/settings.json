@@ -79,7 +79,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/mcp-health.sh 2>&1 | head -20",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/mcp-health.sh\" 2>&1 | head -20",
             "timeout": 10
           }
         ]
@@ -88,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/auto-profile.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/auto-profile.sh\""
           }
         ]
       }
@@ -103,7 +103,7 @@
           },
           {
             "type": "command",
-            "command": "bash .claude/scripts/tmux-dev.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/tmux-dev.sh\""
           }
         ]
       },
@@ -116,11 +116,11 @@
           },
           {
             "type": "command",
-            "command": "bash .claude/scripts/skill-injector.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/skill-injector.sh\""
           },
           {
             "type": "command",
-            "command": "bash .claude/scripts/gateguard.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/gateguard.sh\""
           }
         ]
       }
@@ -177,7 +177,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/pre-compact.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/pre-compact.sh\""
           }
         ]
       }
@@ -195,7 +195,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/learn.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/learn.sh\""
           }
         ]
       },
@@ -203,7 +203,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/cost-tracker.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/cost-tracker.sh\""
           }
         ]
       },
@@ -211,7 +211,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/scripts/evaluate-session.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/evaluate-session.sh\""
           }
         ]
       },
