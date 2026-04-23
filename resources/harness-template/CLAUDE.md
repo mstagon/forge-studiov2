@@ -130,6 +130,23 @@ PLAN → SCHEMA → BACKEND → FRONTEND → CMS → TEST → SYNC → REVIEW
 
 ---
 
+# 항상 로드되는 룰 (MANDATORY — 위반 시 작업 거부)
+
+다음 룰들은 모든 작업에 자동 적용된다. 위반하지 마라.
+
+@.claude/rules/common/architecture.md
+@.claude/rules/common/coding-style.md
+@.claude/rules/common/git-workflow.md
+@.claude/rules/common/security.md
+@.claude/rules/common/testing.md
+@.claude/rules/common/orchestration.md
+@.claude/rules/common/mcp.md
+@.claude/rules/common/automation.md
+
+위 파일들의 룰은 컨텍스트로 자동 로드된다. "어떤 룰이 적용되나요?" 묻지 말고, 위 파일에 적힌 그대로 따라라. 의심되면 해당 파일을 즉시 Read해서 확인.
+
+---
+
 # Pointers
 
 | 주제 | 파일 |

@@ -61,7 +61,22 @@ if echo "$FILE" | grep -qiE 'dockerfile|docker-compose'; then
 fi
 
 if [ -n "$SKILLS" ]; then
-  echo "📚 Auto-Skill:$SKILLS → 해당 스킬 규칙 자동 적용" >&2
+  # stdout으로 출력 → Claude 컨텍스트에 주입됨 (additionalContext)
+  SKILL_LIST=$(echo "$SKILLS" | sed 's/^ //' | tr ' ' ',' | sed 's/,/, /g')
+  FIRST_SKILL=$(echo "$SKILLS" | awk '{print $1}')
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "⚠️ MANDATORY SKILL — 이 파일을 편집하기 전 반드시 적용:"
+  echo ""
+  echo "파일: $FILE"
+  echo "매칭 스킬: $SKILL_LIST"
+  echo ""
+  echo "지금 즉시 다음을 수행:"
+  echo "1. .claude/skills/<skill>/SKILL.md 를 Read 도구로 읽어라"
+  echo "2. 그 SKILL.md의 규칙을 이 편집에 그대로 적용해라"
+  echo "3. 룰 위반 시 편집을 중단하고 사용자에게 보고"
+  echo ""
+  echo "스킬 미적용 편집은 반려 사유다."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi
 
 exit 0
