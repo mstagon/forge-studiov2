@@ -1,5 +1,7 @@
 <div align="center">
 
+English | [한국어](README.ko.md)
+
 # Forge Studio
 
 **A native macOS GUI for [Claude Code](https://claude.com/claude-code) — terminals, workspaces, git, and a first-class harness manager in one window.**
