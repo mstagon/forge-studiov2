@@ -95,6 +95,44 @@
 | `integration_test/**`, `**_e2e_test.dart`, `**_driver.dart` | `flutter-driver-e2e` |
 | `Dockerfile`, `docker-compose.*` | `deployment-patterns` |
 
+> 위 표의 파일 패턴이 매칭되면 **`scripts/skill-injector.sh` 훅이 PreToolUse 단계에서 stdout으로 강제 주입**한다. 매칭된 SKILL.md는 반드시 Read하고 따른다.
+
+# Meta Skills (파일 패턴 무관 — 상황별 호출)
+
+| 스킬 | 호출 시점 |
+|-----|----------|
+| `tdd-workflow` | 모든 구현 시작 전 (Red → Green → Refactor) |
+| `verification-loop` | 구현 완료 시 자동 (build + test + lint + DTO sync + review) |
+| `eval-harness` | `/eval` 실행 또는 품질 평가 필요 시 |
+| `review-checklist` | `/review` 실행 시 (코드 리뷰 3종 체크리스트) |
+| `autonomous-loops` | `loop-operator` 에이전트 작동 시 (자율 수정 루프) |
+| `continuous-learning-v2` | 세션 종료 / `/learn` / `/evolve` |
+| `search-first` | 새 코드 작성 전 — 기존 패턴/유틸 먼저 검색 |
+| `strategic-compact` | 컨텍스트가 80% 넘어가면 / PreCompact 훅 |
+| `skill-stocktake` | 스킬 자체 audit (사용도/충돌/누락 점검) |
+
+# Hook Routing (이벤트 → 스크립트)
+
+| 이벤트 | 스크립트 | 동작 |
+|--------|---------|------|
+| `SessionStart` | `mcp-health.sh` | MCP 서버 헬스체크 (지수 백오프) |
+| `SessionStart` | `auto-profile.sh` | 브랜치 기반 훅 프로파일 자동 감지 (prd/stg=strict, feat=standard, explore=minimal) |
+| `PreToolUse` Bash | (인라인) | 위험 명령 차단(`rm -rf`/`reset --hard`/`--force`/`--no-verify`) + 시크릿 차단 + Conventional Commits + 한국어 subject + Co-Author 차단 + `-A`/`-am` 한 방 커밋 차단 |
+| `PreToolUse` Bash | `tmux-dev.sh` | dev 서버 → tmux 세션 자동 전환 |
+| `PreToolUse` Write/Edit | (인라인) | `.g.dart`/`.freezed.dart`/`prisma/migrations/` 직접 수정 차단 |
+| `PreToolUse` Write/Edit | `skill-injector.sh` | 파일 패턴 → 매칭 스킬 stdout 주입 (MANDATORY 블록) |
+| `PreToolUse` Write/Edit | `gateguard.sh` | 첫 편집 시 5개 조사 체크리스트 stdout 주입 (30분 TTL) |
+| `PostToolUse` Edit/Write | (인라인) | `.dart` 파일 자동 `dart format` |
+| `PostToolUse` Write(pubspec.yaml) | (인라인) | `flutter pub get` 자동 실행 |
+| `PostToolUse` Bash(prisma migrate) | (인라인) | `prisma generate` 자동 실행 안내 |
+| `PreCompact` | `pre-compact.sh` | 컴팩션 전 상태 보존 |
+| `Stop` | `learn.sh` | 교훈 반복 패턴 탐지 (3회+ → 승격) |
+| `Stop` | `evaluate-session.sh` | 세션 패턴 추출 + 신뢰도 평가 |
+| `Stop` | `cost-tracker.sh` | 세션 메트릭스 JSONL 기록 |
+| `Notification` | (인라인) | error/fail 감지 시 macOS notification |
+
+> Hook 상세 설정: [`settings.json`](.claude/settings.json) / 프로파일: [`scripts/hook-profiles.sh`](.claude/scripts/hook-profiles.sh)
+
 ---
 
 # 자동 파이프라인 (항상 MAX — TDD + 풀 체인)

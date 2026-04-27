@@ -15,6 +15,7 @@
 - BuildContext를 async gap 넘기지 마라
 - freezed 수정 후 build_runner 실행
 - 새 패키지 추가 후 `cd ios && pod install`
+- **HTTP 클라이언트는 dio + retrofit만 사용. `http` 패키지 금지** — 인터셉터/타임아웃/취소/타입 안전 코드젠을 일관되게 가져가기 위함. 패턴은 `dio-retrofit` 스킬 참조.
 
 ## TypeScript/NestJS
 - TypeScript strict mode

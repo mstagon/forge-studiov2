@@ -4,6 +4,30 @@ description: Dio+Retrofit API 통신 패턴. API 클라이언트, 인터셉터 �
 globs: client/**/remote/**, client/**/network/**, client/**/api/**
 ---
 
+## ⚠️ MANDATORY — 기본 네트워크 스택
+
+이 프로젝트는 **dio + retrofit만 사용**한다. `http` 패키지 사용 금지 (코딩 스타일 룰).
+
+### 권장 의존성 (pubspec.yaml — 2026-04 기준 최신 stable)
+
+```yaml
+dependencies:
+  dio: ^5.9.2
+  retrofit: ^4.9.2
+  json_annotation: ^4.11.0
+
+dev_dependencies:
+  retrofit_generator: ^10.2.5
+  json_serializable: ^6.13.1
+  build_runner: ^2.14.1
+```
+
+추가 후:
+```bash
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+```
+
 ## Dio + Retrofit 패턴 가이드
 
 ### Dio 인스턴스 설정
