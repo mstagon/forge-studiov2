@@ -130,6 +130,18 @@ PLAN → SCHEMA → BACKEND → FRONTEND → CMS → TEST → SYNC → REVIEW
 
 ---
 
+# 커밋 규칙 (MANDATORY — 위반 시 PreToolUse 훅이 차단)
+
+- **커밋 메시지는 반드시 한국어로 작성**한다. 영어 자동 생성 금지. 제목(subject)에 **한글 1자 이상 필수**.
+  - OK: `feat(auth): 소셜 로그인 추가`
+  - NG: `feat(auth): add social login` (차단됨)
+- **`Co-Authored-By:` trailer 절대 추가 금지**. 저자는 개발자 단독.
+  `Co-Authored-By: Claude ...`, `🤖 Generated with Claude Code` 같은 문구 일체 금지.
+- Conventional Commits 형식 준수: `type(scope): 한국어 제목`
+- 상세 규칙: [`rules/common/git-workflow.md`](.claude/rules/common/git-workflow.md)
+
+---
+
 # 항상 로드되는 룰 (MANDATORY — 위반 시 작업 거부)
 
 다음 룰들은 모든 작업에 자동 적용된다. 위반하지 마라.
