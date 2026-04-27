@@ -1,9 +1,23 @@
 import { Fragment, useRef, useCallback } from 'react'
+import { FiX } from 'react-icons/fi'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { TerminalTabs } from './TerminalTabs'
 import { XTerminal } from './XTerminal'
 import type { TerminalPane } from '@/types'
+
+/** Count total leaf panes in a pane subtree. */
+function countLeavesInTree(panes: TerminalPane[]): number {
+  let count = 0
+  for (const pane of panes) {
+    if (pane.children && pane.children.length > 0) {
+      count += countLeavesInTree(pane.children)
+    } else {
+      count++
+    }
+  }
+  return count
+}
 
 interface ResizeHandleProps {
   direction: 'horizontal' | 'vertical'
@@ -75,9 +89,11 @@ interface PaneViewProps {
   tabVisible: boolean
   searchVisible: boolean
   depth: number
+  /** True when the tab has more than one leaf pane — enables the pane × button. */
+  canClose: boolean
 }
 
-function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisible, searchVisible, depth }: PaneViewProps) {
+function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisible, searchVisible, depth, canClose }: PaneViewProps) {
   if (pane.children && pane.children.length > 0) {
     // Branch node: render children in a flex container
     const isHorizontal = pane.direction === 'horizontal'
@@ -107,6 +123,7 @@ function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisib
                 tabVisible={tabVisible}
                 searchVisible={searchVisible}
                 depth={depth + 1}
+                canClose={canClose}
               />
             </div>
           </Fragment>
@@ -123,7 +140,7 @@ function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisib
     : agent
   return (
     <div
-      className={`h-full w-full border ${
+      className={`group relative h-full w-full border ${
         isActive ? 'border-accent/60' : 'border-transparent'
       }`}
       onClick={() => {
@@ -144,6 +161,23 @@ function PaneView({ pane, tabId, cwd, agent, activePaneId, activeTabId, tabVisib
           useTerminalStore.getState().setTabPtyId(tabId, pane.id, ptyId)
         }}
       />
+      {canClose && (
+        <button
+          className="absolute top-1 right-1 z-10 p-0.5 rounded bg-surface-1/80 text-text-secondary opacity-0 group-hover:opacity-100 hover:bg-surface-2 hover:text-text-primary transition-opacity"
+          title="Close Pane"
+          onMouseDown={(e) => {
+            // Prevent xterm from stealing focus before the click fires.
+            e.stopPropagation()
+            e.preventDefault()
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            useTerminalStore.getState().removePane(tabId, pane.id)
+          }}
+        >
+          <FiX size={12} />
+        </button>
+      )}
     </div>
   )
 }
@@ -170,6 +204,9 @@ export function TerminalPanel() {
         {tabs.map((tab) => {
           const belongsHere = !tab.workspaceId || tab.workspaceId === activeWorkspace?.id
           const isActiveTab = tab.id === activeTabId && belongsHere
+          // Don't expose a per-pane × on agent-bound tabs: those panes are
+          // attached to external tmux processes, not local shells we own.
+          const canClose = countLeavesInTree(tab.panes) > 1 && !tab.agent && !tab.teamId
           return (
             <div
               key={tab.id}
@@ -192,6 +229,7 @@ export function TerminalPanel() {
                     tabVisible={isActiveTab}
                     searchVisible={searchVisible}
                     depth={0}
+                    canClose={canClose}
                   />
                 </div>
               ))}
