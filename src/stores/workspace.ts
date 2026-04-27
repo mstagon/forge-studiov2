@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Workspace, HarnessInfo, McpStatus, SidebarView } from '@/types'
+import type { Workspace, HarnessInfo, McpStatus, SidebarView, SplitReposOptions } from '@/types'
 
 interface WorkspaceState {
   workspaces: Workspace[]
@@ -17,7 +17,7 @@ interface WorkspaceState {
 
   loadWorkspaces: () => Promise<void>
   setActiveWorkspace: (workspace: Workspace) => void
-  createWorkspace: (name: string, dirPath: string) => Promise<Workspace>
+  createWorkspace: (name: string, dirPath: string, splitRepos?: SplitReposOptions) => Promise<Workspace>
   openWorkspace: (dirPath: string) => Promise<Workspace>
   removeWorkspace: (id: string) => void
   scanHarness: () => Promise<void>
@@ -58,7 +58,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     get().refreshHarnessVersion()
   },
 
-  createWorkspace: async (name: string, dirPath: string) => {
+  createWorkspace: async (name: string, dirPath: string, splitRepos?: SplitReposOptions) => {
     const templatePath = await window.api.workspace.getTemplatePath()
     const claudeMdPath = await window.api.workspace.getClaudeMdPath()
     const workspace = await window.api.workspace.create({
@@ -66,6 +66,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       path: dirPath,
       templatePath,
       claudeMdPath,
+      splitRepos: splitRepos?.enabled ? splitRepos : undefined,
     })
     await get().loadWorkspaces()
     set({ activeWorkspace: workspace, newWorkspaceDialogVisible: false })

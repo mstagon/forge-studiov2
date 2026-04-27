@@ -43,6 +43,20 @@ export interface Workspace {
   harnessApplied: boolean
 }
 
+/**
+ * Split-repo settings forwarded from the New Workspace dialog through the
+ * `workspace:create` IPC. When `enabled`, WorkspaceManager registers three
+ * git remotes (`origin-client`, `origin-server`, `origin-cms`) on the new
+ * monorepo so the user can later run `git subtree push` per stack.
+ */
+export interface SplitReposOptions {
+  enabled: boolean
+  baseName: string
+  owner?: string
+  protocol?: 'ssh' | 'https'
+  autoCreateRepos?: boolean
+}
+
 export interface HarnessInfo {
   agents: { name: string; file: string }[]
   skills: { name: string; file: string }[]
