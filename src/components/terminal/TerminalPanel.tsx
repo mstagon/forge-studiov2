@@ -1,5 +1,6 @@
 import { Fragment, useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { FiX } from 'react-icons/fi'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { TerminalTabs } from './TerminalTabs'
@@ -93,6 +94,19 @@ function createSlotRegistry(): SlotRegistry {
   }
 }
 
+/** Count total leaf panes in a pane subtree. */
+function countLeavesInTree(panes: TerminalPane[]): number {
+  let count = 0
+  for (const pane of panes) {
+    if (pane.children && pane.children.length > 0) {
+      count += countLeavesInTree(pane.children)
+    } else {
+      count++
+    }
+  }
+  return count
+}
+
 interface ResizeHandleProps {
   direction: 'horizontal' | 'vertical'
   parentId: string
@@ -157,6 +171,7 @@ interface LeafSlotProps {
   paneId: string
   tabId: string
   isActive: boolean
+  canClose: boolean
   registry: SlotRegistry
 }
 
@@ -166,7 +181,7 @@ interface LeafSlotProps {
  * `createPortal` the XTerminal into that host, and React doesn't tear down the
  * portal because the host's DOM identity (and its React parent) never change.
  */
-function LeafSlot({ paneId, tabId, isActive, registry }: LeafSlotProps) {
+function LeafSlot({ paneId, tabId, isActive, canClose, registry }: LeafSlotProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -179,13 +194,31 @@ function LeafSlot({ paneId, tabId, isActive, registry }: LeafSlotProps) {
   return (
     <div
       ref={ref}
-      className={`h-full w-full border ${
+      className={`group relative h-full w-full border ${
         isActive ? 'border-accent/60' : 'border-transparent'
       }`}
       onClick={() => {
         useTerminalStore.getState().setActivePane(tabId, paneId)
       }}
-    />
+    >
+      {canClose && (
+        <button
+          className="absolute top-1 right-1 z-10 p-0.5 rounded bg-surface-1/80 text-text-secondary opacity-0 group-hover:opacity-100 hover:bg-surface-2 hover:text-text-primary transition-opacity"
+          title="Close Pane"
+          onMouseDown={(e) => {
+            // Prevent xterm from stealing focus before the click fires.
+            e.stopPropagation()
+            e.preventDefault()
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            useTerminalStore.getState().removePane(tabId, paneId)
+          }}
+        >
+          <FiX size={12} />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -193,11 +226,12 @@ interface PaneLayoutProps {
   pane: TerminalPane
   tabId: string
   activePaneId: string
+  canClose: boolean
   registry: SlotRegistry
 }
 
 /** Renders the layout tree (flex containers + leaf slots). No XTerminal here. */
-function PaneLayout({ pane, tabId, activePaneId, registry }: PaneLayoutProps) {
+function PaneLayout({ pane, tabId, activePaneId, canClose, registry }: PaneLayoutProps) {
   if (pane.children && pane.children.length > 0) {
     const isHorizontal = pane.direction === 'horizontal'
     return (
@@ -220,6 +254,7 @@ function PaneLayout({ pane, tabId, activePaneId, registry }: PaneLayoutProps) {
                 pane={child}
                 tabId={tabId}
                 activePaneId={activePaneId}
+                canClose={canClose}
                 registry={registry}
               />
             </div>
@@ -234,6 +269,7 @@ function PaneLayout({ pane, tabId, activePaneId, registry }: PaneLayoutProps) {
       paneId={pane.id}
       tabId={tabId}
       isActive={pane.id === activePaneId}
+      canClose={canClose}
       registry={registry}
     />
   )
@@ -333,6 +369,7 @@ interface TabViewProps {
   activeTabId: string | null
   searchVisible: boolean
   cwd: string
+  canClose: boolean
 }
 
 /**
@@ -340,7 +377,7 @@ interface TabViewProps {
  * tabs don't fight over slot ids (paneIds are uuids so collision is unlikely,
  * but the per-tab boundary keeps reasoning simple).
  */
-function TabView({ tab, isActiveTab, activeTabId, searchVisible, cwd }: TabViewProps) {
+function TabView({ tab, isActiveTab, activeTabId, searchVisible, cwd, canClose }: TabViewProps) {
   const registryRef = useRef<SlotRegistry | null>(null)
   if (!registryRef.current) {
     registryRef.current = createSlotRegistry()
@@ -362,6 +399,7 @@ function TabView({ tab, isActiveTab, activeTabId, searchVisible, cwd }: TabViewP
             pane={pane}
             tabId={tab.id}
             activePaneId={tab.activePaneId}
+            canClose={canClose}
             registry={registry}
           />
         </div>
@@ -400,6 +438,9 @@ export function TerminalPanel() {
         {tabs.map((tab) => {
           const belongsHere = !tab.workspaceId || tab.workspaceId === activeWorkspace?.id
           const isActiveTab = tab.id === activeTabId && belongsHere
+          // Don't expose a per-pane × on agent-bound tabs: those panes are
+          // attached to external tmux processes, not local shells we own.
+          const canClose = countLeavesInTree(tab.panes) > 1 && !tab.agent && !tab.teamId
           return (
             <TabView
               key={tab.id}
@@ -408,6 +449,7 @@ export function TerminalPanel() {
               activeTabId={activeTabId}
               searchVisible={searchVisible}
               cwd={tab.cwd || activeWorkspace?.path || ''}
+              canClose={canClose}
             />
           )
         })}
