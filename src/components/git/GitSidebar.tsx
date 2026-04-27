@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
-import { useGitStore } from '@/stores/git'
+import { useEffect, useMemo } from 'react'
+import { useGitStore, isHarnessPath } from '@/stores/git'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { VscAdd, VscRemove, VscCheck, VscCloudUpload, VscCloudDownload, VscRefresh, VscDiscard, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscNewFile } from 'react-icons/vsc'
-import type { GitFileChange } from '@/types'
+import { VscAdd, VscRemove, VscCheck, VscCloudUpload, VscCloudDownload, VscRefresh, VscDiscard, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscNewFile, VscEye, VscEyeClosed } from 'react-icons/vsc'
+import type { GitFileChange, GitStatus } from '@/types'
 
 const STATUS_ICONS: Record<string, typeof VscDiffModified> = {
   M: VscDiffModified,
@@ -82,9 +82,9 @@ function FileItem({ file, staged, cwd }: { file: GitFileChange | string; staged:
 export function GitSidebar() {
   const { activeWorkspace } = useWorkspaceStore()
   const {
-    status, commitMessage, loading, error,
+    status, commitMessage, loading, error, showHarnessFiles,
     refresh, stageAll, unstageAll, commit, push, pull, fetch,
-    setCommitMessage, clearError,
+    setCommitMessage, clearError, toggleHarnessFiles,
   } = useGitStore()
 
   const cwd = activeWorkspace?.path || ''
@@ -102,7 +102,30 @@ export function GitSidebar() {
     return () => clearInterval(timer)
   }, [cwd])
 
-  if (!status?.isRepo) {
+  // Filter out harness-generated noise unless the user has toggled it on.
+  // Hidden by default to keep the panel responsive (large repos with hundreds
+  // of `.claude/**` files used to render every entry, causing scroll lag).
+  const filteredStatus = useMemo<GitStatus | null>(() => {
+    if (!status) return null
+    if (showHarnessFiles) return status
+    return {
+      ...status,
+      staged: status.staged.filter((f: GitFileChange) => !isHarnessPath(f.path)),
+      unstaged: status.unstaged.filter((f: GitFileChange) => !isHarnessPath(f.path)),
+      untracked: status.untracked.filter((p: string) => !isHarnessPath(p)),
+    }
+  }, [status, showHarnessFiles])
+
+  const hiddenCount = useMemo<number>(() => {
+    if (!status || showHarnessFiles) return 0
+    return (
+      status.staged.filter((f: GitFileChange) => isHarnessPath(f.path)).length +
+      status.unstaged.filter((f: GitFileChange) => isHarnessPath(f.path)).length +
+      status.untracked.filter((p: string) => isHarnessPath(p)).length
+    )
+  }, [status, showHarnessFiles])
+
+  if (!filteredStatus?.isRepo) {
     return (
       <div className="px-3 py-4 text-xs text-text-muted">
         Not a git repository.
@@ -110,19 +133,29 @@ export function GitSidebar() {
     )
   }
 
-  const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length
+  const totalChanges = filteredStatus.staged.length + filteredStatus.unstaged.length + filteredStatus.untracked.length
 
   return (
     <div className="flex flex-col h-full">
       {/* Branch + sync */}
       <div className="px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-semibold text-accent truncate flex-1">{status.branch}</span>
-          {status.upstream && (
+          <span className="text-xs font-semibold text-accent truncate flex-1">{filteredStatus.branch}</span>
+          <button
+            className="p-0.5 hover:bg-surface-2 rounded text-text-muted hover:text-text-primary transition-colors flex items-center gap-1"
+            onClick={toggleHarnessFiles}
+            title={`${showHarnessFiles ? 'Hide' : 'Show'} harness files (Cmd+Shift+.)`}
+          >
+            {showHarnessFiles ? <VscEye size={12} /> : <VscEyeClosed size={12} />}
+            {hiddenCount > 0 && (
+              <span className="text-2xs">{hiddenCount}</span>
+            )}
+          </button>
+          {filteredStatus.upstream && (
             <span className="text-2xs text-text-muted">
-              {status.ahead > 0 && `↑${status.ahead}`}
-              {status.behind > 0 && `↓${status.behind}`}
-              {status.ahead === 0 && status.behind === 0 && '✓'}
+              {filteredStatus.ahead > 0 && `↑${filteredStatus.ahead}`}
+              {filteredStatus.behind > 0 && `↓${filteredStatus.behind}`}
+              {filteredStatus.ahead === 0 && filteredStatus.behind === 0 && '✓'}
             </span>
           )}
         </div>
@@ -179,21 +212,21 @@ export function GitSidebar() {
         <button
           className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-accent hover:bg-accent-hover text-white rounded transition-colors disabled:opacity-50"
           onClick={() => commit(cwd)}
-          disabled={loading || !commitMessage.trim() || status.staged.length === 0}
+          disabled={loading || !commitMessage.trim() || filteredStatus.staged.length === 0}
           title="Commit (Cmd+Enter)"
         >
           <VscCheck size={14} />
-          Commit ({status.staged.length} file{status.staged.length !== 1 ? 's' : ''})
+          Commit ({filteredStatus.staged.length} file{filteredStatus.staged.length !== 1 ? 's' : ''})
         </button>
       </div>
 
       {/* File lists */}
       <div className="flex-1 overflow-y-auto">
         {/* Staged */}
-        {status.staged.length > 0 && (
+        {filteredStatus.staged.length > 0 && (
           <div>
             <div className="flex items-center justify-between px-3 py-1.5 text-2xs text-text-muted uppercase tracking-wider">
-              <span>Staged ({status.staged.length})</span>
+              <span>Staged ({filteredStatus.staged.length})</span>
               <button
                 className="hover:text-text-primary"
                 onClick={() => unstageAll(cwd)}
@@ -202,17 +235,17 @@ export function GitSidebar() {
                 <VscRemove size={12} />
               </button>
             </div>
-            {status.staged.map((f) => (
+            {filteredStatus.staged.map((f) => (
               <FileItem key={`s-${f.path}`} file={f} staged cwd={cwd} />
             ))}
           </div>
         )}
 
         {/* Unstaged */}
-        {status.unstaged.length > 0 && (
+        {filteredStatus.unstaged.length > 0 && (
           <div>
             <div className="flex items-center justify-between px-3 py-1.5 text-2xs text-text-muted uppercase tracking-wider">
-              <span>Changes ({status.unstaged.length})</span>
+              <span>Changes ({filteredStatus.unstaged.length})</span>
               <button
                 className="hover:text-text-primary"
                 onClick={() => stageAll(cwd)}
@@ -221,17 +254,17 @@ export function GitSidebar() {
                 <VscAdd size={12} />
               </button>
             </div>
-            {status.unstaged.map((f) => (
+            {filteredStatus.unstaged.map((f) => (
               <FileItem key={`u-${f.path}`} file={f} staged={false} cwd={cwd} />
             ))}
           </div>
         )}
 
         {/* Untracked */}
-        {status.untracked.length > 0 && (
+        {filteredStatus.untracked.length > 0 && (
           <div>
             <div className="flex items-center justify-between px-3 py-1.5 text-2xs text-text-muted uppercase tracking-wider">
-              <span>Untracked ({status.untracked.length})</span>
+              <span>Untracked ({filteredStatus.untracked.length})</span>
               <button
                 className="hover:text-text-primary"
                 onClick={() => stageAll(cwd)}
@@ -240,7 +273,7 @@ export function GitSidebar() {
                 <VscAdd size={12} />
               </button>
             </div>
-            {status.untracked.map((f) => (
+            {filteredStatus.untracked.map((f) => (
               <FileItem key={`?-${f}`} file={f} staged={false} cwd={cwd} />
             ))}
           </div>
