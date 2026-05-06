@@ -13,6 +13,7 @@ import {
   Pill,
   Dot,
   AgentBadge,
+  Kbd,
   SectionHead,
   STATE_COLOR,
   STATE_LABEL,
@@ -73,20 +74,24 @@ export function RunLiveView({
         <button
           onClick={onClose}
           style={{
-            width: 24,
-            height: 24,
-            borderRadius: 5,
-            color: 'var(--text-2)',
-            background: 'transparent',
+            height: 28,
+            padding: '0 10px 0 8px',
+            borderRadius: 6,
+            color: 'var(--text-1)',
+            background: 'var(--bg-3)',
             border: '1px solid var(--line-2)',
             display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            gap: 6,
             cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 500,
           }}
-          title="Back"
+          title="Back to workspace (Esc)"
         >
           <Icon.Chevron size={14} style={{ transform: 'rotate(180deg)' }} />
+          <span>Back</span>
+          <Kbd style={{ marginLeft: 2 }}>esc</Kbd>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Dot color={STATE_COLOR.active} pulse />

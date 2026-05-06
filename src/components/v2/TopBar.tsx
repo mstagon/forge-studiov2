@@ -45,23 +45,36 @@ export interface WorkspaceSwitcherProps {
   workspaces: WorkspaceSummary[]
   onSwitch: (id: string) => void
   onAddWorkspace?: () => void
+  onOpenExisting?: () => void
   onManageWorkspaces?: () => void
 }
 
 export function WorkspaceSwitcher({
-  workspace, workspaces, onSwitch, onAddWorkspace, onManageWorkspaces,
+  workspace, workspaces, onSwitch, onAddWorkspace, onOpenExisting, onManageWorkspaces,
 }: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
+    setQuery('')
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
+
+  // Fuzzy filter on name + path. Empty query → show all.
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? workspaces.filter(
+        (w) =>
+          w.name.toLowerCase().includes(q) || w.path.toLowerCase().includes(q),
+      )
+    : workspaces
+  const showSearch = workspaces.length >= 5
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -107,10 +120,42 @@ export function WorkspaceSwitcher({
           <div className="ns mono" style={{
             padding: '8px 12px 4px', fontSize: 9.5, letterSpacing: 1,
             color: 'var(--text-4)', fontWeight: 600, textTransform: 'uppercase',
-            borderBottom: '1px solid var(--line-1)',
+            borderBottom: showSearch ? 'none' : '1px solid var(--line-1)',
           }}>이 머신의 워크스페이스</div>
+          {showSearch && (
+            <div
+              style={{
+                padding: '4px 10px 8px',
+                borderBottom: '1px solid var(--line-1)',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon.Search size={11} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="이름 또는 경로 검색…"
+                style={{
+                  flex: 1, height: 22, background: 'var(--bg-1)',
+                  border: '1px solid var(--line-1)', borderRadius: 4,
+                  color: 'var(--text-1)', fontSize: 11.5,
+                  padding: '0 8px', outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+          )}
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            {workspaces.map((w, i) => {
+            {filtered.length === 0 && (
+              <div style={{
+                padding: '20px 12px', textAlign: 'center',
+                fontSize: 11.5, color: 'var(--text-4)',
+              }}>
+                일치하는 워크스페이스가 없습니다.
+              </div>
+            )}
+            {filtered.map((w, i) => {
               const cur = w.id === workspace.id
               return (
                 <button
@@ -122,7 +167,7 @@ export function WorkspaceSwitcher({
                     border: 'none',
                     borderLeft: `2px solid ${cur ? 'var(--accent)' : 'transparent'}`,
                     display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                    borderBottom: i < workspaces.length - 1 ? '1px solid var(--line-1)' : 'none',
+                    borderBottom: i < filtered.length - 1 ? '1px solid var(--line-1)' : 'none',
                   }}
                 >
                   <Icon.Folder size={13} style={{
@@ -155,7 +200,7 @@ export function WorkspaceSwitcher({
           </div>
           <div style={{ borderTop: '1px solid var(--line-1)', background: 'var(--bg-1)' }}>
             <button
-              onClick={onAddWorkspace}
+              onClick={() => { setOpen(false); onAddWorkspace?.() }}
               style={{
                 width: '100%', textAlign: 'left', padding: '10px 12px',
                 background: 'transparent', border: 'none',
@@ -163,10 +208,25 @@ export function WorkspaceSwitcher({
                 color: 'var(--text-2)', fontSize: 12, cursor: 'pointer',
               }}
             >
-              <Icon.Plus size={12} /> 워크스페이스 추가...
+              <Icon.Plus size={12} /> 새 워크스페이스 추가...
             </button>
             <button
-              onClick={onManageWorkspaces}
+              onClick={() => {
+                setOpen(false)
+                ;(onOpenExisting ?? onAddWorkspace)?.()
+              }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '10px 12px',
+                background: 'transparent', border: 'none',
+                display: 'flex', alignItems: 'center', gap: 10,
+                color: 'var(--text-2)', fontSize: 12, cursor: 'pointer',
+                borderTop: '1px solid var(--line-1)',
+              }}
+            >
+              <Icon.Folder size={12} /> 기존 폴더 열기...
+            </button>
+            <button
+              onClick={() => { setOpen(false); onManageWorkspaces?.() }}
               style={{
                 width: '100%', textAlign: 'left', padding: '10px 12px',
                 background: 'transparent', border: 'none',
@@ -194,6 +254,11 @@ export interface TopBarProps {
   onSwitchWorkspace: (id: string) => void
   onOpenSettings?: () => void
   onAddWorkspace?: () => void
+  /**
+   * Optional handler for "기존 폴더 열기". If omitted, the dropdown falls
+   * back to onAddWorkspace (NewWorkspaceDialog already supports both flows).
+   */
+  onOpenExisting?: () => void
   /** Show a red dot on the bell icon when there are unread notifications. */
   hasNotifications?: boolean
   /** Active model name (e.g. "sonnet-4.5"). Falls back to "sonnet-4.5". */
@@ -209,6 +274,7 @@ export function TopBar({
   onSwitchWorkspace,
   onOpenSettings,
   onAddWorkspace,
+  onOpenExisting,
   hasNotifications = true,
   model = 'sonnet-4.5',
   modelEffort = 'HIGH',
@@ -237,6 +303,7 @@ export function TopBar({
         workspaces={workspaces}
         onSwitch={onSwitchWorkspace}
         onAddWorkspace={onAddWorkspace}
+        onOpenExisting={onOpenExisting}
         onManageWorkspaces={onOpenSettings}
       />
 
