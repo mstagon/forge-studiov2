@@ -110,6 +110,8 @@ export interface GitBranch {
 }
 
 export type AgentStatus = 'running' | 'idle' | 'shutdown'
+export type WorktreeStrategy = 'isolated' | 'shared'
+export type MergeStrategy = 'squash' | 'sequential'
 
 export interface TeamMember {
   agentId: string
@@ -127,16 +129,41 @@ export interface TeamMember {
   messageCount: number
   unreadCount: number
   isLead: boolean
+  /** Optional task assigned to this member at create time. */
+  task?: string
+  /** Per-member worktree path (when isolated worktrees are provisioned). */
+  worktreePath?: string
+  branch?: string
 }
 
 export interface Team {
   id: string
   name: string
   description?: string
+  goal?: string
+  /** Workspace this team belongs to (only set for workspace-scoped teams). */
+  workspaceId?: string
+  worktreeStrategy?: WorktreeStrategy
+  mergeStrategy?: MergeStrategy
   createdAt: number
   leadAgentId: string
   leadSessionId?: string
   members: TeamMember[]
+}
+
+export interface TeamCreateMember {
+  agentId: string
+  task?: string
+}
+
+export interface TeamCreateOptions {
+  workspaceId: string
+  workspacePath: string
+  name: string
+  goal?: string
+  members: TeamCreateMember[]
+  worktreeStrategy: WorktreeStrategy
+  mergeStrategy: MergeStrategy
 }
 
 export type SidebarView = 'workspaces' | 'git' | 'teams' | 'dashboard' | 'settings'

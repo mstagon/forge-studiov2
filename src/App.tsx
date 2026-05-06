@@ -2,21 +2,69 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useWorkspaceStore } from './stores/workspace'
 import { useAppUpdateStore } from './stores/appUpdate'
 import { useGitStore } from './stores/git'
+import { useAgentTeamStore } from './stores/agentTeam'
+import { useLibraryStore } from './stores/library'
 
 import { Shell } from './components/v2/Shell'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
 import { Library } from './components/v2/Library'
 import { SettingsFull } from './components/v2/SettingsFull'
-import { Wizard } from './components/v2/Wizard'
+import { Wizard, type WizardResult } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
 import { DashboardPanelWired } from './components/v2/wired/DashboardPanelWired'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
 
 import { TEAMS as SEED_TEAMS } from './components/v2/data'
-import type { ViewKey, WorkspaceSummary } from './components/v2/types'
+import type { ViewKey, WorkspaceSummary, Team as V2Team, MemberState } from './components/v2/types'
 
-import type { Workspace as WorkspaceModel } from '@/types'
+import type { Workspace as WorkspaceModel, Team as StoreTeam, AgentStatus } from '@/types'
+
+/** Map an inbox AgentStatus → the v2 MemberState used by RunLiveView etc. */
+function statusToMemberState(status: AgentStatus): MemberState {
+  if (status === 'idle') return 'idle'
+  if (status === 'shutdown') return 'done'
+  return 'active'
+}
+
+/**
+ * Adapt the watcher-emitted Team (config.json + inbox-derived status) onto the
+ * richer v2 Team shape consumed by WorkspaceV2 / TeamsRunSection / RunLiveView.
+ * UI-only fields (progress, tokens, durationMin) get sensible placeholders;
+ * we'll wire them to real telemetry once it exists.
+ */
+function toV2Team(team: StoreTeam): V2Team {
+  const members = team.members.map((m) => ({
+    agentId: m.agentId,
+    task: m.task ?? m.lastSummary ?? '',
+    state: statusToMemberState(m.status),
+    tokens: 0,
+    files: 0,
+    pane: m.name?.slice(0, 4).toUpperCase() ?? 'PANE',
+  }))
+  // Aggregate run status: blocked > active > idle > done.
+  const runStatus: V2Team['status'] = members.some((m) => m.state === 'blocked')
+    ? 'blocked'
+    : members.some((m) => m.state === 'active')
+      ? 'active'
+      : members.every((m) => m.state === 'done')
+        ? 'done'
+        : 'idle'
+  return {
+    id: team.id,
+    name: team.name,
+    goal: team.goal ?? team.description ?? '',
+    status: runStatus,
+    progress: 0,
+    lastActive: '방금 전',
+    branch: `team/${team.name.toLowerCase().replace(/\s+/g, '-')}`,
+    worktree: team.worktreeStrategy ?? 'isolated',
+    merge: team.mergeStrategy ?? 'squash',
+    tokens: 0,
+    durationMin: Math.max(0, Math.round((Date.now() - team.createdAt) / 60_000)),
+    members,
+  }
+}
 
 /**
  * Map the persisted Workspace model (id/name/path/createdAt/lastOpened) to the
@@ -67,7 +115,22 @@ export default function App() {
   // ── Boot ────────────────────────────────────────────────────────
   useEffect(() => {
     loadWorkspaces()
+    // Subscribe to team updates once. setActiveWorkspace handles repointing
+    // the watcher; the subscribe callback updates the store as the chokidar
+    // watcher emits new configs.
+    useAgentTeamStore.getState().subscribe()
+    return () => useAgentTeamStore.getState().unsubscribeAll()
   }, [loadWorkspaces])
+
+  // ── Library: hydrate scanner-backed lists when workspace changes ──
+  useEffect(() => {
+    if (activeWorkspace) {
+      void useLibraryStore.getState().loadAll(activeWorkspace.path)
+      void useAgentTeamStore.getState().load()
+    } else {
+      useLibraryStore.getState().reset()
+    }
+  }, [activeWorkspace])
 
   useEffect(() => {
     const checkUpdates = useAppUpdateStore.getState().check
@@ -154,10 +217,31 @@ export default function App() {
     setWizardOpen(true)
   }
 
-  const onWizardCreate = () => {
-    setWizardOpen(false)
-    setToast({ name: 'New run', count: 1 })
-    setTimeout(() => setToast(null), 3000)
+  const onWizardCreate = async (result: WizardResult) => {
+    if (!activeWorkspace) {
+      // Without a workspace we have nowhere to write the team config — silently
+      // close the wizard rather than throwing.
+      setWizardOpen(false)
+      return
+    }
+    try {
+      await useAgentTeamStore.getState().create({
+        workspaceId: activeWorkspace.id,
+        workspacePath: activeWorkspace.path,
+        name: result.name,
+        goal: result.goal,
+        members: result.members.map((agentId) => ({ agentId })),
+        worktreeStrategy: result.worktree,
+        mergeStrategy: result.merge,
+      })
+      setToast({ name: result.name, count: result.members.length })
+    } catch (err) {
+      console.error('[wizard] team create failed:', err)
+      setToast({ name: 'Failed to create team', count: 0 })
+    } finally {
+      setWizardOpen(false)
+      setTimeout(() => setToast(null), 3000)
+    }
   }
 
   // ── Render ──────────────────────────────────────────────────────
@@ -205,13 +289,24 @@ export default function App() {
     bundledHarnessVersion &&
     installedHarnessVersion !== bundledHarnessVersion
 
+  // Real teams from the watcher, scoped to the active workspace. When empty,
+  // we keep the seed list so the design demo still has something to render.
+  const realTeams = useAgentTeamStore((s) => s.teams)
+  const runs = useMemo<V2Team[]>(() => {
+    const wsTeams = realTeams.filter(
+      (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id,
+    )
+    if (wsTeams.length === 0) return SEED_TEAMS
+    return wsTeams.map(toV2Team)
+  }, [realTeams, activeWorkspace])
+
   // Map current view → main content
   let main: React.ReactNode
   if (view === 'workspace') {
     main = (
       <WorkspaceV2
         workspace={activeSummary}
-        runs={SEED_TEAMS}
+        runs={runs}
         activeRunId={activeRunId}
         onOpenRun={(id) => setActiveRunId(id)}
         onCloseRun={() => setActiveRunId(null)}

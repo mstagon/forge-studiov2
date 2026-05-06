@@ -494,6 +494,35 @@ ipcMain.handle('updates:check', () => updateChecker.check())
 
 ipcMain.handle('teams:list', () => agentTeamWatcher.list())
 
+ipcMain.handle(
+  'teams:setWorkspace',
+  async (_event, workspacePath: string | null) => {
+    await agentTeamWatcher.setWorkspace(workspacePath)
+  }
+)
+
+ipcMain.handle(
+  'teams:create',
+  async (
+    _event,
+    opts: {
+      workspaceId: string
+      workspacePath: string
+      name: string
+      goal?: string
+      members: { agentId: string; task?: string }[]
+      worktreeStrategy: 'isolated' | 'shared'
+      mergeStrategy: 'squash' | 'sequential'
+    }
+  ) => {
+    return agentTeamWatcher.create(opts)
+  }
+)
+
+ipcMain.handle('teams:remove', async (_event, teamId: string) => {
+  await agentTeamWatcher.remove(teamId)
+})
+
 ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; agentName: string; cols: number; rows: number }) => {
   const teams = agentTeamWatcher.list()
   const team = teams.find((t) => t.id === options.teamId)

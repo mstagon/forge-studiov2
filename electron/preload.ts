@@ -127,6 +127,21 @@ const api = {
     },
     openAgentTerminal: (options: { teamId: string; agentName: string; cols: number; rows: number }): Promise<string> =>
       ipcRenderer.invoke('teams:openAgentTerminal', options),
+    /** Repoint the watcher at <workspacePath>/.claude/teams (or ~/.claude/teams when null). */
+    setWorkspace: (workspacePath: string | null): Promise<void> =>
+      ipcRenderer.invoke('teams:setWorkspace', workspacePath),
+    create: (opts: {
+      workspaceId: string
+      workspacePath: string
+      name: string
+      goal?: string
+      members: { agentId: string; task?: string }[]
+      worktreeStrategy: 'isolated' | 'shared'
+      mergeStrategy: 'squash' | 'sequential'
+    }): Promise<{ teamId: string; configPath: string }> =>
+      ipcRenderer.invoke('teams:create', opts),
+    remove: (teamId: string): Promise<void> =>
+      ipcRenderer.invoke('teams:remove', teamId),
   },
 
   // ─── Updates ─────────────────────────────────────────────────────
