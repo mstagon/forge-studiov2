@@ -38,6 +38,8 @@ export function WorkspaceV2({
   harnessUpdate = true,
 }: WorkspaceV2Props) {
   const selectedFilePath = useFilesStore((s) => s.selectedFilePath)
+  const selectedFileContent = useFilesStore((s) => s.selectedFileContent)
+  const selectedFileTruncated = useFilesStore((s) => s.selectedFileTruncated)
   const clearSelection = useFilesStore((s) => s.clearSelection)
   const selectedFileName = selectedFilePath
     ? selectedFilePath.split('/').filter(Boolean).pop() ?? null
@@ -86,7 +88,12 @@ export function WorkspaceV2({
           onNewRun={onNewRun}
         />
         {selectedFileName ? (
-          <FilePreview filename={selectedFileName} onClose={clearSelection} />
+          <FilePreview
+            filename={selectedFileName}
+            content={selectedFileContent ?? undefined}
+            truncated={selectedFileTruncated}
+            onClose={clearSelection}
+          />
         ) : (
           <TerminalAreaV2 workspace={workspace} />
         )}

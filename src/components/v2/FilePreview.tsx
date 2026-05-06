@@ -137,13 +137,42 @@ const FILE_CONTENTS: Record<string, FileContent> = {
 
 export interface FilePreviewProps {
   filename: string
+  /** When set, renders the actual file text instead of the seed sample. The
+   *  filename still drives header chrome (path / git meta), but the body
+   *  becomes a line-numbered, mono-font dump of `content`. Falls back to the
+   *  curated seed map when omitted. */
+  content?: string
+  /** Indicates the content was clipped due to size cap — appended a footer
+   *  marker so users know they're not seeing the whole file. */
+  truncated?: boolean
   onClose: () => void
 }
 
 type PreviewTab = 'preview' | 'diff' | 'blame'
 
-export function FilePreview({ filename, onClose }: FilePreviewProps) {
-  const file = FILE_CONTENTS[filename] ?? FILE_CONTENTS['main.dart']
+/** Pick a syntax-highlight language from a filename extension. */
+function langFromName(name: string): Lang {
+  const lower = name.toLowerCase()
+  if (lower.endsWith('.dart')) return 'dart'
+  if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'yaml'
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown'
+  return 'markdown'
+}
+
+export function FilePreview({ filename, content, truncated, onClose }: FilePreviewProps) {
+  const seed = FILE_CONTENTS[filename] ?? FILE_CONTENTS['main.dart']
+  // If real content was passed, build a synthetic FileContent with no diff
+  // highlight (we don't know git delta from the renderer side yet).
+  const file: FileContent =
+    content !== undefined
+      ? {
+          lang: langFromName(filename),
+          path: filename,
+          lines: content.split('\n'),
+          highlight: {},
+          git: { branch: '—', changes: 'clean', agent: null },
+        }
+      : seed
   const [tab, setTab] = useState<PreviewTab>('preview')
   return (
     <div
@@ -322,6 +351,18 @@ export function FilePreview({ filename, onClose }: FilePreviewProps) {
               </div>
             )
           })}
+          {truncated && (
+            <div
+              style={{
+                padding: '8px 14px',
+                fontSize: 11,
+                color: 'var(--warning)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              … truncated (file exceeded preview size cap)
+            </div>
+          )}
         </pre>
       </div>
     </div>
