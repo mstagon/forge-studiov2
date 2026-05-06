@@ -5,11 +5,12 @@
 import { useEffect, useState } from 'react'
 // TODO: foundation import — provided by main session
 import { Icon } from './icons'
-import { Btn, Pill, Kbd, Dot } from './primitives'
+import { Btn, Pill, Kbd } from './primitives'
 import { FilesPanel } from './FilesPanel'
 import { TeamsRunSection } from './TeamsRunSection'
 import { FilePreview } from './FilePreview'
 import { RunLiveView } from './RunLiveView'
+import { TerminalAreaV2 } from './TerminalAreaV2'
 import type { Team, WorkspaceSummary } from './types'
 
 export interface WorkspaceV2Props {
@@ -84,7 +85,7 @@ export function WorkspaceV2({
         {selectedFile ? (
           <FilePreview filename={selectedFile} onClose={() => setSelectedFile(null)} />
         ) : (
-          <TerminalTabsArea />
+          <TerminalAreaV2 workspace={workspace} />
         )}
       </div>
       {showResourceBar && <ResourceBar runs={runs} />}
@@ -354,210 +355,6 @@ export function ResourceBar({ runs }: ResourceBarProps) {
       <span style={{ color: 'var(--text-4)' }}>
         무제한 정책 · 자원 표시는 정직성 위주
       </span>
-    </div>
-  )
-}
-
-// ─── Terminal tabs area (placeholder for real PTY wiring) ───────────
-
-function TerminalTabsArea() {
-  const [tab, setTab] = useState(0)
-  const [tick, setTick] = useState(0)
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1500)
-    return () => clearInterval(id)
-  }, [])
-  const tabs = [
-    { id: 0, name: '✻ Claude Code', live: true },
-    { id: 1, name: 'pnpm dev', live: true },
-    { id: 2, name: 'prisma studio', live: false },
-    { id: 3, name: 'logs', live: true },
-  ]
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
-        background: '#06080b',
-      }}
-    >
-      <div
-        className="ns"
-        style={{
-          height: 30,
-          flexShrink: 0,
-          background: 'var(--bg-1)',
-          borderBottom: '1px solid var(--line-1)',
-          display: 'flex',
-          alignItems: 'stretch',
-          paddingLeft: 6,
-        }}
-      >
-        {tabs.map((t) => {
-          const active = tab === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                padding: '0 12px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                background: active ? '#06080b' : 'transparent',
-                borderTop: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                borderLeft: '1px solid transparent',
-                borderRight: '1px solid var(--line-1)',
-                color: active ? 'var(--text-1)' : 'var(--text-3)',
-                fontSize: 11.5,
-                fontFamily: 'var(--font-mono)',
-                cursor: 'pointer',
-              }}
-            >
-              {t.live && (
-                <Dot
-                  color={active ? 'var(--success)' : 'var(--text-4)'}
-                  pulse={active}
-                  size={5}
-                />
-              )}
-              <span>{t.name}</span>
-              <Icon.X size={11} style={{ opacity: 0.4, marginLeft: 4 }} />
-            </button>
-          )
-        })}
-        <button
-          style={{
-            padding: '0 8px',
-            color: 'var(--text-3)',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          <Icon.Plus size={12} />
-        </button>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' }}>
-          <button
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 4,
-              background: 'transparent',
-              border: '1px solid transparent',
-              color: 'var(--text-3)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-            title="Split"
-          >
-            <Icon.Layers size={12} />
-          </button>
-          <button
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 4,
-              background: 'transparent',
-              border: '1px solid transparent',
-              color: 'var(--text-3)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-            title="Search"
-          >
-            <Icon.Search size={12} />
-          </button>
-        </div>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          padding: 14,
-          overflow: 'auto',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-          lineHeight: 1.55,
-          color: 'var(--text-2)',
-        }}
-      >
-        <ClaudeCodeSession tick={tick} />
-      </div>
-    </div>
-  )
-}
-
-// Mock "Claude Code" session content — visual placeholder for the terminal pane.
-function ClaudeCodeSession({ tick: _tick }: { tick: number }) {
-  return (
-    <div>
-      <div style={{ color: 'var(--text-3)' }}>
-        ╭─ Claude Code · sonnet-4.5 · effort: high ─────────────────────╮
-      </div>
-      <div style={{ color: 'var(--text-3)' }}>
-        │ harness <span style={{ color: 'var(--accent)' }}>0.3.9</span> · 18 agents · 24 skills ·
-        12 commands · 5 hooks │
-      </div>
-      <div style={{ color: 'var(--text-3)' }}>
-        ╰────────────────────────────────────────────────────────────────╯
-      </div>
-      <div style={{ height: 12 }} />
-      <div>
-        <span style={{ color: 'var(--accent)' }}>›</span>{' '}
-        <span style={{ color: 'var(--text-1)' }}>
-          회원가입 폼에 약관 모달을 추가해줘
-        </span>
-      </div>
-      <div style={{ height: 8 }} />
-      <div style={{ color: 'var(--text-3)' }}>● 작업을 분석합니다…</div>
-      <div style={{ color: 'var(--text-3)' }}>
-        {'  '}└ 읽음: lib/features/auth/widgets/signup_form.dart
-      </div>
-      <div style={{ color: 'var(--text-3)' }}>{'  '}└ 읽음: lib/theme/spacing.dart</div>
-      <div style={{ height: 8 }} />
-      <div>
-        <span style={{ color: 'var(--success)' }}>✓</span> 5개의 변경사항을 제안합니다{' '}
-        <span style={{ color: 'var(--text-3)' }}>(diff 보려면 d)</span>
-      </div>
-      <div style={{ paddingLeft: 14, color: 'var(--text-3)' }}>
-        <div>
-          1. <span style={{ color: 'var(--text-2)' }}>terms_modal.dart</span> 생성{' '}
-          <span style={{ color: 'var(--success)' }}>+88</span>
-        </div>
-        <div>
-          2. <span style={{ color: 'var(--text-2)' }}>signup_form.dart</span> 수정{' '}
-          <span style={{ color: 'var(--success)' }}>+24</span>{' '}
-          <span style={{ color: 'var(--danger)' }}>-3</span>
-        </div>
-        <div>
-          3. <span style={{ color: 'var(--text-2)' }}>auth_provider.dart</span> 수정{' '}
-          <span style={{ color: 'var(--success)' }}>+12</span>
-        </div>
-        <div>
-          4. <span style={{ color: 'var(--text-2)' }}>l10n/ko.arb</span> 수정{' '}
-          <span style={{ color: 'var(--success)' }}>+6</span>
-        </div>
-        <div>
-          5. <span style={{ color: 'var(--text-2)' }}>l10n/en.arb</span> 수정{' '}
-          <span style={{ color: 'var(--success)' }}>+6</span>
-        </div>
-      </div>
-      <div style={{ height: 8 }} />
-      <div style={{ color: 'var(--text-3)' }}>실행 시간 1m 36s · 184.3k tok</div>
-      <div style={{ height: 12 }} />
-      <div>
-        <span style={{ color: 'var(--accent)' }}>›</span>{' '}
-        <span className="blink" style={{ color: 'var(--text-1)' }}>
-          ▍
-        </span>
-      </div>
     </div>
   )
 }
