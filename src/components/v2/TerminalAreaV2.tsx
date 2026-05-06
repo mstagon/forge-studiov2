@@ -18,7 +18,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { createPortal } from 'react-dom'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { XTerminal } from '@/components/terminal/XTerminal'
+import { XTerminal } from './XTerminal'
 import type { TerminalPane, TerminalTab } from '@/types'
 import { Icon } from './icons'
 import { Dot } from './primitives'
