@@ -40,6 +40,10 @@ git subtree pull --prefix=cms origin-cms <branch> --squash
 - 서브트리 push 전 해당 스택 빌드/테스트 통과 확인
 - 각 원격 레포에도 동일한 dev/stg/prd 브랜치 구조 유지
 
+### 원격 레포 네이밍 컨벤션
+
+원격 레포는 **`{프로젝트명}-{client|server|cms}`** 형식으로 3개 분리한다 (예: `mybook-client`, `mybook-server`, `mybook-cms`). Forge Studio New Workspace 다이얼로그에서 자동 등록 가능 (옵션 토글 + gh CLI로 GitHub 빈 레포 자동 생성도 지원).
+
 ## 환경 브랜치 (dev / stg / prd)
 
 모노레포와 각 서브트리 원격 레포 모두 동일한 브랜치 구조:

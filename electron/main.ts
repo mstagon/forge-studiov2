@@ -213,9 +213,27 @@ ipcMain.handle('pty:getCwd', (_event, id: string) => {
 
 // ─── IPC Handlers: Workspace ────────────────────────────────────────
 
-ipcMain.handle('workspace:create', async (_event, options: { name: string; path: string; templatePath?: string; claudeMdPath?: string }) => {
-  return workspaceManager.create(options)
-})
+ipcMain.handle(
+  'workspace:create',
+  async (
+    _event,
+    options: {
+      name: string
+      path: string
+      templatePath?: string
+      claudeMdPath?: string
+      splitRepos?: {
+        enabled: boolean
+        baseName: string
+        owner?: string
+        protocol?: 'ssh' | 'https'
+        autoCreateRepos?: boolean
+      }
+    }
+  ) => {
+    return workspaceManager.create(options)
+  }
+)
 
 ipcMain.handle('workspace:open', async (_event, dirPath: string) => {
   return workspaceManager.open(dirPath)

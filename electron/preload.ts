@@ -29,8 +29,19 @@ const api = {
 
   // ─── Workspace ───────────────────────────────────────────────────
   workspace: {
-    create: (options: { name: string; path: string; templatePath?: string; claudeMdPath?: string }) =>
-      ipcRenderer.invoke('workspace:create', options),
+    create: (options: {
+      name: string
+      path: string
+      templatePath?: string
+      claudeMdPath?: string
+      splitRepos?: {
+        enabled: boolean
+        baseName: string
+        owner?: string
+        protocol?: 'ssh' | 'https'
+        autoCreateRepos?: boolean
+      }
+    }) => ipcRenderer.invoke('workspace:create', options),
     open: (dirPath: string) =>
       ipcRenderer.invoke('workspace:open', dirPath),
     list: () =>

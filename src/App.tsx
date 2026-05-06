@@ -11,6 +11,7 @@ import { GitGraphPanel } from './components/git/GitGraphPanel'
 import { useWorkspaceStore } from './stores/workspace'
 import { useTerminalStore } from './stores/terminal'
 import { useAppUpdateStore } from './stores/appUpdate'
+import { useGitStore } from './stores/git'
 
 export default function App() {
   const {
@@ -127,6 +128,19 @@ export default function App() {
     if (meta && e.shiftKey && e.key === 'p') {
       e.preventDefault()
       toggleCommandPalette()
+    }
+
+    // Finder-style toggle for hidden harness files. `e.key` reports the actual
+    // character produced by the layout — `.` on US layouts when Shift is held
+    // alongside `Period`, but some layouts emit `>` instead. Match either, plus
+    // `e.code === 'Period'` as a layout-independent fallback.
+    if (
+      meta &&
+      e.shiftKey &&
+      (e.key === '.' || e.key === '>' || e.code === 'Period')
+    ) {
+      e.preventDefault()
+      useGitStore.getState().toggleHarnessFiles()
     }
   }, [toggleCommandPalette])
 

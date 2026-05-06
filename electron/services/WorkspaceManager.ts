@@ -13,6 +13,35 @@ export interface Workspace {
   harnessApplied: boolean
 }
 
+/**
+ * Per-stack split-repo configuration. When `enabled` is true, WorkspaceManager
+ * registers three git remotes (origin-client / origin-server / origin-cms)
+ * pointing at `<owner>/<baseName>-{client,server,cms}` so the user can later
+ * `git subtree push` each stack to its own GitHub repo.
+ *
+ * - `owner` is optional; if omitted we try `gh api user --jq .login`. Failure
+ *   is non-fatal — the workspace still gets created, the remotes are simply
+ *   skipped and logged.
+ * - `protocol` selects ssh (default, `git@github.com:owner/repo.git`) or https
+ *   (`https://github.com/owner/repo.git`).
+ * - `autoCreateRepos` (optional) attempts `gh repo create` for each missing
+ *   repo. If `gh` is unavailable or unauthenticated we skip silently.
+ */
+export interface SplitReposOptions {
+  enabled: boolean
+  baseName: string
+  owner?: string
+  protocol?: 'ssh' | 'https'
+  autoCreateRepos?: boolean
+}
+
+export interface SplitReposResult {
+  registered: { name: string; url: string }[]
+  created: string[]
+  skipped: { name: string; reason: string }[]
+  ownerResolved: string | null
+}
+
 const STORE_PATH = () => path.join(app.getPath('userData'), 'workspaces.json')
 
 export class WorkspaceManager {
@@ -43,7 +72,13 @@ export class WorkspaceManager {
     }
   }
 
-  async create(options: { name: string; path: string; templatePath?: string; claudeMdPath?: string }): Promise<Workspace> {
+  async create(options: {
+    name: string
+    path: string
+    templatePath?: string
+    claudeMdPath?: string
+    splitRepos?: SplitReposOptions
+  }): Promise<Workspace> {
     const projectPath = path.join(options.path, options.name)
 
     // Create project directory
@@ -79,6 +114,16 @@ export class WorkspaceManager {
       execFileSync('git', ['init'], { cwd: projectPath, stdio: 'ignore' })
     } catch {
       // Git not available
+    }
+
+    // Optionally register split-repo remotes (origin-client/server/cms).
+    // Failures here never fail workspace creation — they're additive.
+    if (options.splitRepos?.enabled) {
+      try {
+        await this.applySplitRepos(projectPath, options.splitRepos)
+      } catch (err) {
+        console.error('Failed to apply splitRepos config:', err)
+      }
     }
 
     const workspace: Workspace = {
@@ -265,5 +310,107 @@ export class WorkspaceManager {
     }
 
     return { backupPath, version }
+  }
+
+  /**
+   * Register `origin-client`, `origin-server`, `origin-cms` remotes pointing at
+   * `<owner>/<baseName>-{stack}` repos. If `autoCreateRepos` is set we also try
+   * `gh repo create` (private) for each. All operations are best-effort: a
+   * missing `gh` binary or auth failure means we register what we can and move
+   * on.
+   */
+  private async applySplitRepos(
+    projectPath: string,
+    config: SplitReposOptions
+  ): Promise<SplitReposResult> {
+    const result: SplitReposResult = {
+      registered: [],
+      created: [],
+      skipped: [],
+      ownerResolved: null,
+    }
+
+    const baseName = config.baseName.trim()
+    if (!baseName) {
+      result.skipped.push({ name: '*', reason: 'baseName is empty' })
+      return result
+    }
+
+    const owner = (config.owner?.trim() || (await this.resolveGithubOwner())) ?? null
+    result.ownerResolved = owner
+    if (!owner) {
+      result.skipped.push({ name: '*', reason: 'owner not provided and gh CLI unavailable' })
+      return result
+    }
+
+    const protocol = config.protocol ?? 'ssh'
+    const stacks = ['client', 'server', 'cms'] as const
+
+    for (const stack of stacks) {
+      const repoName = `${baseName}-${stack}`
+      const remoteName = `origin-${stack}`
+      const url = this.buildRemoteUrl(owner, repoName, protocol)
+
+      if (config.autoCreateRepos) {
+        const created = this.tryCreateGithubRepo(owner, repoName)
+        if (created) result.created.push(repoName)
+      }
+
+      try {
+        execFileSync('git', ['remote', 'add', remoteName, url], {
+          cwd: projectPath,
+          stdio: 'ignore',
+        })
+        result.registered.push({ name: remoteName, url })
+      } catch {
+        // Remote may already exist (idempotent retry path) — try set-url instead.
+        try {
+          execFileSync('git', ['remote', 'set-url', remoteName, url], {
+            cwd: projectPath,
+            stdio: 'ignore',
+          })
+          result.registered.push({ name: remoteName, url })
+        } catch {
+          result.skipped.push({ name: remoteName, reason: 'git remote add/set-url failed' })
+        }
+      }
+    }
+
+    return result
+  }
+
+  private async resolveGithubOwner(): Promise<string | null> {
+    try {
+      const out = execFileSync('gh', ['api', 'user', '--jq', '.login'], {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      const login = out.trim()
+      return login || null
+    } catch {
+      return null
+    }
+  }
+
+  private buildRemoteUrl(owner: string, repoName: string, protocol: 'ssh' | 'https'): string {
+    return protocol === 'https'
+      ? `https://github.com/${owner}/${repoName}.git`
+      : `git@github.com:${owner}/${repoName}.git`
+  }
+
+  /**
+   * Best-effort `gh repo create` for a single repo. Returns true only when the
+   * command succeeded; missing `gh`, missing auth, or repo-already-exists all
+   * return false (caller treats it as "skip").
+   */
+  private tryCreateGithubRepo(owner: string, repoName: string): boolean {
+    try {
+      execFileSync('gh', ['repo', 'create', `${owner}/${repoName}`, '--private', '--confirm'], {
+        stdio: 'ignore',
+      })
+      return true
+    } catch {
+      return false
+    }
   }
 }

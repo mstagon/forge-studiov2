@@ -7,8 +7,19 @@ export function NewWorkspaceDialog() {
   const [name, setName] = useState('')
   const [dirPath, setDirPath] = useState('')
   const [creating, setCreating] = useState(false)
+  // Split-repo: register origin-client/server/cms remotes on the new monorepo
+  // so the user can `git subtree push` each stack to its own GitHub repo.
+  const [splitRepos, setSplitRepos] = useState(false)
+  const [owner, setOwner] = useState('')
+  const [baseName, setBaseName] = useState('')
+  const [autoCreateRepos, setAutoCreateRepos] = useState(false)
 
   if (!newWorkspaceDialogVisible) return null
+
+  // Effective base name: explicit input wins, otherwise fall back to the
+  // project folder name. Mirrors what WorkspaceManager will see.
+  const effectiveBaseName = (baseName.trim() || name.trim()).toLowerCase()
+  const effectiveOwner = owner.trim() || '<your-gh-login>'
 
   const handleBrowse = async () => {
     const result = await window.api.system.showOpenDialog({
@@ -24,9 +35,25 @@ export function NewWorkspaceDialog() {
     if (!name.trim() || !dirPath.trim()) return
     setCreating(true)
     try {
-      await createWorkspace(name.trim(), dirPath.trim())
+      await createWorkspace(
+        name.trim(),
+        dirPath.trim(),
+        splitRepos
+          ? {
+              enabled: true,
+              baseName: effectiveBaseName,
+              owner: owner.trim() || undefined,
+              protocol: 'ssh',
+              autoCreateRepos,
+            }
+          : undefined
+      )
       setName('')
       setDirPath('')
+      setSplitRepos(false)
+      setOwner('')
+      setBaseName('')
+      setAutoCreateRepos(false)
     } finally {
       setCreating(false)
     }
@@ -85,6 +112,84 @@ export function NewWorkspaceDialog() {
               <div>18 agents, 22 skills, 26 commands, 10 scripts, 15 MCP servers</div>
               <div>Auto: TDD, verification, review, docs, checkpoint, learning</div>
             </div>
+          </div>
+
+          <div className="bg-surface-0 rounded-lg p-3 border border-border">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={splitRepos}
+                onChange={(e) => setSplitRepos(e.target.checked)}
+                className="w-3.5 h-3.5 accent-accent"
+              />
+              <span className="text-xs text-text-primary">
+                Split remote repos by stack (GitHub)
+              </span>
+            </label>
+
+            {splitRepos && (
+              <div className="mt-3 flex flex-col gap-2.5">
+                <div>
+                  <label className="text-2xs text-text-secondary mb-1 block">
+                    GitHub owner (leave empty to auto-detect via gh CLI)
+                  </label>
+                  <input
+                    type="text"
+                    value={owner}
+                    onChange={(e) => setOwner(e.target.value)}
+                    placeholder="mstagon"
+                    className="w-full bg-surface-1 text-text-primary text-xs px-2.5 py-1.5 rounded-md border border-border focus:border-accent outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-2xs text-text-secondary mb-1 block">
+                    Base name (defaults to project name)
+                  </label>
+                  <input
+                    type="text"
+                    value={baseName}
+                    onChange={(e) => setBaseName(e.target.value)}
+                    placeholder={name.trim() || 'my-project'}
+                    className="w-full bg-surface-1 text-text-primary text-xs px-2.5 py-1.5 rounded-md border border-border focus:border-accent outline-none"
+                  />
+                </div>
+
+                <div className="bg-surface-1 rounded-md px-2.5 py-2 border border-border">
+                  <div className="text-2xs text-text-secondary mb-1">Will register remotes:</div>
+                  <div className="text-2xs text-text-muted font-mono space-y-0.5">
+                    <div>
+                      origin-client → {effectiveOwner}/{effectiveBaseName || '<base>'}-client
+                    </div>
+                    <div>
+                      origin-server → {effectiveOwner}/{effectiveBaseName || '<base>'}-server
+                    </div>
+                    <div>
+                      origin-cms → {effectiveOwner}/{effectiveBaseName || '<base>'}-cms
+                    </div>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoCreateRepos}
+                    onChange={(e) => setAutoCreateRepos(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-accent"
+                  />
+                  <span className="text-2xs text-text-secondary">
+                    Also create empty private repos via gh CLI (best-effort)
+                  </span>
+                </label>
+
+                <div className="text-2xs text-text-muted leading-relaxed">
+                  Note: GitHub repos must already exist (or use the option above). Subtree push is
+                  not run automatically — use{' '}
+                  <span className="font-mono">git subtree push --prefix=client origin-client …</span>{' '}
+                  when ready.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

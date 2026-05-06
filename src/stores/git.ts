@@ -1,6 +1,34 @@
 import { create } from 'zustand'
 import type { GitCommit, GitStatus, GitBranch, GitFileChange } from '@/types'
 
+/**
+ * Path globs that match harness-generated files. The Forge Studio harness
+ * scaffolds a lot of files into every workspace (`.claude/**`, vendored
+ * `framework-agnostic-harness/**`, build outputs, etc.) and they swamp the Git
+ * panel with noise — slowing the UI and burying the user's actual changes.
+ *
+ * Hidden by default; user toggles visibility with `Cmd+Shift+.` (Finder-style).
+ */
+const HARNESS_PATH_PATTERNS: readonly string[] = [
+  '.claude/',
+  'resources/harness-template/',
+  'framework-agnostic-harness/',
+  'dist/',
+  'dist-electron/',
+  'release/',
+  'node_modules/',
+]
+
+export function isHarnessPath(filePath: string): boolean {
+  const normalized = filePath.replace(/^\.\//, '')
+  for (const pattern of HARNESS_PATH_PATTERNS) {
+    if (normalized.startsWith(pattern) || normalized.includes(`/${pattern}`)) {
+      return true
+    }
+  }
+  return false
+}
+
 interface GitState {
   status: GitStatus | null
   commits: GitCommit[]
@@ -12,6 +40,9 @@ interface GitState {
   commitMessage: string
   loading: boolean
   error: string | null
+  /** When false (default), filter harness-generated files out of status/log
+   *  views. Toggled with Cmd+Shift+. (Finder convention). */
+  showHarnessFiles: boolean
 
   refresh: (cwd: string) => Promise<void>
   refreshStatus: (cwd: string) => Promise<void>
@@ -39,6 +70,7 @@ interface GitState {
 
   setCommitMessage: (msg: string) => void
   clearError: () => void
+  toggleHarnessFiles: () => void
 }
 
 export const useGitStore = create<GitState>((set, get) => ({
@@ -52,6 +84,7 @@ export const useGitStore = create<GitState>((set, get) => ({
   commitMessage: '',
   loading: false,
   error: null,
+  showHarnessFiles: false,
 
   refresh: async (cwd) => {
     await Promise.all([
@@ -236,4 +269,5 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   setCommitMessage: (msg) => set({ commitMessage: msg }),
   clearError: () => set({ error: null }),
+  toggleHarnessFiles: () => set((s) => ({ showHarnessFiles: !s.showHarnessFiles })),
 }))
