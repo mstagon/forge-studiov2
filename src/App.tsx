@@ -9,7 +9,8 @@ import { Library } from './components/v2/Library'
 import { SettingsFull } from './components/v2/SettingsFull'
 import { Wizard } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
-import { GitPanel, DashboardPanel } from './components/v2/Placeholders'
+import { GitPanelWired } from './components/v2/wired/GitPanelWired'
+import { DashboardPanelWired } from './components/v2/wired/DashboardPanelWired'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
 
 import { TEAMS as SEED_TEAMS } from './components/v2/data'
@@ -219,9 +220,9 @@ export default function App() {
       />
     )
   } else if (view === 'git') {
-    main = <GitPanel />
+    main = <GitPanelWired />
   } else if (view === 'dashboard') {
-    main = <DashboardPanel onCmdK={() => setPaletteOpen(true)} />
+    main = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
   } else if (view === 'library') {
     main = (
       <Library
