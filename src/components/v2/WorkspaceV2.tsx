@@ -3,14 +3,14 @@
 // Migrated from workspace_v2.jsx (WorkspaceV2 + WorkspaceLeftRail + WorkspaceHeaderV2 + RunBackBar + ResourceBar + ClaudeCodeSession).
 
 import { useEffect, useState } from 'react'
-// TODO: foundation import — provided by main session
 import { Icon } from './icons'
 import { Btn, Pill, Kbd } from './primitives'
-import { FilesPanel } from './FilesPanel'
+import { FilesPanelWired } from './wired/FilesPanelWired'
 import { TeamsRunSection } from './TeamsRunSection'
 import { FilePreview } from './FilePreview'
 import { RunLiveView } from './RunLiveView'
 import { TerminalAreaV2 } from './TerminalAreaV2'
+import { useFilesStore } from '@/stores/files'
 import type { Team, WorkspaceSummary } from './types'
 
 export interface WorkspaceV2Props {
@@ -37,7 +37,11 @@ export function WorkspaceV2({
   showResourceBar = true,
   harnessUpdate = true,
 }: WorkspaceV2Props) {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const selectedFilePath = useFilesStore((s) => s.selectedFilePath)
+  const clearSelection = useFilesStore((s) => s.clearSelection)
+  const selectedFileName = selectedFilePath
+    ? selectedFilePath.split('/').filter(Boolean).pop() ?? null
+    : null
 
   // If a run is selected, the entire workspace becomes the live view.
   if (activeRunId) {
@@ -76,14 +80,13 @@ export function WorkspaceV2({
       <WorkspaceHeaderV2 workspace={workspace} harnessUpdate={harnessUpdate} />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         <WorkspaceLeftRail
+          workspacePath={workspace.path}
           runs={runs}
           onOpenRun={onOpenRun}
           onNewRun={onNewRun}
-          selectedFile={selectedFile}
-          onSelectFile={setSelectedFile}
         />
-        {selectedFile ? (
-          <FilePreview filename={selectedFile} onClose={() => setSelectedFile(null)} />
+        {selectedFileName ? (
+          <FilePreview filename={selectedFileName} onClose={clearSelection} />
         ) : (
           <TerminalAreaV2 workspace={workspace} />
         )}
@@ -96,19 +99,17 @@ export function WorkspaceV2({
 // ─── Left rail (Files + Teams) ──────────────────────────────────────
 
 interface WorkspaceLeftRailProps {
+  workspacePath: string
   runs: Team[]
   onOpenRun: (id: string) => void
   onNewRun: () => void
-  selectedFile: string | null
-  onSelectFile: (name: string) => void
 }
 
 function WorkspaceLeftRail({
+  workspacePath,
   runs,
   onOpenRun,
   onNewRun,
-  selectedFile,
-  onSelectFile,
 }: WorkspaceLeftRailProps) {
   return (
     <div
@@ -121,7 +122,7 @@ function WorkspaceLeftRail({
         background: 'var(--bg-1)',
       }}
     >
-      <FilesPanel selectedFile={selectedFile} onSelectFile={onSelectFile} />
+      <FilesPanelWired workspacePath={workspacePath} />
       <TeamsRunSection runs={runs} onOpenRun={onOpenRun} onNewRun={onNewRun} />
     </div>
   )

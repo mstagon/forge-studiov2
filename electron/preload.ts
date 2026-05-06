@@ -68,6 +68,30 @@ const api = {
       ipcRenderer.invoke('harness:getInstalledVersion', workspacePath),
     update: (workspacePath: string): Promise<{ backupPath: string; version: string }> =>
       ipcRenderer.invoke('harness:update', workspacePath),
+    listAgents: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listAgents', workspacePath),
+    listSkills: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listSkills', workspacePath),
+    listCommands: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listCommands', workspacePath),
+    listHooks: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listHooks', workspacePath),
+    listCompositions: () =>
+      ipcRenderer.invoke('harness:listCompositions'),
+  },
+
+  // ─── Filesystem ──────────────────────────────────────────────────
+  fs: {
+    listDir: (
+      absPath: string,
+      opts?: { includeHidden?: boolean; ignoreNodeModules?: boolean; includeHarness?: boolean }
+    ): Promise<{ entries: { name: string; type: 'file' | 'dir'; size?: number }[] }> =>
+      ipcRenderer.invoke('fs:listDir', absPath, opts ?? {}),
+    readFile: (
+      absPath: string,
+      maxBytes?: number
+    ): Promise<{ content: string | null; truncated: boolean; binary: boolean; size: number }> =>
+      ipcRenderer.invoke('fs:readFile', absPath, maxBytes),
   },
 
   // ─── Git ─────────────────────────────────────────────────────────

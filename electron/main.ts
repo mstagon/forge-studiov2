@@ -9,6 +9,7 @@ import { HarnessScanner } from './services/HarnessScanner'
 import { GitManager } from './services/GitManager'
 import { UpdateChecker } from './services/UpdateChecker'
 import { AgentTeamWatcher } from './services/AgentTeamWatcher'
+import { FsManager, type FsListOpts } from './services/FsManager'
 
 const execFileAsync = promisify(execFile)
 
@@ -25,6 +26,21 @@ const harnessScanner = new HarnessScanner()
 const gitManager = new GitManager()
 const updateChecker = new UpdateChecker()
 const agentTeamWatcher = new AgentTeamWatcher()
+const fsManager = new FsManager()
+
+/**
+ * Allowed path prefixes for `fs:listDir` / `fs:readFile`. We always include
+ * tracked workspace paths plus the bundled harness template directory (so the
+ * renderer can browse harness assets without granting blanket FS access).
+ */
+function getAllowedFsPrefixes(): string[] {
+  const prefixes = workspaceManager.list().map((w) => w.path)
+  const templateRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'harness-template')
+    : path.resolve(__dirname, '..', 'resources', 'harness-template')
+  prefixes.push(templateRoot)
+  return prefixes
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -298,6 +314,30 @@ ipcMain.handle('harness:getMcpStatus', async (_event, workspacePath: string) => 
   return harnessScanner.getMcpStatus(workspacePath)
 })
 
+ipcMain.handle('harness:listAgents', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  return harnessScanner.listAgents(workspacePath)
+})
+
+ipcMain.handle('harness:listSkills', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  return harnessScanner.listSkills(workspacePath)
+})
+
+ipcMain.handle('harness:listCommands', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  return harnessScanner.listCommands(workspacePath)
+})
+
+ipcMain.handle('harness:listHooks', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  return harnessScanner.listHooks(workspacePath)
+})
+
+ipcMain.handle('harness:listCompositions', async () => {
+  return harnessScanner.listCompositions()
+})
+
 ipcMain.handle('harness:getBundledVersion', () => app.getVersion())
 
 ipcMain.handle('harness:getInstalledVersion', async (_event, workspacePath: string) => {
@@ -399,6 +439,16 @@ ipcMain.handle('git:discard', async (_event, cwd: string, file: string) => {
 
 ipcMain.handle('git:remotes', async (_event, cwd: string) => {
   return gitManager.getRemotes(cwd)
+})
+
+// ─── IPC Handlers: Filesystem ───────────────────────────────────────
+
+ipcMain.handle('fs:listDir', async (_event, absPath: string, opts?: FsListOpts) => {
+  return fsManager.listDir(absPath, opts ?? {}, getAllowedFsPrefixes())
+})
+
+ipcMain.handle('fs:readFile', async (_event, absPath: string, maxBytes?: number) => {
+  return fsManager.readFile(absPath, maxBytes ?? 256 * 1024, getAllowedFsPrefixes())
 })
 
 // ─── IPC Handlers: System ───────────────────────────────────────────
