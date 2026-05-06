@@ -18,22 +18,34 @@ import {
   type LibAgent,
 } from './LibraryData'
 import { SectionLabel } from './Library'
+import { useLibraryStore } from '@/stores/library'
 
 type OwnerFilter = 'all' | 'team' | 'you'
 
 export function AgentsTab() {
-  const [selectedId, setSelectedId] = useState<string>(AGENTS_LIB[0]!.id)
+  // Real scanner-backed list when available, design seed otherwise — keeps
+  // the tab demo-able even when no .claude/agents directory exists yet.
+  const real = useLibraryStore((s) => s.agents)
+  const items: LibAgent[] = real ?? AGENTS_LIB
+  const [selectedId, setSelectedId] = useState<string>(items[0]?.id ?? '')
   const [filter, setFilter] = useState<OwnerFilter>('all')
   const [q, setQ] = useState('')
 
-  const filtered = AGENTS_LIB.filter((a) => {
+  const filtered = items.filter((a) => {
     if (filter !== 'all' && a.owner !== filter) return false
     if (q && !(a.name + ' ' + a.role + ' ' + a.desc).toLowerCase().includes(q.toLowerCase())) {
       return false
     }
     return true
   })
-  const selected = AGENTS_LIB.find((a) => a.id === selectedId) ?? AGENTS_LIB[0]!
+  const selected = items.find((a) => a.id === selectedId) ?? items[0]
+  if (!selected) {
+    return (
+      <div style={{ padding: 24, color: 'var(--text-3)', fontSize: 12 }}>
+        No agents available.
+      </div>
+    )
+  }
 
   return (
     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', minHeight: 0 }}>

@@ -28,6 +28,7 @@ import { AgentsTab } from './LibraryTabsAgents'
 import { SkillsTab } from './LibraryTabsSkills'
 import { CommandsTab } from './LibraryTabsCommands'
 import { HooksTab } from './LibraryTabsHooks'
+import { useLibraryStore } from '@/stores/library'
 
 export interface LibraryWorkspace {
   id?: string
@@ -56,13 +57,19 @@ interface TabSpec {
 
 export function Library({ workspace, onApplyComposition }: LibraryProps) {
   const [tab, setTab] = useState<TabId>('compositions')
+  // Counts reflect real scanner data when present; seed otherwise.
+  const realComps = useLibraryStore((s) => s.compositions)
+  const realAgents = useLibraryStore((s) => s.agents)
+  const realSkills = useLibraryStore((s) => s.skills)
+  const realCommands = useLibraryStore((s) => s.commands)
+  const realHooks = useLibraryStore((s) => s.hooks)
 
   const tabs: TabSpec[] = [
-    { id: 'compositions', label: 'Compositions', count: COMPOSITIONS.length, icon: Icon.Cube },
-    { id: 'agents',       label: 'Agents',       count: AGENTS_LIB.length,   icon: Icon.Users },
-    { id: 'skills',       label: 'Skills',       count: SKILLS_LIB.length,   icon: Icon.Sparkle },
-    { id: 'commands',     label: 'Commands',     count: COMMANDS_LIB.length, icon: Icon.Terminal },
-    { id: 'hooks',        label: 'Hooks',        count: HOOKS_LIB.length,    icon: Icon.Bolt },
+    { id: 'compositions', label: 'Compositions', count: (realComps ?? COMPOSITIONS).length, icon: Icon.Cube },
+    { id: 'agents',       label: 'Agents',       count: (realAgents ?? AGENTS_LIB).length,   icon: Icon.Users },
+    { id: 'skills',       label: 'Skills',       count: (realSkills ?? SKILLS_LIB).length,   icon: Icon.Sparkle },
+    { id: 'commands',     label: 'Commands',     count: (realCommands ?? COMMANDS_LIB).length, icon: Icon.Terminal },
+    { id: 'hooks',        label: 'Hooks',        count: (realHooks ?? HOOKS_LIB).length,    icon: Icon.Bolt },
   ]
 
   return (
@@ -176,7 +183,9 @@ function CompositionsTab({ workspace, onApply }: CompositionsTabProps) {
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [previewComp, setPreviewComp] = useState<CompositionSeed | null>(null)
 
-  const filtered = COMPOSITIONS.filter((c) =>
+  const real = useLibraryStore((s) => s.compositions)
+  const items = real ?? COMPOSITIONS
+  const filtered = items.filter((c) =>
     filter === 'all'
       ? true
       : filter === 'yours'

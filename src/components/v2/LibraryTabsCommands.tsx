@@ -10,10 +10,13 @@
 
 import { COMMANDS_LIB, type LibCommand } from './LibraryData'
 import { SectionLabel } from './Library'
+import { useLibraryStore } from '@/stores/library'
 
 export function CommandsTab() {
-  const builtin = COMMANDS_LIB.filter((c) => c.builtin)
-  const custom = COMMANDS_LIB.filter((c) => !c.builtin)
+  const real = useLibraryStore((s) => s.commands)
+  const items = real ?? COMMANDS_LIB
+  const builtin = items.filter((c) => c.builtin)
+  const custom = items.filter((c) => !c.builtin)
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
       <div style={{ marginBottom: 18 }}>

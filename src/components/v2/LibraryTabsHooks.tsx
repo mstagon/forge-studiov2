@@ -8,15 +8,24 @@
  * Source: /tmp/forge_design/forge/project/src/library_tabs.jsx :: LibHooks
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 // TODO: foundation import
 import { AvatarStack } from './primitives'
 import { Icon } from './icons'
 import { HOOKS_LIB, type LibHook } from './LibraryData'
+import { useLibraryStore } from '@/stores/library'
 
 export function HooksTab() {
-  const [hooks, setHooks] = useState<LibHook[]>(HOOKS_LIB)
-  const [openId, setOpenId] = useState<string>(HOOKS_LIB[0]!.id)
+  const real = useLibraryStore((s) => s.hooks)
+  const initial = real ?? HOOKS_LIB
+  const [hooks, setHooks] = useState<LibHook[]>(initial)
+  const [openId, setOpenId] = useState<string>(initial[0]?.id ?? '')
+  // When the store toggles between null/real (e.g. on workspace switch), keep
+  // the local state in sync — otherwise the tab can show stale hooks.
+  useEffect(() => {
+    setHooks(initial)
+    if (initial.length > 0) setOpenId(initial[0].id)
+  }, [real]) // eslint-disable-line react-hooks/exhaustive-deps
   const open = hooks.find((h) => h.id === openId)
   const toggle = (id: string) =>
     setHooks((hs) => hs.map((h) => (h.id === id ? { ...h, enabled: !h.enabled } : h)))

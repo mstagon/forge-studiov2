@@ -12,12 +12,15 @@ import { useState } from 'react'
 import { Pill, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import { SKILLS_LIB } from './LibraryData'
+import { useLibraryStore } from '@/stores/library'
 
 export function SkillsTab() {
+  const real = useLibraryStore((s) => s.skills)
+  const items = real ?? SKILLS_LIB
   const [q, setQ] = useState('')
   const [hover, setHover] = useState<string | null>(null)
 
-  const filtered = SKILLS_LIB.filter(
+  const filtered = items.filter(
     (s) => !q || (s.name + ' ' + s.desc).toLowerCase().includes(q.toLowerCase()),
   )
 
@@ -53,7 +56,7 @@ export function SkillsTab() {
           />
         </div>
         <span className="mono" style={{ fontSize: 11, color: 'var(--text-4)' }}>
-          {filtered.length} of {SKILLS_LIB.length}
+          {filtered.length} of {items.length}
         </span>
       </div>
       <div
