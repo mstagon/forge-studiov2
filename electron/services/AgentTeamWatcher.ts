@@ -2,9 +2,30 @@ import * as chokidar from 'chokidar'
 import path from 'path'
 import os from 'os'
 import fs from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { EventEmitter } from 'events'
 
+const execFileAsync = promisify(execFile)
+
 export type AgentStatus = 'running' | 'idle' | 'shutdown'
+export type WorktreeStrategy = 'isolated' | 'shared'
+export type MergeStrategy = 'squash' | 'sequential'
+
+export interface TeamCreateMember {
+  agentId: string
+  task?: string
+}
+
+export interface TeamCreateOptions {
+  workspaceId: string
+  workspacePath: string
+  name: string
+  goal?: string
+  members: TeamCreateMember[]
+  worktreeStrategy: WorktreeStrategy
+  mergeStrategy: MergeStrategy
+}
 
 export interface TeamMember {
   agentId: string
@@ -22,12 +43,19 @@ export interface TeamMember {
   messageCount: number
   unreadCount: number
   isLead: boolean
+  task?: string
+  worktreePath?: string
+  branch?: string
 }
 
 export interface Team {
   id: string
   name: string
   description?: string
+  goal?: string
+  workspaceId?: string
+  worktreeStrategy?: WorktreeStrategy
+  mergeStrategy?: MergeStrategy
   createdAt: number
   leadAgentId: string
   leadSessionId?: string
@@ -45,11 +73,18 @@ interface RawMember {
   joinedAt: number
   color?: string
   prompt?: string
+  task?: string
+  worktreePath?: string
+  branch?: string
 }
 
 interface RawConfig {
   name: string
   description?: string
+  goal?: string
+  workspaceId?: string
+  worktreeStrategy?: WorktreeStrategy
+  mergeStrategy?: MergeStrategy
   createdAt: number
   leadAgentId: string
   leadSessionId?: string
@@ -66,10 +101,35 @@ interface InboxMessage {
 }
 
 export class AgentTeamWatcher extends EventEmitter {
+  /**
+   * Active teams root. Defaults to ~/.claude/teams for legacy installs but is
+   * normally pointed at <activeWorkspacePath>/.claude/teams via setWorkspace()
+   * so each workspace has its own scoped team registry.
+   */
   private teamsDir = path.join(os.homedir(), '.claude', 'teams')
   private watcher: chokidar.FSWatcher | null = null
   private cache: Map<string, Team> = new Map()
   private refreshTimer: NodeJS.Timeout | null = null
+
+  /**
+   * Switch the watcher to a workspace-scoped teams directory. Safe to call
+   * before or after start(); restarts the watcher when needed.
+   */
+  async setWorkspace(workspacePath: string | null): Promise<void> {
+    const next = workspacePath
+      ? path.join(workspacePath, '.claude', 'teams')
+      : path.join(os.homedir(), '.claude', 'teams')
+    if (next === this.teamsDir && this.watcher) return
+    this.teamsDir = next
+    if (this.watcher) {
+      await this.watcher.close().catch(() => {})
+      this.watcher = null
+    }
+    this.cache = new Map()
+    await this.start()
+    // Notify listeners so the renderer drops stale teams from the previous ws.
+    this.emit('teams', this.list())
+  }
 
   async start(): Promise<void> {
     if (this.watcher) return
@@ -151,12 +211,19 @@ export class AgentTeamWatcher extends EventEmitter {
         messageCount: inbox.length,
         unreadCount: inbox.filter((x) => !x.read).length,
         isLead,
+        task: m.task,
+        worktreePath: m.worktreePath,
+        branch: m.branch,
       })
     }
     return {
       id,
       name: config.name,
       description: config.description,
+      goal: config.goal,
+      workspaceId: config.workspaceId,
+      worktreeStrategy: config.worktreeStrategy,
+      mergeStrategy: config.mergeStrategy,
       createdAt: config.createdAt,
       leadAgentId: config.leadAgentId,
       leadSessionId: config.leadSessionId,
