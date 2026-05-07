@@ -9,6 +9,7 @@
 
 | MCP | 용도 | 자동 활용 시점 |
 |-----|------|---------------|
+| `code-review-graph` | 코드 지식 그래프 / blast radius | 코드 리뷰, 리팩토링, "이 함수 바뀌면 뭐가 영향?" 질의 시 자동 |
 | `context7` | 공식 문서 조회 | 패키지 API 사용 전 필수 조회 |
 | `dart` | Dart 언어 서버 | Dart/Flutter 코드 작성 시 |
 | `serena` | 코드베이스 분석 | 아키텍처 파악, 리팩토링 시 |
@@ -33,6 +34,7 @@
 5. E2E 테스트 → `playwright`로 브라우저 자동화
 6. 배포 → CMS는 `vercel`, 서버는 `railway`
 7. API 키 미설정 MCP → 무시하고 진행 (에러 시 사용자에게 설정 안내)
+8. 코드 리뷰 / 리팩토링 / 영향 분석 → `code-review-graph` 의 blast_radius / dependents / search_nodes 도구를 먼저 호출 (전체 파일 읽기 전). 토큰 절약 핵심.
 
 ## Claude Code MCP 자동 인식
 

@@ -12,6 +12,16 @@ Senior fullstack code reviewer. 상용 프로덕트 기준으로 리뷰. 변경 
 - 도메인 규칙 위반 검출
 - 변경 파일 스택 판별: `.dart` → Flutter, `.ts` in `server/` → NestJS, `.ts/.tsx` in `cms/` → Next.js, `schema.prisma` → Prisma
 
+## Tools 활용
+
+리뷰를 시작하기 전에 반드시 다음 순서를 따른다 (전체 코드베이스 스캔은 토큰 낭비):
+
+1. `code-review-graph` MCP 의 blast radius 도구로 변경 파일의 영향 범위(영향 받는 caller / dependent / test)를 조회한다.
+2. 그래프가 알려준 영향 범위 안의 파일만 `Read` 한다. 매칭되지 않은 파일은 읽지 않는다.
+3. caller / dependent / 테스트 누락 여부는 그래프 결과로 판단하고, 누락이 의심되는 노드만 추가로 `Read` 로 확인한다.
+
+이 순서를 어기고 변경 파일과 무관한 영역을 광범위하게 읽으면 토큰을 낭비할 뿐 아니라 리뷰 정확도도 떨어진다.
+
 ## 체크리스트
 
 ### 🔴 Critical (하나라도 있으면 반려)
