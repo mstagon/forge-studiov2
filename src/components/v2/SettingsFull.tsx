@@ -10,11 +10,12 @@
  * Source: /tmp/forge_design/forge/project/src/settings_full.jsx
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 // TODO: foundation import
 import { Btn, Pill, Dot, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import type { WorkspaceSummary } from './types'
+import { CodeGraphViz } from './CodeGraphViz'
 
 export interface SettingsFullProps {
   workspaces: WorkspaceSummary[]
@@ -105,7 +106,7 @@ export function SettingsFull({ workspaces, workspace }: SettingsFullProps) {
         {section === 'general' && (
           <SettingsGeneral workspaces={workspaces} workspace={workspace} />
         )}
-        {section === 'harness' && <SettingsHarness />}
+        {section === 'harness' && <SettingsHarness workspace={workspace} />}
         {section === 'agents' && <SettingsAgents />}
         {section === 'integrations' && <SettingsIntegrations />}
         {section === 'account' && <SettingsAccount />}
@@ -374,13 +375,19 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
 
 // ─── Harness ──────────────────────────────────────────────────────
 
-export function SettingsHarness() {
+export interface SettingsHarnessProps {
+  workspace?: WorkspaceSummary
+}
+
+export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
   const [autoUpdate, setAutoUpdate] = useState(true)
   const [telemetry, setTelemetry] = useState(false)
   const [betaChannel, setBetaChannel] = useState(false)
   return (
     <>
       <SectionHeader title="Harness" sub="forge 자체의 업데이트와 정책" />
+
+      <CodeReviewGraphCard workspace={workspace} />
 
       <SettingsCard title="Version">
         <Row
@@ -830,6 +837,361 @@ export function SettingsAccount() {
           />
         ))}
       </SettingsCard>
+    </>
+  )
+}
+
+// ─── Code Review Graph (Harness add-on) ────────────────────────────
+//
+// Surface for the optional code-review-graph harness module: install / build /
+// open visualization. The IPC bridge (window.api.crGraph.*) is being added by
+// a peer worker — until it lands the controls degrade to a "not installed"
+// state and the buttons no-op with an informational error.
+//
+// TODO(crGraph-ipc): replace the loose `any` access with a typed import once
+// the preload bridge is committed.
+
+interface CrGraphStats {
+  nodes: number
+  edges: number
+  files: number
+  languages: number
+  lastBuiltAt?: string | null
+}
+
+interface CrGraphInstallStatus {
+  installed: boolean
+  version?: string
+}
+
+interface CrGraphApi {
+  isInstalled?: () => Promise<CrGraphInstallStatus>
+  install?: (mode: 'pipx' | string) => Promise<void>
+  build?: (workspacePath: string) => Promise<void>
+  stats?: (workspacePath: string) => Promise<CrGraphStats | null>
+  vizStart?: (workspacePath: string) => Promise<{ url: string; pid: number | string }>
+  vizStop?: (pid: number | string) => Promise<void>
+}
+
+function getCrGraphApi(): CrGraphApi | undefined {
+  if (typeof window === 'undefined') return undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any
+  return w?.api?.crGraph as CrGraphApi | undefined
+}
+
+function formatRelative(iso?: string | null): string {
+  if (!iso) return '한 번도 빌드 안 함'
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return '한 번도 빌드 안 함'
+  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (diffSec < 60) return `${diffSec}초 전`
+  const min = Math.round(diffSec / 60)
+  if (min < 60) return `${min}분 전`
+  const hr = Math.round(min / 60)
+  if (hr < 24) return `${hr}시간 전`
+  return `${Math.round(hr / 24)}일 전`
+}
+
+interface CodeReviewGraphCardProps {
+  workspace?: WorkspaceSummary
+}
+
+function CodeReviewGraphCard({ workspace }: CodeReviewGraphCardProps) {
+  const [status, setStatus] = useState<CrGraphInstallStatus | null>(null)
+  const [stats, setStats] = useState<CrGraphStats | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [building, setBuilding] = useState(false)
+  const [progressSec, setProgressSec] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [vizOpen, setVizOpen] = useState(false)
+
+  const api = getCrGraphApi()
+  const apiAvailable = Boolean(api?.isInstalled)
+  const wsPath = workspace?.path
+
+  // Refresh install/stats whenever the workspace changes.
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      if (!api?.isInstalled) {
+        if (!cancelled) {
+          setStatus({ installed: false })
+          setStats(null)
+        }
+        return
+      }
+      try {
+        const s = await api.isInstalled()
+        if (cancelled) return
+        setStatus(s)
+        if (s.installed && wsPath && api.stats) {
+          const next = await api.stats(wsPath)
+          if (!cancelled) setStats(next ?? null)
+        } else if (!cancelled) {
+          setStats(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [api, wsPath])
+
+  // Drive the "12s" progress counter while a long-running op is in flight.
+  useEffect(() => {
+    if (!installing && !building) {
+      setProgressSec(0)
+      return
+    }
+    setProgressSec(0)
+    const start = Date.now()
+    const id = window.setInterval(() => {
+      setProgressSec(Math.round((Date.now() - start) / 1000))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [installing, building])
+
+  const installed = status?.installed ?? false
+  const busy = installing || building
+
+  async function handleInstall() {
+    if (!api?.install) {
+      setError(
+        'crGraph IPC bridge not available yet. window.api.crGraph.install will be wired by a peer worker.',
+      )
+      return
+    }
+    setError(null)
+    setInstalling(true)
+    try {
+      await api.install('pipx')
+      if (api.isInstalled) setStatus(await api.isInstalled())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  async function handleBuild() {
+    if (!api?.build || !wsPath) {
+      setError('build 호출 불가: 활성 워크스페이스 또는 IPC 미준비')
+      return
+    }
+    setError(null)
+    setBuilding(true)
+    try {
+      await api.build(wsPath)
+      if (api.stats) setStats(await api.stats(wsPath))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBuilding(false)
+    }
+  }
+
+  function handleOpenViz() {
+    if (!wsPath) {
+      setError('활성 워크스페이스 없음 — 시각화를 열 수 없습니다.')
+      return
+    }
+    setError(null)
+    setVizOpen(true)
+  }
+
+  // ─── Status badge ───
+  let badge: ReactNode
+  if (building) {
+    badge = <Pill color="var(--warning)">빌드 중</Pill>
+  } else if (installing) {
+    badge = <Pill color="var(--warning)">설치 중</Pill>
+  } else if (!installed) {
+    badge = <Pill color="var(--text-3)">설치 안 됨</Pill>
+  } else {
+    badge = (
+      <Pill color="var(--success)">
+        설치됨{status?.version ? ` · ${status.version}` : ''}
+      </Pill>
+    )
+  }
+
+  const statCells: Array<{ label: string; value: string | number }> = [
+    { label: 'nodes', value: stats?.nodes ?? '—' },
+    { label: 'edges', value: stats?.edges ?? '—' },
+    { label: 'files', value: stats?.files ?? '—' },
+    { label: 'languages', value: stats?.languages ?? '—' },
+  ]
+
+  return (
+    <>
+      <SettingsCard
+        title="Code Review Graph"
+        right={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {badge}
+            {!apiAvailable && (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: 'var(--text-4)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                ipc pending
+              </span>
+            )}
+          </span>
+        }
+      >
+        {/* Description row */}
+        <Row
+          label="저장소 의존성 + 호출 그래프"
+          sub={`마지막 빌드: ${formatRelative(stats?.lastBuiltAt)}${
+            busy ? ` · 작업 중… (${progressSec}s)` : ''
+          }`}
+          right={
+            busy ? (
+              <span
+                aria-hidden
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: '2px solid var(--line-2)',
+                  borderTopColor: 'var(--accent)',
+                  display: 'inline-block',
+                  animation: 'crg-spin 0.7s linear infinite',
+                }}
+              >
+                <style>{`@keyframes crg-spin { to { transform: rotate(360deg); } }`}</style>
+              </span>
+            ) : (
+              <Icon.Layers size={14} style={{ color: 'var(--text-3)' }} />
+            )
+          }
+        />
+
+        {/* Stats grid (only when installed) */}
+        {installed && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--line-1)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
+            }}
+          >
+            {statCells.map((c) => (
+              <div
+                key={c.label}
+                style={{
+                  padding: 10,
+                  borderRadius: 6,
+                  background: 'var(--bg-1)',
+                  border: '1px solid var(--line-1)',
+                }}
+              >
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9.5,
+                    letterSpacing: 1.2,
+                    textTransform: 'uppercase',
+                    fontWeight: 600,
+                    color: 'var(--text-3)',
+                    marginBottom: 6,
+                  }}
+                >
+                  {c.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  {c.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid var(--line-1)',
+              fontSize: 11.5,
+              color: 'var(--danger)',
+              background: 'color-mix(in oklab, var(--danger) 8%, transparent)',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div
+          style={{
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          {!installed && (
+            <Btn
+              variant="primary"
+              icon={<Icon.Plus size={11} />}
+              onClick={handleInstall}
+              disabled={busy}
+            >
+              Install via pipx
+            </Btn>
+          )}
+          {installed && (
+            <Btn
+              variant="default"
+              icon={<Icon.Refresh size={11} />}
+              onClick={handleBuild}
+              disabled={busy || !wsPath}
+            >
+              Rebuild graph
+            </Btn>
+          )}
+          <Btn
+            variant="ghost"
+            icon={<Icon.Activity size={11} />}
+            onClick={handleOpenViz}
+            disabled={busy || !wsPath}
+          >
+            Open Visualization
+          </Btn>
+          {!wsPath && (
+            <span style={{ fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>
+              활성 워크스페이스를 먼저 선택하세요
+            </span>
+          )}
+        </div>
+      </SettingsCard>
+
+      {vizOpen && wsPath && (
+        <CodeGraphViz workspacePath={wsPath} onClose={() => setVizOpen(false)} />
+      )}
     </>
   )
 }

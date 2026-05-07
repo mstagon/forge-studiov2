@@ -7,7 +7,7 @@
  * counts), `mcpStatus` (live `which`-checked server health), and the
  * installed/bundled harness versions.
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 import { Icon } from '../icons'
@@ -29,6 +29,47 @@ interface QuickAction {
 
 export interface DashboardPanelWiredProps {
   onCmdK?: () => void
+}
+
+// ─── Knowledge Graph (code-review-graph) helpers ────────────────────
+//
+// The crGraph IPC bridge is wired by a peer worker. Until it lands we read
+// it defensively via optional chaining so the panel still renders without it.
+//
+// TODO(crGraph-ipc): replace with a typed `window.api.crGraph` import once the
+// preload bridge is committed.
+
+interface CrGraphStats {
+  nodes: number
+  edges: number
+  files: number
+  languages: number
+  lastBuiltAt?: string | null
+}
+
+interface CrGraphApiSlim {
+  isInstalled?: () => Promise<{ installed: boolean; version?: string }>
+  stats?: (workspacePath: string) => Promise<CrGraphStats | null>
+}
+
+function getCrGraphApiSlim(): CrGraphApiSlim | undefined {
+  if (typeof window === 'undefined') return undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any
+  return w?.api?.crGraph as CrGraphApiSlim | undefined
+}
+
+function formatRelative(iso?: string | null): string {
+  if (!iso) return '한 번도 빌드 안 함'
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return '한 번도 빌드 안 함'
+  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (diffSec < 60) return `${diffSec}초 전`
+  const min = Math.round(diffSec / 60)
+  if (min < 60) return `${min}분 전`
+  const hr = Math.round(min / 60)
+  if (hr < 24) return `${hr}시간 전`
+  return `${Math.round(hr / 24)}일 전`
 }
 
 /**
@@ -64,6 +105,44 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
     scanHarness()
     scanMcp()
   }, [activeWorkspace, scanHarness, scanMcp])
+
+  // ─── Knowledge Graph (code-review-graph) ───
+  const [crInstalled, setCrInstalled] = useState<boolean | null>(null)
+  const [crStats, setCrStats] = useState<CrGraphStats | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const api = getCrGraphApiSlim()
+      if (!api?.isInstalled) {
+        if (!cancelled) {
+          setCrInstalled(false)
+          setCrStats(null)
+        }
+        return
+      }
+      try {
+        const s = await api.isInstalled()
+        if (cancelled) return
+        setCrInstalled(s.installed)
+        if (s.installed && activeWorkspace?.path && api.stats) {
+          const next = await api.stats(activeWorkspace.path)
+          if (!cancelled) setCrStats(next ?? null)
+        } else if (!cancelled) {
+          setCrStats(null)
+        }
+      } catch {
+        if (!cancelled) {
+          setCrInstalled(false)
+          setCrStats(null)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspace?.path])
 
   // Graceful defaults for missing data — a freshly-opened workspace whose
   // scan hasn't completed yet, or a workspace without `.claude/` at all.
@@ -248,6 +327,107 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Knowledge Graph (code-review-graph) */}
+      <div
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--line-1)',
+          borderRadius: 6,
+          overflow: 'hidden',
+          marginBottom: 18,
+        }}
+      >
+        <SectionHead
+          title="Knowledge Graph"
+          sub={
+            crInstalled === false
+              ? 'code-review-graph not installed'
+              : crStats
+                ? `${crStats.nodes.toLocaleString()} nodes · ${crStats.edges.toLocaleString()} edges`
+                : 'no data yet'
+          }
+          right={
+            crInstalled === false ? (
+              <Btn
+                variant="ghost"
+                style={{ height: 22, fontSize: 11 }}
+                icon={<Icon.Cog size={11} />}
+              >
+                Settings에서 활성화
+              </Btn>
+            ) : undefined
+          }
+        />
+        {crInstalled === false ? (
+          <div
+            style={{
+              padding: '14px 14px',
+              fontSize: 11.5,
+              color: 'var(--text-3)',
+            }}
+          >
+            저장소 의존성/호출 그래프가 활성화되지 않았습니다. Settings → Harness →{' '}
+            <strong style={{ color: 'var(--text-2)' }}>Code Review Graph</strong>에서 설치하세요.
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: 12,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
+            }}
+          >
+            {(
+              [
+                { label: 'nodes', value: crStats?.nodes },
+                { label: 'edges', value: crStats?.edges },
+                { label: 'files', value: crStats?.files },
+                {
+                  label: 'last build',
+                  value: formatRelative(crStats?.lastBuiltAt),
+                },
+              ] as const
+            ).map((c) => (
+              <div
+                key={c.label}
+                style={{
+                  padding: 10,
+                  borderRadius: 6,
+                  background: 'var(--bg-1)',
+                  border: '1px solid var(--line-1)',
+                }}
+              >
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 9.5,
+                    letterSpacing: 1.2,
+                    textTransform: 'uppercase',
+                    fontWeight: 600,
+                    color: 'var(--text-3)',
+                    marginBottom: 6,
+                  }}
+                >
+                  {c.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: typeof c.value === 'number' ? 22 : 13,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  {c.value === undefined || c.value === null ? '—' : String(c.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12 }}>
