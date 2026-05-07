@@ -41,6 +41,8 @@ function toV2Team(team: StoreTeam): V2Team {
     tokens: 0,
     files: 0,
     pane: m.name?.slice(0, 4).toUpperCase() ?? 'PANE',
+    name: m.name,
+    tmuxPaneId: m.tmuxPaneId,
   }))
   // Aggregate run status: blocked > active > idle > done.
   const runStatus: V2Team['status'] = members.some((m) => m.state === 'blocked')
@@ -225,7 +227,7 @@ export default function App() {
       return
     }
     try {
-      await useAgentTeamStore.getState().create({
+      const created = await useAgentTeamStore.getState().create({
         workspaceId: activeWorkspace.id,
         workspacePath: activeWorkspace.path,
         name: result.name,
@@ -234,13 +236,27 @@ export default function App() {
         worktreeStrategy: result.worktree,
         mergeStrategy: result.merge,
       })
-      setToast({ name: result.name, count: result.members.length })
+      // When W1's create() returns enriched stats (worktreesCreated /
+      // tmuxSessionsStarted > 0), append them to the toast name so the
+      // user gets immediate feedback that the orchestration kicked in.
+      const memberCount = result.members.length
+      const extras: string[] = [`${memberCount} members`]
+      if (created.worktreesCreated > 0) {
+        extras.push(`${created.worktreesCreated} worktrees`)
+      }
+      if (created.tmuxSessionsStarted > 0) {
+        extras.push(`${created.tmuxSessionsStarted} tmux 세션`)
+      }
+      const decoratedName =
+        extras.length > 1 ? `${result.name} (${extras.join(' · ')})` : result.name
+      setToast({ name: decoratedName, count: memberCount })
     } catch (err) {
       console.error('[wizard] team create failed:', err)
-      setToast({ name: 'Failed to create team', count: 0 })
+      const message = err instanceof Error ? err.message : 'Failed to create team'
+      setToast({ name: `팀 생성 실패: ${message}`, count: 0 })
     } finally {
       setWizardOpen(false)
-      setTimeout(() => setToast(null), 3000)
+      setTimeout(() => setToast(null), 4000)
     }
   }
 

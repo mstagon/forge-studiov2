@@ -20,6 +20,31 @@ import {
 } from './primitives'
 import { AGENT_BY_ID, ACTIVITY, TERMINAL_LINES } from './data'
 import type { Team, TeamMember, ActivityItem, MemberState, TerminalLine } from './types'
+import { MergeConflictView, type ConflictItem } from './MergeConflictView'
+
+// ─── Optional team-control IPC (graceful when backend is unfinished) ─
+//
+// The pause / resume / merge / per-member control surface is being added by a
+// peer worker. We type it loosely + reach in via optional chaining so the UI
+// keeps compiling and degrades to a console.warn no-op when methods are
+// missing in the renderer's preload bridge.
+interface TeamsControlApi {
+  pause?: (teamId: string) => Promise<void> | void
+  resume?: (teamId: string) => Promise<void> | void
+  pauseMember?: (teamId: string, agentName: string) => Promise<void> | void
+  resumeMember?: (teamId: string, agentName: string) => Promise<void> | void
+  merge?: (teamId: string) => Promise<
+    | { ok: true; mergedBranch?: string; commitSha?: string | null }
+    | { ok: false; conflicts: ConflictItem[]; error?: string }
+  >
+}
+
+function getTeamsControlApi(): TeamsControlApi | undefined {
+  if (typeof window === 'undefined') return undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any
+  return w?.api?.teams as TeamsControlApi | undefined
+}
 
 export interface RunLiveViewProps {
   team: Team
@@ -39,7 +64,25 @@ export function RunLiveView({
 }: RunLiveViewProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [feedOpen, setFeedOpen] = useState(true)
-  const [paused, setPaused] = useState(false)
+  // Local paused fallback for the design demo (when no real backend status).
+  const [localPaused, setLocalPaused] = useState(false)
+  const paused = team.status === 'paused' || localPaused
+
+  // Transient inline notice (success / warn) for IPC-triggered actions.
+  const [notice, setNotice] = useState<{
+    kind: 'info' | 'warn' | 'error' | 'success'
+    text: string
+  } | null>(null)
+  function flash(kind: 'info' | 'warn' | 'error' | 'success', text: string) {
+    setNotice({ kind, text })
+    window.setTimeout(() => setNotice(null), 3500)
+  }
+
+  // Merge-conflict overlay state — shown when teams.merge resolves to ok=false.
+  const [activeConflict, setActiveConflict] = useState<{
+    teamId: string
+    conflicts: ConflictItem[]
+  } | null>(null)
 
   // Live tick — drives terminal scroll + activity feed
   const [tick, setTick] = useState(0)
@@ -48,6 +91,116 @@ export function RunLiveView({
     const id = setInterval(() => setTick((t) => t + 1), 1200)
     return () => clearInterval(id)
   }, [paused])
+
+  // ── Action handlers (all IPC-optional) ──────────────────────────
+  async function handlePauseAll() {
+    const api = getTeamsControlApi()
+    if (paused) {
+      if (typeof api?.resume === 'function') {
+        try {
+          await api.resume(team.id)
+          flash('success', `Resumed ${team.name}`)
+        } catch (err) {
+          console.error('[RunLiveView] resume failed:', err)
+          flash('error', 'Resume failed — see console')
+        }
+      } else {
+        console.warn('[RunLiveView] window.api.teams.resume() not implemented')
+        setLocalPaused(false)
+      }
+    } else {
+      if (typeof api?.pause === 'function') {
+        try {
+          await api.pause(team.id)
+          flash('success', `Paused ${team.name}`)
+        } catch (err) {
+          console.error('[RunLiveView] pause failed:', err)
+          flash('error', 'Pause failed — see console')
+        }
+      } else {
+        console.warn('[RunLiveView] window.api.teams.pause() not implemented')
+        setLocalPaused(true)
+      }
+    }
+  }
+
+  async function handlePauseMember(member: TeamMember) {
+    const api = getTeamsControlApi()
+    const agentName = member.name ?? member.agentId
+    const isPaused = member.state === 'idle' || member.state === 'queued'
+    const fn = isPaused ? api?.resumeMember : api?.pauseMember
+    const verb = isPaused ? 'Resume' : 'Pause'
+    if (typeof fn !== 'function') {
+      console.warn(`[RunLiveView] window.api.teams.${verb.toLowerCase()}Member() not implemented`)
+      flash('warn', `${verb} member — backend not yet wired`)
+      return
+    }
+    try {
+      await fn(team.id, agentName)
+      flash('success', `${verb}d ${agentName}`)
+    } catch (err) {
+      console.error(`[RunLiveView] ${verb.toLowerCase()}Member failed:`, err)
+      flash('error', `${verb} failed — see console`)
+    }
+  }
+
+  function handleDiff() {
+    // No backend conflict source yet — surface a benign inline notice.
+    flash('info', 'No merge conflicts')
+  }
+
+  async function handleMerge() {
+    const ok = window.confirm(
+      `Merge all completed members of "${team.name}" into ${team.branch}?`,
+    )
+    if (!ok) return
+    const api = getTeamsControlApi()
+    if (typeof api?.merge !== 'function') {
+      console.warn('[RunLiveView] window.api.teams.merge() not implemented')
+      flash('warn', 'Merge — backend not yet wired')
+      return
+    }
+    try {
+      const res = await api.merge(team.id)
+      if (res.ok) {
+        flash('success', `Merged into ${res.mergedBranch ?? team.branch}`)
+      } else {
+        const conflicts = Array.isArray(res.conflicts) ? res.conflicts : []
+        if (conflicts.length === 0) {
+          flash('error', res.error ?? 'Merge failed (no conflict detail)')
+        } else {
+          setActiveConflict({ teamId: team.id, conflicts })
+        }
+      }
+    } catch (err) {
+      console.error('[RunLiveView] merge failed:', err)
+      flash('error', 'Merge failed — see console')
+    }
+  }
+
+  function handleOpenAgentTerminal(member: TeamMember) {
+    const api = window.api?.teams
+    if (!member.tmuxPaneId) {
+      flash(
+        'warn',
+        'tmux 세션이 아직 spawn 되지 않음 — 워크스페이스 isolated 옵션으로 다시 생성 필요',
+      )
+      return
+    }
+    if (typeof api?.openAgentTerminal !== 'function') {
+      console.warn('[RunLiveView] window.api.teams.openAgentTerminal() unavailable')
+      flash('error', '터미널 IPC 사용 불가')
+      return
+    }
+    const agentName = member.name ?? member.agentId
+    api
+      .openAgentTerminal({ teamId: team.id, agentName, cols: 80, rows: 24 })
+      .then(() => flash('success', `${agentName} 터미널에 attach`))
+      .catch((err) => {
+        console.error('[RunLiveView] openAgentTerminal failed:', err)
+        flash('error', '터미널 attach 실패 — see console')
+      })
+  }
 
   return (
     <div
@@ -112,20 +265,23 @@ export function RunLiveView({
         <Btn
           variant="ghost"
           icon={paused ? <Icon.Play size={12} /> : <Icon.Pause size={12} />}
-          onClick={() => setPaused((p) => !p)}
+          onClick={handlePauseAll}
         >
-          {paused ? 'Resume' : 'Pause all'}
+          {paused ? 'Resume all' : 'Pause all'}
         </Btn>
-        <Btn variant="ghost" icon={<Icon.Diff size={12} />}>
+        <Btn variant="ghost" icon={<Icon.Diff size={12} />} onClick={handleDiff}>
           Diff
         </Btn>
-        <Btn variant="primary" icon={<Icon.Check size={12} />}>
+        <Btn variant="primary" icon={<Icon.Check size={12} />} onClick={handleMerge}>
           Merge
         </Btn>
-        <Btn variant="ghost" icon={<Icon.X size={12} />}>
+        <Btn variant="ghost" icon={<Icon.X size={12} />} onClick={onClose}>
           Close team
         </Btn>
       </div>
+
+      {/* Inline notice (transient, replaces toast for in-view IPC actions) */}
+      {notice && <InlineNotice kind={notice.kind} text={notice.text} />}
 
       {/* Body: 3 columns */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
@@ -150,6 +306,8 @@ export function RunLiveView({
                 onClick={() =>
                   setSelectedAgentId(m.agentId === selectedAgentId ? null : m.agentId)
                 }
+                onTogglePause={() => handlePauseMember(m)}
+                onOpenTerminal={() => handleOpenAgentTerminal(m)}
               />
             ))}
           </div>
@@ -240,6 +398,92 @@ export function RunLiveView({
           </div>
         )}
       </div>
+
+      {/* Merge conflict overlay — only when teams.merge() returned ok=false */}
+      {activeConflict && (
+        <MergeConflictView
+          teamId={activeConflict.teamId}
+          conflicts={activeConflict.conflicts}
+          onResolve={(file, strategy) => {
+            console.warn(
+              `[RunLiveView] resolve(${file}, ${strategy}) — backend resolver not yet wired`,
+            )
+            flash('info', `Resolve ${strategy} → ${file}`)
+            // Optimistic UI: drop the resolved file from the list. Backend
+            // will republish via teams:update once it actually resolves.
+            setActiveConflict((cur) =>
+              cur
+                ? {
+                    ...cur,
+                    conflicts: cur.conflicts.filter((c) => c.file !== file),
+                  }
+                : cur,
+            )
+          }}
+          onAbort={() => {
+            setActiveConflict(null)
+            flash('warn', 'Merge aborted')
+          }}
+          onClose={() => setActiveConflict(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Inline notice (transient, replaces Shell-level toast in live view) ──
+
+function InlineNotice({
+  kind,
+  text,
+}: {
+  kind: 'info' | 'warn' | 'error' | 'success'
+  text: string
+}) {
+  const palette: Record<typeof kind, { bg: string; border: string; fg: string }> = {
+    info: {
+      bg: 'color-mix(in oklab, var(--info, var(--accent)) 12%, var(--bg-2))',
+      border: 'color-mix(in oklab, var(--info, var(--accent)) 35%, var(--line-2))',
+      fg: 'var(--info, var(--accent))',
+    },
+    warn: {
+      bg: 'color-mix(in oklab, var(--warning, #f0a23a) 12%, var(--bg-2))',
+      border: 'color-mix(in oklab, var(--warning, #f0a23a) 35%, var(--line-2))',
+      fg: 'var(--warning, #f0a23a)',
+    },
+    error: {
+      bg: 'color-mix(in oklab, var(--danger) 12%, var(--bg-2))',
+      border: 'color-mix(in oklab, var(--danger) 35%, var(--line-2))',
+      fg: 'var(--danger)',
+    },
+    success: {
+      bg: 'color-mix(in oklab, var(--success) 12%, var(--bg-2))',
+      border: 'color-mix(in oklab, var(--success) 35%, var(--line-2))',
+      fg: 'var(--success)',
+    },
+  }
+  const p = palette[kind]
+  return (
+    <div
+      role="status"
+      style={{
+        position: 'absolute',
+        top: 56,
+        right: 18,
+        zIndex: 60,
+        padding: '8px 12px',
+        borderRadius: 6,
+        background: p.bg,
+        border: `1px solid ${p.border}`,
+        color: p.fg,
+        fontSize: 12,
+        fontWeight: 500,
+        fontFamily: 'var(--font-mono)',
+        boxShadow: 'var(--shadow-pop, 0 4px 12px rgba(0,0,0,0.25))',
+        maxWidth: 360,
+      }}
+    >
+      {text}
     </div>
   )
 }
@@ -250,15 +494,35 @@ interface AgentCardProps {
   member: TeamMember
   selected: boolean
   onClick: () => void
+  /** ▶/⏸ toggle (active/done → pause; idle/queued → resume; blocked → disabled). */
+  onTogglePause?: () => void
+  /** Open the agent's tmux pane in a new terminal tab. */
+  onOpenTerminal?: () => void
 }
 
-function AgentCard({ member, selected, onClick }: AgentCardProps) {
+function AgentCard({
+  member,
+  selected,
+  onClick,
+  onTogglePause,
+  onOpenTerminal,
+}: AgentCardProps) {
   const a = AGENT_BY_ID[member.agentId]
   const stateC = STATE_COLOR[member.state]
   if (!a) return null
+  const blocked = member.state === 'blocked'
+  const isPaused = member.state === 'idle' || member.state === 'queued'
   return (
-    <button
+    <div
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
       style={{
         width: '100%',
         textAlign: 'left',
@@ -303,6 +567,51 @@ function AgentCard({ member, selected, onClick }: AgentCardProps) {
           color={stateC}
           pulse={member.state === 'active' || member.state === 'blocked'}
         />
+        <div
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 2 }}
+        >
+          {onTogglePause && (
+            <CardIconBtn
+              title={
+                blocked
+                  ? '결정 대기 — 외부 응답 필요'
+                  : isPaused
+                    ? `Resume ${a.name}`
+                    : `Pause ${a.name}`
+              }
+              disabled={blocked}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!blocked) onTogglePause()
+              }}
+              danger={blocked}
+            >
+              {blocked ? (
+                <span style={{ fontSize: 11, lineHeight: 1 }}>⚠</span>
+              ) : isPaused ? (
+                <Icon.Play size={11} />
+              ) : (
+                <Icon.Pause size={11} />
+              )}
+            </CardIconBtn>
+          )}
+          {onOpenTerminal && (
+            <CardIconBtn
+              title={
+                member.tmuxPaneId
+                  ? `Open ${a.name} terminal`
+                  : 'tmux 세션 미할당 — isolated 옵션으로 재생성 필요'
+              }
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenTerminal()
+              }}
+              dim={!member.tmuxPaneId}
+            >
+              <Icon.Terminal size={11} />
+            </CardIconBtn>
+          )}
+        </div>
       </div>
       <div
         style={{
@@ -346,6 +655,64 @@ function AgentCard({ member, selected, onClick }: AgentCardProps) {
           {STATE_LABEL[member.state]}
         </span>
       </div>
+    </div>
+  )
+}
+
+// ─── Tiny icon-only button used inside AgentCard ────────────────────
+//
+// Stops click propagation by default so it doesn't toggle the card's selection
+// when the user just wanted to pause / open terminal.
+interface CardIconBtnProps {
+  children: React.ReactNode
+  title?: string
+  disabled?: boolean
+  danger?: boolean
+  dim?: boolean
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
+}
+
+function CardIconBtn({ children, title, disabled, danger, dim, onClick }: CardIconBtnProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 3,
+        background: 'transparent',
+        border: '1px solid transparent',
+        color: danger
+          ? 'var(--danger)'
+          : dim
+            ? 'var(--text-4, var(--text-3))'
+            : 'var(--text-3)',
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return
+        ;(e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-4, var(--bg-3))'
+        ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text-1)'
+      }}
+      onMouseLeave={(e) => {
+        ;(e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+        ;(e.currentTarget as HTMLButtonElement).style.color = danger
+          ? 'var(--danger)'
+          : dim
+            ? 'var(--text-4, var(--text-3))'
+            : 'var(--text-3)'
+      }}
+    >
+      {children}
     </button>
   )
 }
