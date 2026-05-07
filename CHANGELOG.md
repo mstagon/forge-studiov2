@@ -4,6 +4,115 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-05-07
+
+대규모 UI 전면 재구성 + 하네스 라우팅 정합성 + 코드 지식 그래프 통합. 4개
+PR (#4 #5 #6 #7) 의 변경을 한 릴리즈로 묶음.
+
+### Added — UI 전면 재구성 v2
+- **새 사이드바 IA**: Workspace · Git · Dashboard · **Library** · Settings
+  (기존 Teams 단독 항목 제거, Run 들은 Workspace 내부 Teams 섹션으로 흡수)
+- **Workspace 패널** = 새로운 홈: 헤더 (path/branch/Update Harness 배지) +
+  좌패널 (Files 트리 + Teams Run 섹션) + 메인 (실제 xterm 터미널 / FilePreview /
+  RunLiveView 분기) + 하단 ResourceBar (CPU/MEM/DISK/PTY)
+- **Run 라이브뷰** (777genius 레퍼런스): 멤버 레일 + tmux split grid +
+  Activity feed + 컨트롤 바. ESC 로 복귀
+- **Library**: Compositions / Agents / Skills / Commands / Hooks 5탭 +
+  글로벌 Composition 템플릿 카드 그리드 + "Apply to workspace" 플로우
+- **Settings 5섹션 풀 디자인**: General / Harness / Agents / Integrations /
+  Account
+- **단축키**: ⌘1~4 view · ⌘, Settings · ⌘N New Run · ⌘K 팔레트 · Esc Run 닫기 ·
+  Cmd+Shift+. 하네스 파일 토글
+- **디자인 토큰**: cool neutral dark + forge orange (#ff6b35) accent +
+  8개 role-coded agent 컬러 + Geist (UI) + JetBrains Mono (코드) Google Fonts
+
+### Added — 핵심 기능
+- **Wizard → 실제 팀 생성**: AgentTeamWatcher.create() + teams:create IPC.
+  Wizard 결과가 `<workspace>/.claude/teams/<id>/config.json` 자동 작성 →
+  Run 섹션에 즉시 표시
+- **스택별 원격 레포 자동 등록**: `{프로젝트명}-{client,server,cms}` 컨벤션.
+  NewWorkspaceDialog 토글 + gh CLI 로 빈 private 레포 자동 생성 옵션
+- **실제 파일 시스템 wired**: Files 패널 lazy load + 하네스 토글 +
+  path traversal 방어 + 바이너리 감지. FilePreview 실 파일 내용 + truncated 알림
+- **Library 실데이터**: 5개 IPC 병렬 호출로 활성 워크스페이스의
+  `.claude/{agents,skills,commands,hooks}` + `~/.claude/team-compositions/` 스캔
+- **Git/Dashboard 풀 wired**: useGitStore (status/log/diff/stage/composer) +
+  useWorkspaceStore (harnessInfo + mcpStatus) 실데이터, 자동 scan/refresh
+- **Code Review Graph 통합** (신규): Tree-sitter 기반 코드 지식 그래프 MCP
+  (https://github.com/tirth8205/code-review-graph) 풀 통합. 평균 6.8× 토큰 절약
+  - mcp.json 에 server 추가 (uvx) + 자동 활용 룰 + code-reviewer agent
+    Tools 활용 명시
+  - Settings → Harness → Code Review Graph 카드 (상태/통계/Install/Rebuild/
+    Open Visualization)
+  - Dashboard → Knowledge Graph 섹션 (4-cell stat)
+  - 워크스페이스 생성 시 자동 빌드 옵션 (NewWorkspaceDialog Advanced)
+  - 풀스크린 D3 시각화 모달 (`code-review-graph viz` iframe 임베드)
+
+### Added — 하네스 강제 메커니즘
+- **룰/스킬 강제**: PreToolUse 훅이 stderr → **stdout 주입** 으로 전환.
+  매칭된 SKILL.md 절대경로 4줄을 Claude 컨텍스트에 직접 넣음 — 무시 불가
+- **커밋 강제**: PreToolUse Bash 훅이 (a) Conventional Commits 형식,
+  (b) 한국어 subject ([가-힣] 1자 이상), (c) Co-Authored-By trailer 차단,
+  (d) `-A`/`-am` 한 방 커밋 차단 — 모두 `exit 2` 로 피드백
+- **CLAUDE.md 라우팅 정합성**: `client/presentation/` → mobile-design +
+  mobile-touch 자동 주입 추가 (이전엔 누락). Meta Skills 표 + Hook Routing
+  표 신규
+- **8개 룰 자동 로드**: `@.claude/rules/common/*.md` 문법으로 매 세션 컨텍스트
+  주입
+
+### Added — 하네스 콘텐츠
+- `harness-template/README.md` (한글) — agent / skill / rule / hook 추가법 +
+  로컬 테스트 + Code Review Graph 절
+- `harness-template/.env.example` — Supabase / Exa / Firecrawl / Jira / FAL
+  토큰 placeholder + 발급 링크
+- **OWASP Top 10 (2025)** 전체 10개 — A01 Broken Access Control,
+  A02 Security Misconfiguration, A03 Software Supply Chain Failures,
+  A04 Cryptographic Failures, A05 Injection, A06 Insecure Design,
+  A07 Authentication Failures, A08 Software/Data Integrity Failures,
+  A09 Logging & Alerting Failures, A10 Mishandling of Exceptional
+  Conditions. 기준 연도/갱신 주기 메타데이터
+- `dio-retrofit` 스킬에 MANDATORY 블록 + pubspec stable 버전
+- `git-workflow.md` — 한국어 커밋 강제 + Co-Author 금지 + 원격 레포 네이밍
+  컨벤션 명시
+- 새 README.ko.md (~360줄, 영문 풀 번역) + 양방향 언어 토글
+
+### Added — 개발 인프라
+- **ESLint 9 flat config** + Prettier 복원, `npm run lint` 정상 동작
+- `eslint.config.js` (TS strict + React 19 + react-hooks) + `.prettierrc.json`
+  (semi:false / singleQuote / printWidth:100)
+
+### Fixed
+- **`npm run electron:dev` 창 2번 열림** — single instance lock + 중복
+  `electron .` 호출 제거
+- **터미널 split 시 PTY 유실** — `splitPane` 이 React 최상위 key 를 바꿔
+  XTerminal 이 unmount 되며 PTY dispose 되던 버그. **Portal 라이프타임
+  분리** 로 해결 — paneId 별 long-lived host div 가 split/branch-collapse
+  에도 살아남음
+- **Git 탭 렉** — 하네스 파일 (.claude/, resources/harness-template/, dist/)
+  기본 숨김 + Cmd+Shift+. Finder 식 토글
+- **Co-Author/영어 메시지 자동 생성** — 하네스 룰 + PreToolUse 훅으로
+  이중 차단
+
+### Added — UX 폴리시
+- **Split pane 개별 닫기 버튼** — 호버 시 우상단 ×
+- **터미널 이름 자동 순번** — `Terminal`, `Terminal (2)`, `Terminal (3)` ...
+- **Workspace switcher** (TopBar dropdown): 검색 (≥5개 시), \"기존 폴더 열기\",
+  활성 ws 체크마크 + path 미리보기, dropdown 자동 닫기
+- **Run ← 백 버튼** 강조 + Esc Kbd 힌트 인라인
+
+### Removed (cleanup)
+- v1 컴포넌트 13개 파일 (~2000줄): `src/components/{layout,dashboard,git,
+  teams,terminal,workspace/HarnessUpdateBanner}/` — v2 가 전부 대체
+
+### Visual
+- 새 앱 아이콘 (Ember Cube) — SVG → icon.icns (16~1024 모든 사이즈)
+
+### Migration
+기존 워크스페이스: **Update Harness** 클릭으로 새 mcp.json + 룰 + agent +
+README 자동 적용. 보존: `agent-memory/`, `settings.local.json`, `.pdca-*`.
+사전 작업 (선택): `pipx install code-review-graph` (또는 pip / uv tool
+install) — Code Review Graph 기능 활성화 시.
+
 ## [0.3.5] — 2026-04-20
 
 ### Fixed

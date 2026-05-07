@@ -1,6 +1,6 @@
 {
   "name": "forge-studio",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "Forge Studio — Claude Code GUI Wrapper",
   "license": "GPL-3.0-or-later",
   "main": "dist-electron/main.js",
