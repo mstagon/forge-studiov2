@@ -160,6 +160,21 @@ function countLeaves(panes: TerminalPane[]): number {
   return count
 }
 
+/**
+ * Pick the next available "Terminal", "Terminal (2)", "Terminal (3)" ... title
+ * within the given workspace. Only active tabs' titles are considered, so a
+ * closed tab frees its number for reuse.
+ */
+function nextTerminalTitle(tabs: TerminalTab[], workspaceId?: string): string {
+  const base = 'Terminal'
+  const siblings = tabs.filter((t) => t.workspaceId === workspaceId)
+  const usedTitles = new Set(siblings.map((t) => t.title))
+  if (!usedTitles.has(base)) return base
+  let n = 2
+  while (usedTitles.has(`${base} (${n})`)) n++
+  return `${base} (${n})`
+}
+
 export const useTerminalStore = create<TerminalState>((set, get) => ({
   tabs: [],
   activeTabId: null,
@@ -168,9 +183,10 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   addTab: (cwd?: string, workspaceId?: string) => {
     const pane = createPane()
     pane.size = 100
+    const title = nextTerminalTitle(get().tabs, workspaceId)
     const tab: TerminalTab = {
       id: uuid(),
-      title: 'Terminal',
+      title,
       ptyId: null,
       cwd: cwd || '',
       workspaceId,

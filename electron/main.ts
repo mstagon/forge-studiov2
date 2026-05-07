@@ -56,6 +56,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // sandbox:false — node-pty가 Node API를 직접 호출해야 하므로 필요 (contextIsolation:true로 보안 유지)
       sandbox: false,
     },
   })
@@ -552,24 +553,41 @@ ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; ag
 
 // ─── App Lifecycle ──────────────────────────────────────────────────
 
-app.whenReady().then(() => {
-  buildMenu()
-  createWindow()
+// Single instance lock — guarantees only one Electron main process creates
+// BrowserWindows. Without this, `npm run electron:dev` could spawn a second
+// window if both vite-plugin-electron and a stray `electron .` launch.
+const gotTheLock = app.requestSingleInstanceLock()
 
-  agentTeamWatcher.start().catch((err) => {
-    console.error('[AgentTeamWatcher] start failed:', err)
-  })
-  agentTeamWatcher.on('teams', (teams) => {
-    mainWindow?.webContents.send('teams:update', teams)
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // Another instance tried to start — focus the existing window instead.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
   })
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+  app.whenReady().then(() => {
+    buildMenu()
+    createWindow()
 
-app.on('window-all-closed', () => {
-  ptyManager.disposeAll()
-  agentTeamWatcher.stop()
-  if (process.platform !== 'darwin') app.quit()
-})
+    agentTeamWatcher.start().catch((err) => {
+      console.error('[AgentTeamWatcher] start failed:', err)
+    })
+    agentTeamWatcher.on('teams', (teams) => {
+      mainWindow?.webContents.send('teams:update', teams)
+    })
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    ptyManager.disposeAll()
+    agentTeamWatcher.stop()
+    if (process.platform !== 'darwin') app.quit()
+  })
+}

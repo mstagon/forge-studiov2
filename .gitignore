@@ -37,3 +37,5 @@ framework-agnostic-harness/
 
 # iconutil 중간 산출물 (icon.icns만 커밋)
 build/*.iconset/
+
+.omc/

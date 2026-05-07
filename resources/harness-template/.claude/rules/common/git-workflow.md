@@ -74,7 +74,11 @@ prd 머지 → 각 원격 레포 prd로 subtree push → 프로덕션 배포
 
 ## 커밋
 - conventional commits 형식: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
-- 커밋 메시지는 한글 또는 영어 (혼용 OK)
+- **커밋 메시지는 반드시 한국어로 작성**한다. subject(제목)에 한글 1자 이상 필수 (PreToolUse 훅이 차단).
+  - OK: `feat(auth): 소셜 로그인 추가`
+  - NG: `feat(auth): add social login` (차단됨)
+  - type/scope 키워드는 영어 그대로, subject 부분만 한국어
+- **`Co-Authored-By:` trailer 절대 추가 금지** — 저자는 개발자 단독. `Co-Authored-By: Claude ...`, `🤖 Generated with Claude Code`, `Generated-by: Claude` 등 일체 금지 (PreToolUse 훅이 차단).
 - 하나의 커밋에 하나의 논리적 변경
 - **세부 단위로 커밋한다** — 여러 기능/수정을 하나로 묶지 마라.
   `git add -A && git commit` 한 방 금지. 파일/관심사별로 stage 나눠서 commit n개로 분리.
