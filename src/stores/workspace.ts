@@ -53,6 +53,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setActiveWorkspace: (workspace: Workspace) => {
     set({ activeWorkspace: workspace })
+    // Repoint the team watcher at this workspace's .claude/teams dir so
+    // workspace-scoped teams created via the wizard land in (and refresh
+    // from) the right place.
+    void window.api.teams.setWorkspace(workspace.path).catch((err) => {
+      console.error('[workspace] teams.setWorkspace failed:', err)
+    })
     get().scanHarness()
     get().scanMcp()
     get().refreshHarnessVersion()
@@ -70,6 +76,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })
     await get().loadWorkspaces()
     set({ activeWorkspace: workspace, newWorkspaceDialogVisible: false })
+    void window.api.teams.setWorkspace(workspace.path).catch(() => {})
     get().scanHarness()
     get().refreshHarnessVersion()
     return workspace
@@ -79,6 +86,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const workspace = await window.api.workspace.open(dirPath)
     await get().loadWorkspaces()
     set({ activeWorkspace: workspace })
+    void window.api.teams.setWorkspace(workspace.path).catch(() => {})
     get().scanHarness()
     get().scanMcp()
     get().refreshHarnessVersion()

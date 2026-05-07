@@ -68,6 +68,30 @@ const api = {
       ipcRenderer.invoke('harness:getInstalledVersion', workspacePath),
     update: (workspacePath: string): Promise<{ backupPath: string; version: string }> =>
       ipcRenderer.invoke('harness:update', workspacePath),
+    listAgents: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listAgents', workspacePath),
+    listSkills: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listSkills', workspacePath),
+    listCommands: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listCommands', workspacePath),
+    listHooks: (workspacePath: string) =>
+      ipcRenderer.invoke('harness:listHooks', workspacePath),
+    listCompositions: () =>
+      ipcRenderer.invoke('harness:listCompositions'),
+  },
+
+  // ─── Filesystem ──────────────────────────────────────────────────
+  fs: {
+    listDir: (
+      absPath: string,
+      opts?: { includeHidden?: boolean; ignoreNodeModules?: boolean; includeHarness?: boolean }
+    ): Promise<{ entries: { name: string; type: 'file' | 'dir'; size?: number }[] }> =>
+      ipcRenderer.invoke('fs:listDir', absPath, opts ?? {}),
+    readFile: (
+      absPath: string,
+      maxBytes?: number
+    ): Promise<{ content: string | null; truncated: boolean; binary: boolean; size: number }> =>
+      ipcRenderer.invoke('fs:readFile', absPath, maxBytes),
   },
 
   // ─── Git ─────────────────────────────────────────────────────────
@@ -103,6 +127,21 @@ const api = {
     },
     openAgentTerminal: (options: { teamId: string; agentName: string; cols: number; rows: number }): Promise<string> =>
       ipcRenderer.invoke('teams:openAgentTerminal', options),
+    /** Repoint the watcher at <workspacePath>/.claude/teams (or ~/.claude/teams when null). */
+    setWorkspace: (workspacePath: string | null): Promise<void> =>
+      ipcRenderer.invoke('teams:setWorkspace', workspacePath),
+    create: (opts: {
+      workspaceId: string
+      workspacePath: string
+      name: string
+      goal?: string
+      members: { agentId: string; task?: string }[]
+      worktreeStrategy: 'isolated' | 'shared'
+      mergeStrategy: 'squash' | 'sequential'
+    }): Promise<{ teamId: string; configPath: string }> =>
+      ipcRenderer.invoke('teams:create', opts),
+    remove: (teamId: string): Promise<void> =>
+      ipcRenderer.invoke('teams:remove', teamId),
   },
 
   // ─── Updates ─────────────────────────────────────────────────────
