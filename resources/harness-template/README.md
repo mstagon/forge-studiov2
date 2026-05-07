@@ -305,6 +305,34 @@ matcher 예시:
 
 ---
 
+## 8. Code Review Graph
+
+[`code-review-graph`](https://github.com/tirth8205/code-review-graph) 는 Tree-sitter 기반 코드 지식 그래프 + MCP 서버로,
+변경 파일의 **blast radius**(영향 범위) / **dependents**(의존자) / **callers**(호출자) 를 토큰 효율적으로 질의할 수 있게 한다.
+하네스의 `code-reviewer` 에이전트가 리뷰 시작 전 반드시 호출하도록 룰화되어 있다 (평균 6.8× 토큰 절약).
+
+### 설치 (시스템에 한 번만)
+
+```bash
+pipx install code-review-graph
+# 또는
+pip install code-review-graph
+# 또는
+uv tool install code-review-graph
+```
+
+### 사용
+
+- **워크스페이스 생성 시 자동 빌드**: Forge Studio의 New Workspace 다이얼로그에서 "Code Review Graph" 옵션이 켜져 있으면, 워크스페이스 부트스트랩 단계에서 자동으로 그래프가 빌드된다.
+- **수동 빌드 / 재빌드**: 워크스페이스 루트에서 `code-review-graph build` 실행. 큰 리팩토링 후나 언어/스택을 추가했을 때 권장.
+- **Claude Code 자동 연결**: `.claude/mcp.json` 에 `code-review-graph` 서버가 등록되어 있어, 새 Claude Code 세션을 열면 MCP 가 자동으로 붙는다. 별도 설정/토큰 불필요.
+
+### 동작 원리
+
+소스 파일을 **Tree-sitter** 로 파싱 → 함수/클래스/import 노드 + 호출/참조 엣지를 추출해 워크스페이스 루트의 **SQLite 그래프**에 저장한다. 이후 **MCP 서버** 모드로 떠서 `blast_radius` / `dependents` / `callers` / `search_nodes` 같은 도구를 Claude Code 에게 노출한다. 그래프는 SQL 인덱스 기반이라 수만 노드 규모에서도 ms 단위로 질의되며, 전체 파일을 읽기 전에 영향 범위를 좁히기 때문에 평균 **6.8× 토큰 절약** 효과가 보고되어 있다.
+
+---
+
 ## 관련 파일
 
 - `CLAUDE.md` — 매니저 롤, 에이전트/스킬 라우팅 표
