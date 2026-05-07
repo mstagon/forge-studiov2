@@ -4,6 +4,15 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] — 2026-05-07
+
+### Fixed
+- **앱 아이콘이 너무 작아 보이던 문제** — Ember Cube 아트워크가 1024px
+  캔버스의 ~52% 만 차지해 macOS Dock 의 다른 앱 (~80% fill) 대비
+  작게 보임. 마스터 SVG 의 cube transform 에 `scale(1.55)` 추가해
+  ~80% fill 로 재렌더 후 icns 재빌드. 캔버스 squircle 마스크와
+  주변 별 장식은 그대로 유지.
+
 ## [0.4.0] — 2026-05-07
 
 대규모 UI 전면 재구성 + 하네스 라우팅 정합성 + 코드 지식 그래프 통합. 4개
