@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forge Studio · 하네스 아키텍처</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg-0: #07090d;
+    --bg-1: #0b0e13;
+    --bg-2: #11151c;
+    --bg-3: #161b24;
+    --bg-4: #1d242f;
+    --line-1: #1c222c;
+    --line-2: #262e3a;
+    --line-3: #313a48;
+    --text-1: #e6e9ef;
+    --text-2: #9aa3b2;
+    --text-3: #6b7280;
+    --text-4: #4a525e;
+    --accent: #ff6b35;
+    --accent-2: #ff8758;
+    --accent-dim: rgba(255, 107, 53, 0.14);
+    --accent-line: rgba(255, 107, 53, 0.32);
+    --success: #4ade80;
+    --warning: #f5a524;
+    --danger: #f87171;
+    --info: #60a5fa;
+    --violet: #a78bfa;
+    --role-fe: #60a5fa;
+    --role-be: #a78bfa;
+    --role-db: #f59e0b;
+    --role-test: #34d399;
+    --role-review: #f472b6;
+    --role-infra: #fb923c;
+    --role-arch: #22d3ee;
+    --role-doc: #facc15;
+    --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    --shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-pop: 0 12px 32px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  body { background-image: radial-gradient(1200px 600px at 50% -200px, rgba(255,107,53,0.08), transparent 70%); }
+  ::selection { background: var(--accent-dim); color: var(--text-1); }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 60px 32px 120px; }
+  .mono { font-family: var(--font-mono); font-feature-settings: "calt" 0; }
+
+  /* HERO */
+  .hero { padding: 64px 0 56px; text-align: center; border-bottom: 1px solid var(--line-1); margin-bottom: 64px; }
+  .hero .badge { display: inline-block; padding: 4px 10px; border: 1px solid var(--accent-line); background: var(--accent-dim); color: var(--accent); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; margin-bottom: 18px; }
+  .hero h1 { font-size: 48px; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.5px; }
+  .hero .sub { font-size: 17px; color: var(--text-2); max-width: 640px; margin: 0 auto; }
+  .hero .meta { margin-top: 22px; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+  .hero .meta span + span { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line-2); }
+
+  /* SECTION */
+  section { margin-bottom: 80px; }
+  section h2 { font-size: 28px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.3px; }
+  section .lead { font-size: 15px; color: var(--text-2); margin: 0 0 28px; max-width: 720px; }
+  section h3 { font-size: 17px; font-weight: 600; margin: 36px 0 12px; color: var(--text-1); }
+  section h4 { font-size: 13px; font-weight: 600; margin: 20px 0 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; font-family: var(--font-mono); }
+  p { color: var(--text-2); }
+  strong { color: var(--text-1); font-weight: 600; }
+  code { font-family: var(--font-mono); font-size: 12.5px; padding: 1px 5px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 3px; color: var(--text-1); }
+  a { color: var(--accent-2); text-decoration: none; border-bottom: 1px dashed var(--accent-line); }
+
+  /* CARDS */
+  .grid { display: grid; gap: 14px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 800px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } }
+  .card { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 8px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .card .ico { width: 28px; height: 28px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-3); border: 1px solid var(--line-2); color: var(--accent); margin-bottom: 10px; }
+  .card h5 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .card .desc { font-size: 13px; color: var(--text-2); margin: 0; line-height: 1.55; }
+  .card .key { display: inline-block; margin-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); padding: 2px 6px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 3px; }
+
+  /* DIAGRAMS */
+  .diagram { background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 8px; padding: 22px; margin: 18px 0; box-shadow: var(--shadow); }
+  .diagram .caption { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+  svg { display: block; width: 100%; height: auto; }
+
+  /* PILLS / TAGS */
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; font-size: 10.5px; font-weight: 500; letter-spacing: 0.2px; text-transform: uppercase; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--line-2); border-radius: 4px; font-family: var(--font-mono); }
+  .pill.accent { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-line); }
+  .pill.success { background: rgba(74,222,128,0.12); color: var(--success); border-color: rgba(74,222,128,0.28); }
+  .pill.danger { background: rgba(248,113,113,0.12); color: var(--danger); border-color: rgba(248,113,113,0.28); }
+  .pill.warning { background: rgba(245,165,36,0.12); color: var(--warning); border-color: rgba(245,165,36,0.28); }
+  .pill.info { background: rgba(96,165,250,0.12); color: var(--info); border-color: rgba(96,165,250,0.28); }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-1); }
+  th { color: var(--text-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-mono); background: var(--bg-2); }
+  td { color: var(--text-2); }
+  td strong { color: var(--text-1); }
+  tr:hover td { background: var(--bg-2); }
+  .table-wrap { background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 8px; overflow: hidden; }
+
+  /* ENFORCED ACTION ROW */
+  .actrow { display: grid; grid-template-columns: 200px 1fr 100px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line-1); font-size: 13px; }
+  .actrow:last-child { border-bottom: none; }
+  .actrow .src { font-family: var(--font-mono); color: var(--text-2); font-size: 12px; }
+  .actrow .desc { color: var(--text-2); }
+
+  /* TIMELINE */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--line-2); }
+  .step { position: relative; padding: 12px 0 12px 14px; }
+  .step::before { content: ''; position: absolute; left: -27px; top: 16px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg-1); border: 2px solid var(--accent); box-shadow: 0 0 0 4px var(--bg-0); }
+  .step .num { display: inline-block; padding: 1px 7px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-line); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+  .step h6 { display: inline; font-size: 14px; font-weight: 600; color: var(--text-1); margin: 0; }
+  .step p { font-size: 13px; color: var(--text-2); margin: 6px 0 0; }
+
+  /* CALLOUT */
+  .callout { padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 4px; margin: 18px 0; font-size: 13.5px; color: var(--text-1); }
+  .callout strong { color: var(--accent); }
+  .callout.warn { border-color: var(--warning); background: rgba(245,165,36,0.08); }
+  .callout.warn strong { color: var(--warning); }
+
+  /* TWO-COL LAYOUT */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+  .two-col .col h4 { margin-top: 0; }
+
+  /* Stat block */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+  @media (max-width: 800px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 6px; padding: 14px 16px; }
+  .stat .v { font-size: 24px; font-weight: 700; color: var(--text-1); font-family: var(--font-mono); letter-spacing: -0.5px; }
+  .stat .l { font-size: 11px; color: var(--text-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-mono); }
+
+  /* TOC */
+  .toc { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 8px; padding: 18px 22px; margin-bottom: 56px; }
+  .toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  @media (max-width: 800px) { .toc ol { columns: 1; } }
+  .toc li { font-size: 13.5px; margin: 4px 0; color: var(--text-2); }
+  .toc a { color: var(--text-1); border-bottom: none; }
+  .toc a:hover { color: var(--accent); }
+
+  /* FOOTER */
+  footer { text-align: center; padding: 40px 0 0; font-size: 12px; color: var(--text-3); border-top: 1px solid var(--line-1); margin-top: 80px; font-family: var(--font-mono); }
+
+  /* Animation */
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="badge">v0.4.1 · 하네스 아키텍처</div>
+    <h1>Forge Studio Harness</h1>
+    <p class="sub">Claude Code 의 행동을 강제·자동화하는 번들 하네스 — Electron 앱이 워크스페이스를 만들고, <code>.claude/</code> 안의 8개 슬롯이 매 세션 Claude 의 코드/리뷰/팀 작업을 통제한다.</p>
+    <div class="meta mono">
+      <span>Flutter + NestJS + Prisma + Next.js 모노레포</span>
+      <span>macOS · Electron 35</span>
+      <span>25 skills · 18 agents · 25 commands · 15 MCP</span>
+    </div>
+  </header>
+
+  <!-- TOC -->
+  <nav class="toc">
+    <ol>
+      <li><a href="#big-picture">큰 그림 — 3계층 모델</a></li>
+      <li><a href="#slots">.claude/ 안의 8개 슬롯</a></li>
+      <li><a href="#hooks">Hook 라이프사이클</a></li>
+      <li><a href="#skills">스킬 자동 주입</a></li>
+      <li><a href="#pipeline">자동 오케스트레이션 파이프라인</a></li>
+      <li><a href="#teams">팀 시스템 — Run vs Composition</a></li>
+      <li><a href="#run-lifecycle">Run 라이프사이클</a></li>
+      <li><a href="#run-liveview">Run 라이브뷰</a></li>
+      <li><a href="#enforcement">강제 메커니즘 4계층</a></li>
+      <li><a href="#crgraph">Code Review Graph 통합</a></li>
+      <li><a href="#learning">자기 개선 루프</a></li>
+      <li><a href="#summary">요약 · 사용자가 묻는 6가지</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. BIG PICTURE -->
+  <section id="big-picture">
+    <h2>1. 큰 그림 — 3계층 모델</h2>
+    <p class="lead">Forge Studio (Electron 앱) 가 워크스페이스를 만들고 그 안에 <code>.claude/</code> 하네스를 복사한다. Claude Code 가 그 워크스페이스에서 세션을 시작하면 하네스의 룰/스킬/훅이 매 도구 호출마다 끼어들어 작업을 통제한다.</p>
+
+    <div class="diagram">
+      <div class="caption">Layer Diagram</div>
+      <svg viewBox="0 0 1000 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g-fs" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#1d242f"/><stop offset="1" stop-color="#161b24"/>
+          </linearGradient>
+          <linearGradient id="g-h" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ff6b3522"/><stop offset="1" stop-color="#ff6b3508"/>
+          </linearGradient>
+          <linearGradient id="g-c" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#1d242f"/><stop offset="1" stop-color="#161b24"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Layer 1 -->
+        <rect x="40" y="20" width="920" height="100" rx="8" fill="url(#g-fs)" stroke="#262e3a"/>
+        <text x="60" y="45" font-family="JetBrains Mono" font-size="11" fill="#6b7280" letter-spacing="1">LAYER 1 · ELECTRON SHELL</text>
+        <text x="60" y="76" font-family="Geist" font-weight="700" font-size="20" fill="#e6e9ef">Forge Studio</text>
+        <text x="60" y="100" font-family="Geist" font-size="13" fill="#9aa3b2">워크스페이스 생성/관리 · Files/Git/터미널 UI · Run 라이브뷰 · 하네스 버전 관리 · 스택별 레포 분리</text>
+
+        <!-- arrow 1 -->
+        <path d="M 500 130 L 500 160" stroke="#ff6b35" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+        <text x="510" y="148" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">create / update</text>
+
+        <!-- Layer 2 -->
+        <rect x="40" y="170" width="920" height="120" rx="8" fill="url(#g-h)" stroke="#ff6b3540"/>
+        <text x="60" y="195" font-family="JetBrains Mono" font-size="11" fill="#ff6b35" letter-spacing="1">LAYER 2 · BUNDLED HARNESS</text>
+        <text x="60" y="226" font-family="Geist" font-weight="700" font-size="20" fill="#e6e9ef">&lt;project&gt;/.claude/</text>
+        <text x="60" y="252" font-family="JetBrains Mono" font-size="13" fill="#ff8758">agents/  skills/  commands/  rules/  scripts/  contexts/  mcp.json  settings.json</text>
+        <text x="60" y="276" font-family="Geist" font-size="13" fill="#9aa3b2">번들 템플릿 · 워크스페이스 생성 시 통째 복사 · `.harness-version` 으로 버전 추적 · 한 클릭 업데이트</text>
+
+        <!-- arrow 2 -->
+        <path d="M 500 300 L 500 330" stroke="#ff6b35" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+        <text x="510" y="318" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">매 세션 자동 로드</text>
+
+        <!-- Layer 3 -->
+        <rect x="40" y="340" width="920" height="100" rx="8" fill="url(#g-c)" stroke="#262e3a"/>
+        <text x="60" y="365" font-family="JetBrains Mono" font-size="11" fill="#6b7280" letter-spacing="1">LAYER 3 · CLAUDE CODE</text>
+        <text x="60" y="396" font-family="Geist" font-weight="700" font-size="20" fill="#e6e9ef">Manager Mode + Worker Agents</text>
+        <text x="60" y="420" font-family="Geist" font-size="13" fill="#9aa3b2">메인 세션 = delegation hub (코드 5줄+ 시 자동 위임) · 18개 서브에이전트 풀 · Hook 이 매 도구 호출마다 차단/주입</text>
+
+        <defs>
+          <marker id="arr" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff6b35"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="callout">
+      <strong>핵심 결정:</strong> Forge Studio 자체는 Claude 행동에 직접 개입하지 않는다. 단지 <em>하네스를 정확한 자리에 깔아주고</em>, 결과물 (파일/팀/그래프) 을 <em>실시간 시각화</em>할 뿐. 모든 통제는 <code>.claude/</code> 안의 룰/훅/스킬이 한다.
+    </div>
+  </section>
+
+  <!-- 2. SLOTS -->
+  <section id="slots">
+    <h2>2. <code>.claude/</code> 안의 8개 슬롯</h2>
+    <p class="lead">하네스의 모든 동작은 이 8개 슬롯의 조합. 각각이 \"언제\", \"어떻게\" 발화하는지가 하네스의 정체.</p>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 20a5 5 0 0 1 6-4"/></svg></div>
+        <h5>agents/ <span class="pill">18개</span></h5>
+        <p class="desc">서브에이전트 정의 — flutter-ui, nestjs-backend, prisma-data, code-reviewer 등. 메인 세션이 \"Agent Routing\" 표 매칭 시 파견.</p>
+        <span class="key">자동 발화: 메인 분석 → 매칭 → Agent() 호출</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></div>
+        <h5>skills/ <span class="pill">25개</span></h5>
+        <p class="desc">freezed-models, dio-retrofit, mobile-design 등 도메인 패턴. <code>skill-injector.sh</code> 가 파일 경로 매칭 시 SKILL.md 절대경로를 컨텍스트로 주입.</p>
+        <span class="key">자동 발화: PreToolUse Write/Edit + 파일 패턴</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4 10 20"/></svg></div>
+        <h5>commands/ <span class="pill">25개</span></h5>
+        <p class="desc"><code>/verify</code>, <code>/review</code>, <code>/checkpoint</code>, <code>/implement</code>, <code>/full-cycle</code> 등 슬래시 커맨드. 사용자 입력 또는 워크플로 자동 트리거.</p>
+        <span class="key">발화: 사용자 입력 OR 파이프라인 자동</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg></div>
+        <h5>rules/common/ <span class="pill">8개</span></h5>
+        <p class="desc">architecture, coding-style, git-workflow, security, testing, orchestration, mcp, automation. CLAUDE.md 의 <code>@-syntax</code> 로 매 세션 자동 컨텍스트 주입.</p>
+        <span class="key">자동 발화: 매 세션 시작 (mandatory)</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+        <h5>scripts/ <span class="pill">10개</span></h5>
+        <p class="desc">훅 셸 스크립트 — gateguard, skill-injector, mcp-health, learn, evaluate-session, auto-profile 등. settings.json 의 hooks 가 호출.</p>
+        <span class="key">발화: SessionStart / PreToolUse / Stop 등</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M3 7 12 3l9 4v10l-9 4-9-4z"/></svg></div>
+        <h5>contexts/</h5>
+        <p class="desc"><code>tech-stack.md</code> 등 도메인 컨텍스트. CLAUDE.md 또는 에이전트가 필요 시 Read 로 가져감.</p>
+        <span class="key">발화: 에이전트가 명시적 Read</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20"/></svg></div>
+        <h5>mcp.json <span class="pill">15개</span></h5>
+        <p class="desc">MCP 서버 설정 — context7, code-review-graph, dart, serena, supabase, playwright 등. 세션 시작 시 자동 spawn.</p>
+        <span class="key">발화: 세션 시작 시 자동 + 도구 호출 시</span>
+      </div>
+      <div class="card">
+        <div class="ico"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.5h4l.4-2.5a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg></div>
+        <h5>settings.json</h5>
+        <p class="desc">model · effortLevel · permissions (allow / deny) · hooks 매핑. 세션 시작 시 로드. Hook profile 이 브랜치별 자동 전환.</p>
+        <span class="key">발화: 세션 시작 + auto-profile.sh 갱신</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. HOOKS -->
+  <section id="hooks">
+    <h2>3. Hook 라이프사이클</h2>
+    <p class="lead">Claude Code 의 5개 라이프사이클 이벤트마다 settings.json 의 hooks 가 fire. <strong>PreToolUse 가 핵심</strong> — stdout 은 컨텍스트로 주입되고, exit 2 는 도구를 차단하면서 stderr 를 Claude 에게 피드백.</p>
+
+    <div class="diagram">
+      <div class="caption">Tool Call Hook Sequence</div>
+      <svg viewBox="0 0 1000 360" xmlns="http://www.w3.org/2000/svg">
+        <!-- swimlanes -->
+        <line x1="180" y1="40" x2="180" y2="340" stroke="#262e3a" stroke-dasharray="3,3"/>
+        <line x1="500" y1="40" x2="500" y2="340" stroke="#262e3a" stroke-dasharray="3,3"/>
+        <line x1="820" y1="40" x2="820" y2="340" stroke="#262e3a" stroke-dasharray="3,3"/>
+
+        <text x="90" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280" letter-spacing="0.5">CLAUDE</text>
+        <text x="340" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#ff6b35" letter-spacing="0.5">CLAUDE CODE 런타임</text>
+        <text x="660" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280" letter-spacing="0.5">HOOK 스크립트</text>
+        <text x="910" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#6b7280" letter-spacing="0.5">결과</text>
+
+        <!-- Step 1 -->
+        <rect x="20" y="50" width="140" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="90" y="73" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">Edit() 호출 시도</text>
+        <path d="M 160 67 L 200 67" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- Step 2 -->
+        <rect x="200" y="50" width="280" height="34" rx="5" fill="#11151c" stroke="#262e3a"/>
+        <text x="340" y="73" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">PreToolUse 매칭 — Write|Edit hooks</text>
+        <path d="M 480 67 L 520 67" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- Step 3 -->
+        <rect x="520" y="50" width="280" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="660" y="73" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">차단 인라인 (코드젠/마이그)</text>
+
+        <!-- Step 4 -->
+        <rect x="520" y="100" width="280" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="660" y="123" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">skill-injector.sh</text>
+
+        <!-- Step 5 -->
+        <rect x="520" y="150" width="280" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="660" y="173" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">gateguard.sh</text>
+
+        <!-- arrows down -->
+        <path d="M 660 84 L 660 100" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+        <path d="M 660 134 L 660 150" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <!-- exit results -->
+        <path d="M 800 67 L 840 67" stroke="#f87171" stroke-width="1.5" marker-end="url(#a2-r)"/>
+        <text x="900" y="71" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#f87171">exit 1</text>
+        <text x="900" y="84" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">차단</text>
+
+        <path d="M 800 117 L 840 117" stroke="#4ade80" stroke-width="1.5" marker-end="url(#a2-g)"/>
+        <text x="900" y="121" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#4ade80">stdout</text>
+        <text x="900" y="134" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">→ 컨텍스트</text>
+
+        <path d="M 800 167 L 840 167" stroke="#4ade80" stroke-width="1.5" marker-end="url(#a2-g)"/>
+        <text x="900" y="171" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#4ade80">stdout</text>
+        <text x="900" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">→ 컨텍스트</text>
+
+        <!-- final arrow back to claude -->
+        <path d="M 660 184 L 660 230 L 90 230 L 90 250" stroke="#ff6b35" stroke-width="2" fill="none" marker-end="url(#a2-o)"/>
+        <text x="380" y="225" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">매칭 SKILL.md 들 + 조사 체크리스트 주입</text>
+
+        <!-- Final block -->
+        <rect x="20" y="260" width="140" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="90" y="283" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">SKILL.md 자동 Read</text>
+        <path d="M 160 277 L 200 277" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <rect x="200" y="260" width="280" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="340" y="283" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">실제 Edit 수행 (룰 적용된)</text>
+        <path d="M 480 277 L 520 277" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <rect x="520" y="260" width="280" height="34" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="660" y="283" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">PostToolUse — dart format 등</text>
+
+        <defs>
+          <marker id="a2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/>
+          </marker>
+          <marker id="a2-r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#f87171"/>
+          </marker>
+          <marker id="a2-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#4ade80"/>
+          </marker>
+          <marker id="a2-o" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <h3>5개 라이프사이클 이벤트</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>이벤트</th><th>트리거 시점</th><th>stdout</th><th>exit 의미</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>SessionStart</strong></td><td>Claude Code 세션 시작</td><td>컨텍스트 주입</td><td>무시</td></tr>
+          <tr><td><strong>PreToolUse</strong></td><td>모든 도구 호출 직전</td><td><span class="pill accent">컨텍스트 주입</span></td><td><span class="pill danger">exit 2 = 차단 + 피드백</span></td></tr>
+          <tr><td><strong>PostToolUse</strong></td><td>도구 호출 직후</td><td>주입</td><td>무시</td></tr>
+          <tr><td><strong>Stop</strong></td><td>Claude 응답 종료</td><td>무시</td><td>무시 (사이드이펙트)</td></tr>
+          <tr><td><strong>PreCompact</strong></td><td>컨텍스트 압축 직전</td><td>주입</td><td>무시 (백업용)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Hook profile — 브랜치별 자동 전환</h3>
+    <div class="grid cols-3">
+      <div class="card">
+        <h5><span class="pill danger">strict</span></h5>
+        <p class="desc"><code>prd</code>, <code>stg</code>, <code>hotfix/*</code> 브랜치. 모든 차단 활성, 검증 풀 체인 강제.</p>
+      </div>
+      <div class="card">
+        <h5><span class="pill warning">standard</span> <span class="pill">기본</span></h5>
+        <p class="desc"><code>dev</code>, <code>feat/*</code>, <code>fix/*</code>. 일반 개발 — 균형.</p>
+      </div>
+      <div class="card">
+        <h5><span class="pill success">minimal</span></h5>
+        <p class="desc"><code>explore/*</code>, <code>poc/*</code>. 프로토타이핑 — 차단 완화.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. SKILLS -->
+  <section id="skills">
+    <h2>4. 스킬 자동 주입 — 가장 중요한 메커니즘</h2>
+    <p class="lead">Claude 가 파일을 편집하려는 순간 <code>skill-injector.sh</code> 가 파일 경로를 보고 매칭되는 SKILL.md 절대경로 목록을 stdout 으로 출력. Claude Code 의 <code>additionalContext</code> 메커니즘이 이를 컨텍스트에 강제 삽입 — 무시 불가.</p>
+
+    <div class="diagram">
+      <div class="caption">Skill Injection Flow · 예시: client/presentation/login.dart</div>
+      <svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg">
+        <!-- Input -->
+        <rect x="40" y="30" width="280" height="60" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="55" y="52" font-family="JetBrains Mono" font-size="11" fill="#6b7280">파일 경로</text>
+        <text x="55" y="78" font-family="JetBrains Mono" font-size="13" fill="#e6e9ef">client/presentation/login.dart</text>
+
+        <path d="M 320 60 L 380 60" stroke="#9aa3b2" stroke-width="2" marker-end="url(#sa)"/>
+
+        <!-- Matcher -->
+        <rect x="380" y="20" width="240" height="80" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="500" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">SKILL-INJECTOR.SH</text>
+        <text x="500" y="64" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">정규식 매칭</text>
+        <text x="500" y="82" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">"client/presentation/" → 4개 hit</text>
+
+        <path d="M 620 60 L 680 60" stroke="#9aa3b2" stroke-width="2" marker-end="url(#sa)"/>
+
+        <!-- Output -->
+        <rect x="680" y="0" width="280" height="120" rx="6" fill="#161b24" stroke="#4ade80"/>
+        <text x="820" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#4ade80">STDOUT (컨텍스트로 주입)</text>
+        <text x="700" y="48" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">⚠️ MANDATORY SKILL</text>
+        <text x="700" y="68" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">- skills/riverpod-patterns/SKILL.md</text>
+        <text x="700" y="82" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">- skills/go-router/SKILL.md</text>
+        <text x="700" y="96" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">- skills/mobile-design/SKILL.md</text>
+        <text x="700" y="110" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">- skills/mobile-touch/SKILL.md</text>
+
+        <!-- claude reads -->
+        <path d="M 820 130 L 820 180" stroke="#ff6b35" stroke-width="2" marker-end="url(#so)"/>
+
+        <rect x="40" y="190" width="920" height="100" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="60" y="215" font-family="JetBrains Mono" font-size="11" fill="#6b7280">CLAUDE 자동 동작</text>
+        <text x="60" y="240" font-family="Geist" font-size="13" fill="#e6e9ef">1. Read 도구로 4개 SKILL.md 모두 읽음</text>
+        <text x="60" y="258" font-family="Geist" font-size="13" fill="#e6e9ef">2. riverpod 패턴 + go_router 라우팅 + MFRI 평가 + Disney 12 원칙 모두 적용해서 코드 작성</text>
+        <text x="60" y="276" font-family="Geist" font-size="13" fill="#e6e9ef">3. 룰 위반 시 편집 중단 → 사용자 보고</text>
+
+        <defs>
+          <marker id="sa" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/>
+          </marker>
+          <marker id="so" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <h3>매칭 패턴 전체 (skill-injector.sh)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>파일 패턴</th><th>주입되는 SKILL</th></tr></thead>
+        <tbody>
+          <tr><td><code>client/domain/entity/</code> · <code>client/data/**/dto/</code></td><td><span class="pill">freezed-models</span></td></tr>
+          <tr><td><code>client/presentation/</code></td><td><span class="pill">riverpod-patterns</span> <span class="pill">go-router</span> <span class="pill">mobile-design</span> <span class="pill">mobile-touch</span></td></tr>
+          <tr><td><code>client/data/remote/</code> · <code>client/core/network/</code></td><td><span class="pill">dio-retrofit</span></td></tr>
+          <tr><td><code>client/core/utils/result.dart</code></td><td><span class="pill">error-handling</span></td></tr>
+          <tr><td><code>client/core/logger/</code></td><td><span class="pill">logging</span></td></tr>
+          <tr><td><code>server/src/**/*.module.ts</code></td><td><span class="pill">nestjs-module</span></td></tr>
+          <tr><td><code>server/src/auth/</code></td><td><span class="pill">nestjs-auth</span></td></tr>
+          <tr><td><code>server/src/**/dto/</code></td><td><span class="pill">api-contract</span></td></tr>
+          <tr><td><code>prisma/schema.prisma</code></td><td><span class="pill">prisma-patterns</span> <span class="pill">postgres-patterns</span></td></tr>
+          <tr><td><code>cms/app/</code></td><td><span class="pill">nextjs-patterns</span></td></tr>
+          <tr><td><code>test/</code> · <code>**_test.dart</code> · <code>**.spec.ts</code></td><td><span class="pill">tdd-workflow</span></td></tr>
+          <tr><td><code>integration_test/</code> · <code>**_e2e_test.dart</code></td><td><span class="pill">flutter-driver-e2e</span></td></tr>
+          <tr><td><code>Dockerfile</code> · <code>docker-compose.*</code></td><td><span class="pill">deployment-patterns</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top: 14px; font-size: 13px;">여러 패턴이 동시에 매칭되면 모두 누적. 예: <code>client/presentation/auth/dto/login_dto.dart</code> → <span class="pill">freezed-models</span> + <span class="pill">riverpod-patterns</span> + <span class="pill">go-router</span> + <span class="pill">mobile-design</span> + <span class="pill">mobile-touch</span> 다섯 개 동시 주입.</p>
+  </section>
+
+  <!-- 5. PIPELINE -->
+  <section id="pipeline">
+    <h2>5. 자동 오케스트레이션 파이프라인</h2>
+    <p class="lead">사용자 \"~~ 만들어줘\" 한 줄 → CLAUDE.md 매니저 모드가 분석/위임/검증/리뷰/문서/체크포인트까지 자동으로 진행. 사용자에게 묻는 건 마지막 \"커밋할까요?\" 뿐.</p>
+
+    <div class="diagram">
+      <div class="caption">10-step Auto Pipeline (예: \"회원가입 만들어줘\")</div>
+      <div class="timeline" style="margin-top: 8px;">
+        <div class="step">
+          <span class="num">01</span> <h6>분석</h6>
+          <p>영향 스택 (Prisma+NestJS+Flutter) + 필요 에이전트 + 의존성 + 적용 스킬 자동 결정.</p>
+        </div>
+        <div class="step">
+          <span class="num">02</span> <h6>TDD 테스트 먼저</h6>
+          <p>test-writer 자동 파견 → 실패하는 테스트 작성 (Red).</p>
+        </div>
+        <div class="step">
+          <span class="num">03</span> <h6>구현 (병렬/순차)</h6>
+          <p>의존성 순서: prisma-data → nestjs-backend → flutter-* (병렬, worktree 격리). 테스트 통과 (Green).</p>
+        </div>
+        <div class="step">
+          <span class="num">04</span> <h6>리팩토링</h6>
+          <p>refactor-cleaner 자동 — 중복/데드코드 정리, 테스트 유지.</p>
+        </div>
+        <div class="step">
+          <span class="num">05</span> <h6>검증 (/verify)</h6>
+          <p>flutter analyze + test + npm test + lint + DTO 동기화 + 품질 평가.</p>
+        </div>
+        <div class="step">
+          <span class="num">06</span> <h6>실패 시 자동 수정</h6>
+          <p>loop-operator 자동 — 빌드/테스트 실패 → 수정 → 재검증 (최대 5회).</p>
+        </div>
+        <div class="step">
+          <span class="num">07</span> <h6>리뷰 3종 동시</h6>
+          <p>code-reviewer + security-auditor + spec-verifier 병렬 파견.</p>
+        </div>
+        <div class="step">
+          <span class="num">08</span> <h6>문서 동기화 (/update-docs)</h6>
+          <p>API 문서 / dartdoc / CHANGELOG 자동 갱신.</p>
+        </div>
+        <div class="step">
+          <span class="num">09</span> <h6>체크포인트 (/checkpoint)</h6>
+          <p>피처 완료 시점 자동 백업.</p>
+        </div>
+        <div class="step">
+          <span class="num">10</span> <h6>"커밋할까요?" 묻기</h6>
+          <p>이것만 사용자에게 묻는다. 답하면 한국어 메시지 + Conventional Commits + Co-Author 차단 검증 통과 후 커밋.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. TEAMS -->
+  <section id="teams">
+    <h2>6. 팀 시스템 — Run vs Composition</h2>
+    <p class="lead">v0.4.0 의 가장 큰 구조 변화. 기존 단일 \"Team\" 개념을 두 정체성으로 분리. <strong>Run</strong> = 워크스페이스 안에서 진행 중인 인스턴스, <strong>Composition</strong> = 글로벌 재사용 템플릿.</p>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="ico" style="color: var(--info);"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M2 12h20"/></svg></div>
+        <h5>Run <span class="pill info">워크스페이스 스코프</span></h5>
+        <p class="desc">이 워크스페이스에서 실제로 돌아가는 N명 agent + worktree + 진행도. <code>&lt;wsPath&gt;/.claude/teams/&lt;id&gt;/config.json</code> 에 저장.</p>
+        <h4>필드</h4>
+        <p class="desc"><code>id</code> · <code>name</code> · <code>goal</code> · <code>members[]</code> · <code>worktreeStrategy</code> · <code>mergeStrategy</code> · <code>workspaceId</code> · <code>createdAt</code> · <code>status</code> · <code>progress</code></p>
+        <h4>UI 위치</h4>
+        <p class="desc">Workspace 패널 좌측 \"Teams\" 섹션 → 카드 클릭 → 풀스크린 RunLiveView</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="color: var(--violet);"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="M3 13 12 18l9-5"/></svg></div>
+        <h5>Composition <span class="pill" style="color: var(--violet); border-color: rgba(167,139,250,0.32); background: rgba(167,139,250,0.12);">글로벌 템플릿</span></h5>
+        <p class="desc">\"이런 멤버 조합으로 일하는 패턴\" 재사용 단위. <code>~/.claude/team-compositions/&lt;name&gt;.json</code> 에 저장.</p>
+        <h4>필드</h4>
+        <p class="desc"><code>name</code> · <code>members[]</code> · <code>defaultWorktree</code> · <code>defaultMerge</code> · <code>usedCount</code></p>
+        <h4>UI 위치</h4>
+        <p class="desc">Library 사이드바 → Compositions 탭 카드 그리드 → \"Apply to workspace\" 클릭 → Wizard 가 멤버 prefilled 상태로 열림</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>왜 분리했나?</strong> Run 은 git worktree 에 묶여 한 워크스페이스 안에서만 의미 있고, Composition 은 \"다음 프로젝트에서 또 쓰고 싶은 멤버 조합\" 이라 글로벌이어야 한다. 이전엔 둘이 한 개념이라 \"이 팀이 어느 프로젝트?\" 매번 헷갈림.
+    </div>
+
+    <h3>워크스페이스 격리 효과</h3>
+    <div class="diagram">
+      <div class="caption">workspace switch → AgentTeamWatcher.setWorkspace 자동 트리거</div>
+      <svg viewBox="0 0 1000 280" xmlns="http://www.w3.org/2000/svg">
+        <!-- Workspace A -->
+        <rect x="40" y="20" width="280" height="240" rx="8" fill="#161b24" stroke="#60a5fa40"/>
+        <text x="180" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#60a5fa">WORKSPACE ws-A</text>
+        <text x="180" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">~/projects/ws-A/.claude/teams/</text>
+        <rect x="60" y="80" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="75" y="98" font-family="Geist" font-size="12" fill="#e6e9ef">team-1 (회원가입 팀)</text>
+        <text x="75" y="115" font-family="JetBrains Mono" font-size="10" fill="#6b7280">5 members · feature/auth-signup</text>
+        <rect x="60" y="134" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="75" y="152" font-family="Geist" font-size="12" fill="#e6e9ef">team-2 (리팩토링 팀)</text>
+        <text x="75" y="169" font-family="JetBrains Mono" font-size="10" fill="#6b7280">4 members · refactor/payment</text>
+        <text x="180" y="220" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">Teams 섹션: 2개 표시</text>
+
+        <!-- Switcher -->
+        <text x="500" y="135" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">Workspace 전환</text>
+        <path d="M 320 140 L 680 140" stroke="#ff6b35" stroke-width="2" marker-end="url(#wa)"/>
+        <text x="500" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">setWorkspace(\"ws-B\")</text>
+        <text x="500" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">chokidar → 새 디렉터리로 재포인트</text>
+
+        <!-- Workspace B -->
+        <rect x="680" y="20" width="280" height="240" rx="8" fill="#161b24" stroke="#a78bfa40"/>
+        <text x="820" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#a78bfa">WORKSPACE ws-B</text>
+        <text x="820" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">~/projects/ws-B/.claude/teams/</text>
+        <rect x="700" y="80" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="715" y="98" font-family="Geist" font-size="12" fill="#e6e9ef">team-3 (디자인 팀)</text>
+        <text x="715" y="115" font-family="JetBrains Mono" font-size="10" fill="#6b7280">3 members · design/onboarding</text>
+        <text x="820" y="220" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">Teams 섹션: 1개 표시</text>
+        <text x="820" y="240" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">team-1, team-2 는 안 보이지만 디스크에 그대로</text>
+
+        <defs>
+          <marker id="wa" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 7. RUN LIFECYCLE -->
+  <section id="run-lifecycle">
+    <h2>7. Run 라이프사이클</h2>
+    <p class="lead">사용자가 Wizard 4-step 으로 입력 → AgentTeamWatcher 가 config.json 작성 → chokidar 가 변경 감지 → store 갱신 → UI 즉시 반영. 풀 라운드트립.</p>
+
+    <div class="diagram">
+      <div class="caption">Wizard → Real Team Creation Flow</div>
+      <svg viewBox="0 0 1000 360" xmlns="http://www.w3.org/2000/svg">
+        <!-- Step boxes -->
+        <rect x="20" y="30" width="180" height="60" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="110" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">USER ACTION</text>
+        <text x="110" y="76" text-anchor="middle" font-family="Geist" font-size="13" fill="#e6e9ef">⌘N or +</text>
+
+        <path d="M 200 60 L 230 60" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ra)"/>
+
+        <rect x="230" y="30" width="180" height="60" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="320" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">UI</text>
+        <text x="320" y="68" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">Wizard 4-step</text>
+        <text x="320" y="83" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">name → members → worktree → confirm</text>
+
+        <path d="M 410 60 L 440 60" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ra)"/>
+
+        <rect x="440" y="30" width="180" height="60" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="530" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">REACT STORE</text>
+        <text x="530" y="68" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">useAgentTeamStore.create()</text>
+
+        <path d="M 620 60 L 650 60" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ra)"/>
+
+        <rect x="650" y="30" width="180" height="60" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="740" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">IPC</text>
+        <text x="740" y="68" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">teams:create</text>
+
+        <!-- Down arrow -->
+        <path d="M 740 90 L 740 130" stroke="#ff6b35" stroke-width="2" marker-end="url(#ra-o)"/>
+
+        <rect x="650" y="130" width="180" height="60" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="740" y="150" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">ELECTRON MAIN</text>
+        <text x="740" y="168" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">AgentTeamWatcher.create</text>
+        <text x="740" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">teamId 생성 + config.json 작성</text>
+
+        <!-- Down to disk -->
+        <path d="M 740 190 L 740 220" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ra)"/>
+
+        <rect x="650" y="220" width="180" height="50" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="740" y="240" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">DISK</text>
+        <text x="740" y="256" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#e6e9ef">&lt;ws&gt;/.claude/teams/team-xxx/config.json</text>
+
+        <!-- chokidar feedback -->
+        <path d="M 650 245 Q 350 245 320 90" stroke="#4ade80" stroke-width="2" fill="none" marker-end="url(#ra-g)"/>
+        <text x="450" y="270" font-family="JetBrains Mono" font-size="11" fill="#4ade80">chokidar 변경 감지 → emit 'change'</text>
+
+        <!-- store update -->
+        <rect x="20" y="220" width="280" height="50" rx="6" fill="#161b24" stroke="#4ade80"/>
+        <text x="160" y="240" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4ade80">UI UPDATE</text>
+        <text x="160" y="256" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">TeamsRunSection 새 카드 표시</text>
+
+        <path d="M 320 245 L 300 245" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ra-g)"/>
+
+        <!-- Toast -->
+        <rect x="20" y="290" width="280" height="50" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="160" y="310" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">TOAST</text>
+        <text x="160" y="326" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">"회원가입 피처 팀 (5 members)"</text>
+
+        <defs>
+          <marker id="ra" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/>
+          </marker>
+          <marker id="ra-o" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/>
+          </marker>
+          <marker id="ra-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#4ade80"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <h3>Wizard 4 Step</h3>
+    <div class="grid cols-4">
+      <div class="card">
+        <h5>Step 1 · 이름</h5>
+        <p class="desc">팀 이름 + 자연어 한 줄 목표.</p>
+        <span class="key">예: "회원가입 피처 팀"</span>
+      </div>
+      <div class="card">
+        <h5>Step 2 · 멤버</h5>
+        <p class="desc">18개 agent 풀에서 chip multi-select.</p>
+        <span class="key">예: 5명 선택</span>
+      </div>
+      <div class="card">
+        <h5>Step 3 · 전략</h5>
+        <p class="desc">worktree (isolated/shared) + merge (squash/sequential).</p>
+        <span class="key">기본: isolated + squash</span>
+      </div>
+      <div class="card">
+        <h5>Step 4 · 확인</h5>
+        <p class="desc">요약 표시 → Start.</p>
+        <span class="key">→ Run 즉시 등장</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. RUN LIVE VIEW -->
+  <section id="run-liveview">
+    <h2>8. Run 라이브뷰 — 풀스크린 작업 모니터</h2>
+    <p class="lead">Workspace 패널의 Run 카드 클릭 시 메인 영역 전체가 풀스크린으로 전환. 4영역 레이아웃 — 멤버 사이드바, tmux split grid, Activity feed, 컨트롤 바. ESC 로 복귀.</p>
+
+    <div class="diagram">
+      <div class="caption">RunLiveView Layout</div>
+      <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+        <!-- back bar -->
+        <rect x="20" y="20" width="960" height="36" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <rect x="30" y="28" width="80" height="20" rx="3" fill="#1d242f" stroke="#313a48"/>
+        <text x="70" y="42" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">← Back</text>
+        <text x="42" y="50" font-family="JetBrains Mono" font-size="9" fill="#6b7280">esc</text>
+        <text x="140" y="42" font-family="Geist" font-size="13" font-weight="600" fill="#e6e9ef">회원가입 피처 팀</text>
+        <circle cx="252" cy="38" r="4" fill="#4ade80"/>
+        <text x="900" y="42" font-family="Geist" font-size="11" fill="#9aa3b2">Pause All  ·  Diff  ·  Merge  ·  ✕</text>
+
+        <!-- Members sidebar -->
+        <rect x="20" y="66" width="180" height="350" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="36" y="86" font-family="JetBrains Mono" font-size="10" fill="#6b7280">MEMBERS</text>
+
+        <!-- members 5 cards -->
+        <g transform="translate(30, 96)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#262e3a"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#22d3ee20" stroke="#22d3ee60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#22d3ee" font-weight="700">A</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">architect</text>
+          <circle cx="148" cy="14" r="3" fill="#9aa3b2"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">ADR 작성</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">22.4k tk · 3 files</text>
+        </g>
+        <g transform="translate(30, 156)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#60a5fa40"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#60a5fa20" stroke="#60a5fa60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#60a5fa" font-weight="700">F</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">flutter-ui</text>
+          <circle cx="148" cy="14" r="3" fill="#4ade80" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">SignupForm UI</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">41.9k tk · 6 files</text>
+        </g>
+        <g transform="translate(30, 216)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#a78bfa40"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#a78bfa20" stroke="#a78bfa60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#a78bfa" font-weight="700">N</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">nestjs-auth</text>
+          <circle cx="148" cy="14" r="3" fill="#4ade80" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">JWT issue</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">38.1k tk · 4 files</text>
+        </g>
+        <g transform="translate(30, 276)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#f8717140"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#f5a52420" stroke="#f5a52460"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#f5a524" font-weight="700">P</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">prisma-schema</text>
+          <circle cx="148" cy="14" r="3" fill="#f87171" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#f87171">⚠ blocked</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">12.8k tk · 2 files</text>
+        </g>
+        <g transform="translate(30, 336)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#262e3a"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#34d39920" stroke="#34d39960"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#34d399" font-weight="700">E</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">test-e2e</text>
+          <circle cx="148" cy="14" r="3" fill="#6b7280"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#6b7280">queued</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">0 tk · 0 files</text>
+        </g>
+
+        <!-- tmux split grid 2x2 -->
+        <g transform="translate(210, 66)">
+          <text x="0" y="20" font-family="JetBrains Mono" font-size="10" fill="#6b7280">TMUX SPLIT GRID</text>
+          <rect x="0" y="30" width="280" height="170" rx="4" fill="#0b0e13" stroke="#262e3a"/>
+          <text x="10" y="46" font-family="JetBrains Mono" font-size="10" fill="#22d3ee">[ARCH] done</text>
+          <text x="10" y="62" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ # ADR-0007 written</text>
+          <text x="10" y="78" font-family="JetBrains Mono" font-size="10" fill="#4ade80">✓ 3 files</text>
+          <text x="10" y="94" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ _</text>
+
+          <rect x="290" y="30" width="280" height="170" rx="4" fill="#0b0e13" stroke="#60a5fa60"/>
+          <text x="300" y="46" font-family="JetBrains Mono" font-size="10" fill="#60a5fa">[UI] active</text>
+          <text x="300" y="62" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ flutter analyze lib/auth</text>
+          <text x="300" y="78" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">Analyzing auth...</text>
+          <text x="300" y="94" font-family="JetBrains Mono" font-size="10" fill="#4ade80">No issues found</text>
+          <text x="300" y="110" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">$ flutter test</text>
+          <text x="300" y="126" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ ✓ ✓</text>
+          <text x="300" y="142" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">› hot reload (124ms)_</text>
+
+          <rect x="0" y="210" width="280" height="170" rx="4" fill="#0b0e13" stroke="#a78bfa60"/>
+          <text x="10" y="226" font-family="JetBrains Mono" font-size="10" fill="#a78bfa">[API] active</text>
+          <text x="10" y="242" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ pnpm test:watch auth</text>
+          <text x="10" y="258" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">PASS auth.service.spec.ts</text>
+          <text x="10" y="274" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ hashes password</text>
+          <text x="10" y="290" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ issues JWT</text>
+
+          <rect x="290" y="210" width="280" height="170" rx="4" fill="#0b0e13" stroke="#f8717160"/>
+          <text x="300" y="226" font-family="JetBrains Mono" font-size="10" fill="#f87171">[DB] blocked</text>
+          <text x="300" y="242" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ prisma migrate dev</text>
+          <text x="300" y="258" font-family="JetBrains Mono" font-size="10" fill="#f5a524">⚠ Drift detected</text>
+          <text x="300" y="274" font-family="JetBrains Mono" font-size="10" fill="#f87171">Error: Unique constraint</text>
+          <text x="300" y="290" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">     conflict on email</text>
+          <text x="300" y="320" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ # waiting on architect</text>
+        </g>
+
+        <!-- Activity feed -->
+        <rect x="800" y="66" width="180" height="350" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="816" y="86" font-family="JetBrains Mono" font-size="10" fill="#6b7280">ACTIVITY FEED</text>
+
+        <g transform="translate(810, 96)">
+          <text x="0" y="14" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:38:21</text>
+          <text x="0" y="28" font-family="Geist" font-size="11" fill="#60a5fa">flutter-ui edit</text>
+          <text x="0" y="42" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">signup_form.dart</text>
+          <text x="0" y="55" font-family="JetBrains Mono" font-size="9" fill="#4ade80">+124 -8</text>
+
+          <line x1="0" y1="65" x2="160" y2="65" stroke="#262e3a"/>
+
+          <text x="0" y="80" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:38:04</text>
+          <text x="0" y="94" font-family="Geist" font-size="11" fill="#a78bfa">nestjs-auth commit</text>
+          <text x="0" y="108" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">feat(auth): bcrypt + jwt</text>
+          <text x="0" y="121" font-family="JetBrains Mono" font-size="9" fill="#4ade80">4 files</text>
+
+          <line x1="0" y1="131" x2="160" y2="131" stroke="#262e3a"/>
+
+          <text x="0" y="146" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:37:51</text>
+          <text x="0" y="160" font-family="Geist" font-size="11" fill="#f87171">prisma-schema blocked</text>
+          <text x="0" y="174" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">User.email unique</text>
+          <text x="0" y="187" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">충돌</text>
+
+          <line x1="0" y1="197" x2="160" y2="197" stroke="#262e3a"/>
+
+          <text x="0" y="212" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:37:29</text>
+          <text x="0" y="226" font-family="Geist" font-size="11" fill="#ff6b35">architect decision</text>
+          <text x="0" y="240" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">refresh = httpOnly</text>
+          <text x="0" y="253" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">cookie, 14d</text>
+
+          <line x1="0" y1="263" x2="160" y2="263" stroke="#262e3a"/>
+
+          <text x="0" y="278" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:37:10</text>
+          <text x="0" y="292" font-family="Geist" font-size="11" fill="#60a5fa">flutter-ui edit</text>
+          <text x="0" y="306" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">spacing.dart</text>
+          <text x="0" y="319" font-family="JetBrains Mono" font-size="9" fill="#4ade80">+12 -2</text>
+        </g>
+
+        <!-- Resource bar -->
+        <rect x="20" y="426" width="960" height="40" rx="6" fill="#0b0e13" stroke="#262e3a"/>
+        <text x="40" y="450" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">🔋  CPU 47%   ·   MEM 6.2 / 16 GB   ·   DISK +2.1 GB   ·   4 PTYs   ·   184.3k tokens   ·   38min</text>
+      </svg>
+    </div>
+
+    <p style="margin-top: 16px; font-size: 13.5px;">멤버 카드 클릭 → 그 agent 의 pane 이 grid 에서 강조/확대. 더블클릭 → 풀스크린, ESC 로 그리드 복귀. Activity feed 항목 클릭 → 해당 파일 diff 인라인 표시. 컨트롤 바: Pause All / Resume / Merge (충돌 시 충돌 해결 뷰) / Close.</p>
+  </section>
+
+  <!-- 9. ENFORCEMENT -->
+  <section id="enforcement">
+    <h2>9. 강제 메커니즘 — 4계층</h2>
+    <p class="lead">CLAUDE.md 의 매니저 모드 + 자동 라우팅 표 + Hook 의 stdout 주입 + Bash hook 의 차단/검증. 4개가 합쳐져서 사용자가 한 줄 입력 → 적절한 에이전트가 적절한 스킬로 적절한 코드를 적절한 형식으로 커밋하게 만든다.</p>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <span class="pill accent">Layer 1</span>
+        <h5 style="margin-top: 8px;">매니저 모드</h5>
+        <p class="desc">CLAUDE.md ROLE 블록이 메인 세션을 강제. \"5줄 이상 코드 → 위임\", \"방법 설명 전 라우팅\" 등 stop-the-line 4종.</p>
+        <h4>적용 시점</h4>
+        <p class="desc">매 응답 시작 시 자가점검 (internal, 출력 X)</p>
+      </div>
+      <div class="card">
+        <span class="pill accent">Layer 2</span>
+        <h5 style="margin-top: 8px;">자동 라우팅</h5>
+        <p class="desc">CLAUDE.md 의 Agent Routing 표 + Skill Routing 표 + Hook Routing 표. 사용자 요청 패턴 → 자동 액션 매핑.</p>
+        <h4>적용 시점</h4>
+        <p class="desc">매 사용자 입력 분석 시</p>
+      </div>
+      <div class="card">
+        <span class="pill accent">Layer 3</span>
+        <h5 style="margin-top: 8px;">강제 주입 (stdout)</h5>
+        <p class="desc"><code>skill-injector.sh</code> + <code>gateguard.sh</code> 가 매칭된 SKILL.md / 조사 체크리스트를 컨텍스트에 직접 삽입. 무시 불가.</p>
+        <h4>적용 시점</h4>
+        <p class="desc">매 Write/Edit 도구 호출 직전</p>
+      </div>
+      <div class="card">
+        <span class="pill accent">Layer 4</span>
+        <h5 style="margin-top: 8px;">차단 / 검증</h5>
+        <p class="desc">PreToolUse Bash 인라인 — 위험 명령/시크릿/-A·-am/Conventional/한국어/Co-Author 검증. exit 1 (즉시) 또는 exit 2 (재시도 유도).</p>
+        <h4>적용 시점</h4>
+        <p class="desc">매 Bash 도구 호출 직전</p>
+      </div>
+    </div>
+
+    <h3>Bash hook 7단계 검증 (예: <code>git commit</code>)</h3>
+    <div class="diagram">
+      <div class="actrow">
+        <span class="src">위험 명령</span>
+        <span class="desc"><code>rm -rf</code>, <code>reset --hard</code>, <code>push --force</code>, <code>--no-verify</code>, <code>prisma db push</code></span>
+        <span><span class="pill danger">exit 1</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">시크릿 패턴</span>
+        <span class="desc">staged 파일에 <code>AKIA...</code>, <code>ghp_...</code>, <code>sk-...</code>, <code>api_key=</code> 등</span>
+        <span><span class="pill danger">exit 1</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">-A / -am 한 방</span>
+        <span class="desc"><code>git add -A && git commit</code> 또는 <code>git commit -am</code> 차단</span>
+        <span><span class="pill warning">exit 2</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">Conventional Commits</span>
+        <span class="desc"><code>type(scope): subject</code> 형식 미준수</span>
+        <span><span class="pill warning">exit 2</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">한국어 subject</span>
+        <span class="desc">subject 에 한글 1자 이상 없으면 차단</span>
+        <span><span class="pill warning">exit 2</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">Co-Author trailer</span>
+        <span class="desc"><code>Co-Authored-By: Claude</code>, <code>🤖 Generated with Claude</code> 등</span>
+        <span><span class="pill warning">exit 2</span></span>
+      </div>
+      <div class="actrow">
+        <span class="src">통과</span>
+        <span class="desc">위 6개 모두 통과</span>
+        <span><span class="pill success">exit 0</span></span>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>exit 1 vs exit 2:</strong> exit 1 = 즉시 실패 (Claude 가 완전히 멈춤). exit 2 = 도구 차단 + stderr 를 Claude 컨텍스트로 피드백 → Claude 가 사유 보고 자동 재시도. 사용자 개입 없이 \"한국어 메시지로 다시\" 같은 자동 정정이 가능한 이유.
+    </div>
+  </section>
+
+  <!-- 10. CR GRAPH -->
+  <section id="crgraph">
+    <h2>10. Code Review Graph 통합 (v0.4.0)</h2>
+    <p class="lead">Tree-sitter 기반 코드 지식 그래프 MCP 를 하네스에 풀 통합. <code>code-reviewer</code> agent 가 리뷰 시작 전 자동으로 \"blast radius\" (영향 받는 caller/dependent/test) 쿼리 → 그 파일들만 Read → 평균 6.8× 토큰 절약.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="v">6.8×</div><div class="l">평균 토큰 절약</div></div>
+      <div class="stat"><div class="v">~10s</div><div class="l">500-file 초기 빌드</div></div>
+      <div class="stat"><div class="v">&lt;2s</div><div class="l">2,900-file 증분</div></div>
+      <div class="stat"><div class="v">23+</div><div class="l">언어 지원</div></div>
+    </div>
+
+    <h3>통합 지점 4곳</h3>
+    <div class="grid cols-2">
+      <div class="card">
+        <h5>① <code>.claude/mcp.json</code></h5>
+        <p class="desc"><code>code-review-graph</code> server 등록 (uvx). 세션 시작 시 자동 spawn.</p>
+      </div>
+      <div class="card">
+        <h5>② <code>code-reviewer</code> agent 룰</h5>
+        <p class="desc">Tools 활용 섹션 — 리뷰 전 그래프 쿼리 강제 → 영향 범위 안만 Read.</p>
+      </div>
+      <div class="card">
+        <h5>③ Settings UI 카드</h5>
+        <p class="desc">Install (pipx/uv/pip) · Rebuild · Open Visualization 버튼 + 4-cell 통계.</p>
+      </div>
+      <div class="card">
+        <h5>④ 워크스페이스 자동 빌드</h5>
+        <p class="desc">NewWorkspaceDialog Advanced 토글 → 워크스페이스 생성 후 best-effort <code>code-review-graph build</code>.</p>
+      </div>
+    </div>
+
+    <h3>풀스크린 D3 시각화</h3>
+    <p style="font-size: 13.5px;"><code>code-review-graph viz</code> 백그라운드 spawn → localhost URL 을 sandbox iframe 으로 임베드. 모달 닫으면 process kill. force-directed graph + 검색 + community legend toggles + degree-scaled nodes.</p>
+  </section>
+
+  <!-- 11. LEARNING -->
+  <section id="learning">
+    <h2>11. 자기 개선 루프 — Continuous Learning v2</h2>
+    <p class="lead">세션이 끝날 때마다 Stop hook 4종이 fire. 사용자 발언/Claude 행동에서 패턴을 추출 → 신뢰도 평가 → 3회+ 확인되면 instinct → SKILL 로 자동 승격. 만료된 instinct 는 prune.</p>
+
+    <div class="diagram">
+      <div class="caption">Stop Hook Chain</div>
+      <svg viewBox="0 0 1000 220" xmlns="http://www.w3.org/2000/svg">
+        <rect x="20" y="40" width="160" height="60" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="100" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">Stop hook 발화</text>
+        <text x="100" y="80" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">세션 종료</text>
+
+        <path d="M 180 70 L 220 70" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#la)"/>
+
+        <rect x="220" y="20" width="160" height="50" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="300" y="40" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">learn.sh</text>
+        <text x="300" y="56" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">교훈 추출</text>
+
+        <rect x="220" y="80" width="160" height="50" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="300" y="100" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">evaluate-session.sh</text>
+        <text x="300" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">패턴 + 신뢰도</text>
+
+        <rect x="220" y="140" width="160" height="50" rx="5" fill="#161b24" stroke="#262e3a"/>
+        <text x="300" y="160" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">cost-tracker.sh</text>
+        <text x="300" y="176" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">JSONL 메트릭스</text>
+
+        <path d="M 380 105 L 440 105" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#la)"/>
+
+        <rect x="440" y="60" width="160" height="90" rx="6" fill="#11151c" stroke="#a78bfa40"/>
+        <text x="520" y="84" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#a78bfa">INSTINCT 생성</text>
+        <text x="520" y="106" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">신뢰도 점수</text>
+        <text x="520" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">(0.0 ~ 1.0)</text>
+        <text x="520" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">3회+ 누적 시 승격 후보</text>
+
+        <path d="M 600 105 L 640 105" stroke="#4ade80" stroke-width="1.5" marker-end="url(#la-g)"/>
+
+        <rect x="640" y="60" width="160" height="90" rx="6" fill="#11151c" stroke="#4ade8040"/>
+        <text x="720" y="84" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4ade80">EVOLVE</text>
+        <text x="720" y="106" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">SKILL 승격</text>
+        <text x="720" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">.claude/skills/&lt;name&gt;/SKILL.md</text>
+
+        <path d="M 800 105 L 840 105" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#la)"/>
+
+        <rect x="840" y="60" width="140" height="90" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="910" y="84" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">PRUNE</text>
+        <text x="910" y="106" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">만료/저신뢰</text>
+        <text x="910" y="124" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">자동 정리</text>
+
+        <defs>
+          <marker id="la" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/>
+          </marker>
+          <marker id="la-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#4ade80"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 12. SUMMARY -->
+  <section id="summary">
+    <h2>12. 사용자가 묻는 6가지 (그 외엔 안 묻는다)</h2>
+    <p class="lead">매니저 모드의 핵심 약속 — 다음 6가지만 사용자에게 묻고, 그 외 모든 것 (리뷰/테스트/리팩토링/문서/체크포인트/학습) 은 자동.</p>
+
+    <div class="grid cols-3">
+      <div class="card"><h5>🚦 설계 GATE</h5><p class="desc">큰 피처의 아키텍처 리뷰</p></div>
+      <div class="card"><h5>🔀 머지 충돌</h5><p class="desc">worktree 병렬 실행 후 충돌 발생 시</p></div>
+      <div class="card"><h5>❓ 모호한 요청</h5><p class="desc">여러 해석이 가능할 때</p></div>
+      <div class="card"><h5>🔄 5회 실패</h5><p class="desc">자동 수정 루프 소진</p></div>
+      <div class="card"><h5>💀 위험 작업</h5><p class="desc">reset, force push, 대량 삭제</p></div>
+      <div class="card"><h5>📦 커밋 / 배포</h5><p class="desc">커밋 여부, subtree-push 여부</p></div>
+    </div>
+
+    <h3 style="margin-top: 40px;">한 줄 정리</h3>
+    <div class="callout">
+      <strong>Forge Studio 가 워크스페이스를 만들고 하네스를 깔아주면, <span style="color: var(--accent);">CLAUDE.md 매니저 모드 + Hook 강제 주입 + 자동 라우팅 + Bash 검증</span> 4계층이 협업해서 사용자의 한 줄 요청 → 적절한 에이전트가 적절한 스킬로 적절한 코드를 적절한 형식으로 커밋하기까지를 묻지 않고 자동 진행한다.</strong>
+    </div>
+  </section>
+
+  <footer>
+    Forge Studio v0.4.1 · 하네스 아키텍처 문서 · 2026-05-07
+    <br/>
+    <a href="https://github.com/mstagon/forge-studiov2" style="color: var(--text-3);">github.com/mstagon/forge-studiov2</a>
+  </footer>
+
+</div>
+</body>
+</html>
