@@ -552,6 +552,29 @@ ipcMain.handle('teams:remove', async (_event, teamId: string) => {
   await agentTeamWatcher.remove(teamId)
 })
 
+ipcMain.handle('teams:pause', async (_event, teamId: string) => {
+  return agentTeamWatcher.pause(teamId)
+})
+
+ipcMain.handle('teams:resume', async (_event, teamId: string) => {
+  return agentTeamWatcher.resume(teamId)
+})
+
+ipcMain.handle('teams:pauseMember', async (_event, teamId: string, agentId: string) => {
+  return agentTeamWatcher.pauseMember(teamId, agentId)
+})
+
+ipcMain.handle('teams:resumeMember', async (_event, teamId: string, agentId: string) => {
+  return agentTeamWatcher.resumeMember(teamId, agentId)
+})
+
+ipcMain.handle(
+  'teams:merge',
+  async (_event, teamId: string, opts?: { mergeStrategy?: 'squash' | 'sequential' }) => {
+    return agentTeamWatcher.merge(teamId, opts ?? {})
+  }
+)
+
 ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; agentName: string; cols: number; rows: number }) => {
   const teams = agentTeamWatcher.list()
   const team = teams.find((t) => t.id === options.teamId)

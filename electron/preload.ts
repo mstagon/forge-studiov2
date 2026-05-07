@@ -139,10 +139,33 @@ const api = {
       members: { agentId: string; task?: string }[]
       worktreeStrategy: 'isolated' | 'shared'
       mergeStrategy: 'squash' | 'sequential'
-    }): Promise<{ teamId: string; configPath: string }> =>
-      ipcRenderer.invoke('teams:create', opts),
+      autoStartClaude?: boolean
+    }): Promise<{
+      teamId: string
+      configPath: string
+      worktreesCreated: number
+      tmuxSessionsStarted: number
+    }> => ipcRenderer.invoke('teams:create', opts),
     remove: (teamId: string): Promise<void> =>
       ipcRenderer.invoke('teams:remove', teamId),
+    pause: (teamId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('teams:pause', teamId),
+    resume: (teamId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('teams:resume', teamId),
+    pauseMember: (teamId: string, agentId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('teams:pauseMember', teamId, agentId),
+    resumeMember: (teamId: string, agentId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('teams:resumeMember', teamId, agentId),
+    merge: (
+      teamId: string,
+      opts?: { mergeStrategy?: 'squash' | 'sequential' }
+    ): Promise<{
+      ok: boolean
+      mergedBranch?: string
+      commitSha?: string
+      conflicts?: { file: string; theirsBranch: string; oursBranch: string; conflictMarkers: string }[]
+      error?: string
+    }> => ipcRenderer.invoke('teams:merge', teamId, opts),
   },
 
   // ─── code-review-graph ───────────────────────────────────────────
