@@ -25,6 +25,11 @@ export interface TeamMember {
   files: number
   pane: string
   blockedReason?: string
+  /** Optional human-readable member name (used as agent identifier for tmux). */
+  name?: string
+  /** Optional tmux pane id — when present, the member can attach to a real
+   *  terminal session via `window.api.teams.openAgentTerminal`. */
+  tmuxPaneId?: string
 }
 
 export interface Team {

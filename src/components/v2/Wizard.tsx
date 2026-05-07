@@ -510,24 +510,42 @@ function Step3({ worktree, setWorktree, merge, setMerge }: Step3Props) {
     id: WorktreeStrategy
     title: string
     desc: string
+    detail: string
     icon: React.ReactNode
   }[] = [
     {
       id: 'isolated',
       title: '격리 (권장)',
       desc: 'agent마다 별도 worktree, 충돌 위험 ↓',
+      detail: '멤버별 격리 git worktree + tmux 세션 자동 spawn (멤버 ≥ 2명일 때 권장)',
       icon: <Icon.Cube size={16} />,
     },
     {
       id: 'shared',
       title: '공유',
       desc: '같은 디렉터리, 빠르지만 충돌 가능',
+      detail: '같은 worktree 공유 (소규모 팀)',
       icon: <Icon.Layers size={16} />,
     },
   ]
-  const mergeOptions: { id: MergeStrategy; title: string; desc: string }[] = [
-    { id: 'squash', title: 'Squash', desc: '각 agent의 작업을 하나의 커밋으로' },
-    { id: 'sequential', title: 'Sequential', desc: 'agent 순서대로 차례로 머지' },
+  const mergeOptions: {
+    id: MergeStrategy
+    title: string
+    desc: string
+    detail: string
+  }[] = [
+    {
+      id: 'squash',
+      title: 'Squash',
+      desc: '각 agent의 작업을 하나의 커밋으로',
+      detail: '한 커밋으로 합침',
+    },
+    {
+      id: 'sequential',
+      title: 'Sequential',
+      desc: 'agent 순서대로 차례로 머지',
+      detail: '멤버 순서대로 머지 (history 보존)',
+    },
   ]
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -567,6 +585,18 @@ function Step3({ worktree, setWorktree, merge, setMerge }: Step3Props) {
               <div style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.4 }}>
                 {o.desc}
               </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-2)',
+                  lineHeight: 1.4,
+                  marginTop: 2,
+                  paddingTop: 6,
+                  borderTop: '1px solid var(--line-1)',
+                }}
+              >
+                {o.detail}
+              </div>
             </button>
           ))}
         </div>
@@ -600,6 +630,18 @@ function Step3({ worktree, setWorktree, merge, setMerge }: Step3Props) {
               <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4 }}>
                 {o.desc}
               </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-2)',
+                  lineHeight: 1.4,
+                  marginTop: 6,
+                  paddingTop: 6,
+                  borderTop: '1px solid var(--line-1)',
+                }}
+              >
+                {o.detail}
+              </div>
             </button>
           ))}
         </div>
@@ -619,6 +661,20 @@ interface Step4Props {
 }
 
 function Step4({ name, goal, selected, worktree, merge }: Step4Props) {
+  // ── Expected-action one-liners (so the user can sanity-check before
+  //    Start). Mirrors the strategy details from Step3 but phrased in terms
+  //    of *this team's* concrete numbers — e.g. "5 worktrees" not "per-member
+  //    worktrees". Sequential / shared get the inverse phrasing.
+  const memberCount = selected.length
+  const worktreeAction =
+    worktree === 'isolated'
+      ? `${memberCount}명 분리 worktree + ${memberCount}개 tmux 세션 spawn`
+      : `${memberCount}명이 단일 worktree 공유`
+  const mergeAction =
+    merge === 'squash'
+      ? '머지 시 한 커밋으로 합쳐짐'
+      : '머지 시 멤버 순서대로 차례로 합쳐짐 (history 보존)'
+
   const rows: { k: string; v: React.ReactNode; extra?: React.ReactNode }[] = [
     { k: '이름', v: name || '(없음)' },
     { k: '목표', v: goal || '(없음)' },
@@ -627,8 +683,20 @@ function Step4({ name, goal, selected, worktree, merge }: Step4Props) {
       v: `${selected.length}명`,
       extra: <AvatarStack ids={selected} max={8} size={20} />,
     },
-    { k: '워크트리', v: worktree === 'isolated' ? '격리' : '공유' },
-    { k: '머지', v: merge === 'squash' ? 'Squash' : 'Sequential' },
+    {
+      k: '워크트리',
+      v: worktree === 'isolated' ? '격리' : '공유',
+      extra: (
+        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>· {worktreeAction}</span>
+      ),
+    },
+    {
+      k: '머지',
+      v: merge === 'squash' ? 'Squash' : 'Sequential',
+      extra: (
+        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>· {mergeAction}</span>
+      ),
+    },
     {
       k: '브랜치',
       v: (

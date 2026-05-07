@@ -109,9 +109,54 @@ export interface GitBranch {
   lastCommitMsg: string
 }
 
-export type AgentStatus = 'running' | 'idle' | 'shutdown'
+export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
+export type TeamStatus = 'active' | 'paused'
 export type WorktreeStrategy = 'isolated' | 'shared'
 export type MergeStrategy = 'squash' | 'sequential'
+
+export interface TeamCreateResult {
+  teamId: string
+  configPath: string
+  worktreesCreated: number
+  tmuxSessionsStarted: number
+}
+
+/**
+ * Single-file merge conflict surfaced by `teams:merge`. The renderer uses
+ * `conflictMarkers` to render an inline diff in `MergeConflictView` (W2).
+ */
+export interface MergeConflict {
+  file: string
+  theirsBranch: string
+  oursBranch: string
+  conflictMarkers: string
+}
+
+/**
+ * Result envelope for `teams:merge`. On success exposes the resulting branch
+ * + commit sha; on conflict surfaces a list of `MergeConflict` for the UI.
+ *
+ * Shape was deliberately chosen to be flat (one record, optional fields)
+ * instead of a discriminated union so renderer code can `result.ok &&
+ * result.commitSha` without narrowing acrobatics.
+ */
+export interface MergeResult {
+  ok: boolean
+  mergedBranch?: string
+  commitSha?: string
+  conflicts?: MergeConflict[]
+  error?: string
+}
+
+/** @deprecated alias for `MergeConflict` — kept for any in-flight callers. */
+export type TeamMergeConflict = MergeConflict
+
+/** @deprecated alias for `MergeResult` — kept for any in-flight callers. */
+export type TeamMergeResult = MergeResult
+
+export interface TeamMergeOptions {
+  mergeStrategy?: MergeStrategy
+}
 
 export interface TeamMember {
   agentId: string
@@ -149,6 +194,8 @@ export interface Team {
   leadAgentId: string
   leadSessionId?: string
   members: TeamMember[]
+  /** Lifecycle status — 'active' | 'paused'. Absent = active. */
+  status?: TeamStatus
 }
 
 export interface TeamCreateMember {
