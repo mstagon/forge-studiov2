@@ -13,6 +13,9 @@ export function NewWorkspaceDialog() {
   const [owner, setOwner] = useState('')
   const [baseName, setBaseName] = useState('')
   const [autoCreateRepos, setAutoCreateRepos] = useState(false)
+  // code-review-graph: opt-in auto build right after scaffolding. Requires the
+  // CLI to be installed (Settings → MCP / Tools panel handles install).
+  const [crGraphAutoBuild, setCrGraphAutoBuild] = useState(false)
 
   if (!newWorkspaceDialogVisible) return null
 
@@ -46,7 +49,8 @@ export function NewWorkspaceDialog() {
               protocol: 'ssh',
               autoCreateRepos,
             }
-          : undefined
+          : undefined,
+        crGraphAutoBuild ? { autoBuild: true } : undefined
       )
       setName('')
       setDirPath('')
@@ -54,6 +58,7 @@ export function NewWorkspaceDialog() {
       setOwner('')
       setBaseName('')
       setAutoCreateRepos(false)
+      setCrGraphAutoBuild(false)
     } finally {
       setCreating(false)
     }
@@ -190,6 +195,28 @@ export function NewWorkspaceDialog() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Advanced options: code-review-graph build (opt-in) */}
+          <div className="bg-surface-0 rounded-lg p-3 border border-border">
+            <div className="text-xs text-text-secondary mb-2">Advanced</div>
+            <label className="flex items-start gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={crGraphAutoBuild}
+                onChange={(e) => setCrGraphAutoBuild(e.target.checked)}
+                className="mt-0.5 w-3.5 h-3.5 accent-accent"
+              />
+              <span className="flex-1">
+                <span className="block text-xs text-text-primary">
+                  코드 리뷰 그래프 빌드 (code-review-graph)
+                </span>
+                <span className="block text-2xs text-text-muted leading-relaxed mt-0.5">
+                  <span className="font-mono">pipx install code-review-graph</span>{' '}
+                  가 미리 깔려 있어야 합니다 (Settings 에서 확인).
+                </span>
+              </span>
+            </label>
           </div>
         </div>
 

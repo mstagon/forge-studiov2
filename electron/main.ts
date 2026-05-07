@@ -10,6 +10,7 @@ import { GitManager } from './services/GitManager'
 import { UpdateChecker } from './services/UpdateChecker'
 import { AgentTeamWatcher } from './services/AgentTeamWatcher'
 import { FsManager, type FsListOpts } from './services/FsManager'
+import { CodeReviewGraphManager, type InstallMethod } from './services/CodeReviewGraphManager'
 
 const execFileAsync = promisify(execFile)
 
@@ -21,7 +22,8 @@ process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
 
 let mainWindow: BrowserWindow | null = null
 const ptyManager = new PtyManager()
-const workspaceManager = new WorkspaceManager()
+const crGraphManager = new CodeReviewGraphManager()
+const workspaceManager = new WorkspaceManager(crGraphManager)
 const harnessScanner = new HarnessScanner()
 const gitManager = new GitManager()
 const updateChecker = new UpdateChecker()
@@ -245,6 +247,7 @@ ipcMain.handle(
         protocol?: 'ssh' | 'https'
         autoCreateRepos?: boolean
       }
+      crGraph?: { autoBuild?: boolean }
     }
   ) => {
     return workspaceManager.create(options)
@@ -362,6 +365,31 @@ ipcMain.handle('harness:update', async (_event, workspacePath: string) => {
     ? path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
     : path.resolve(__dirname, '..', 'resources', 'harness-template', 'CLAUDE.md')
   return workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
+})
+
+// ─── IPC Handlers: code-review-graph ───────────────────────────────
+
+ipcMain.handle('cr-graph:isInstalled', () => crGraphManager.isInstalled())
+
+ipcMain.handle('cr-graph:install', (_event, method?: InstallMethod) =>
+  crGraphManager.install(method)
+)
+
+ipcMain.handle('cr-graph:build', (_event, workspacePath: string) =>
+  crGraphManager.build(workspacePath)
+)
+
+ipcMain.handle('cr-graph:stats', (_event, workspacePath: string) =>
+  crGraphManager.stats(workspacePath)
+)
+
+ipcMain.handle('cr-graph:vizStart', (_event, workspacePath: string) =>
+  crGraphManager.vizUrl(workspacePath)
+)
+
+ipcMain.handle('cr-graph:vizStop', (_event, pid: number) => {
+  crGraphManager.stopViz(pid)
+  return true
 })
 
 // ─── IPC Handlers: Git ─────────────────────────────────────────────
@@ -588,6 +616,7 @@ if (!gotTheLock) {
   app.on('window-all-closed', () => {
     ptyManager.disposeAll()
     agentTeamWatcher.stop()
+    crGraphManager.disposeAll()
     if (process.platform !== 'darwin') app.quit()
   })
 }

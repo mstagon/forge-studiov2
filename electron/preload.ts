@@ -41,6 +41,7 @@ const api = {
         protocol?: 'ssh' | 'https'
         autoCreateRepos?: boolean
       }
+      crGraph?: { autoBuild?: boolean }
     }) => ipcRenderer.invoke('workspace:create', options),
     open: (dirPath: string) =>
       ipcRenderer.invoke('workspace:open', dirPath),
@@ -142,6 +143,36 @@ const api = {
       ipcRenderer.invoke('teams:create', opts),
     remove: (teamId: string): Promise<void> =>
       ipcRenderer.invoke('teams:remove', teamId),
+  },
+
+  // ─── code-review-graph ───────────────────────────────────────────
+  crGraph: {
+    isInstalled: (): Promise<{
+      installed: boolean
+      version?: string
+      method?: 'pipx' | 'pip' | 'uv'
+    }> => ipcRenderer.invoke('cr-graph:isInstalled'),
+    install: (
+      method?: 'pipx' | 'pip' | 'uv'
+    ): Promise<{ ok: boolean; output: string }> =>
+      ipcRenderer.invoke('cr-graph:install', method),
+    build: (
+      workspacePath: string
+    ): Promise<{ ok: boolean; durationMs: number; output: string }> =>
+      ipcRenderer.invoke('cr-graph:build', workspacePath),
+    stats: (
+      workspacePath: string
+    ): Promise<{
+      nodes: number
+      edges: number
+      files: number
+      languages: string[]
+      lastBuiltAt: string | null
+    } | null> => ipcRenderer.invoke('cr-graph:stats', workspacePath),
+    vizStart: (workspacePath: string): Promise<{ url: string; pid: number }> =>
+      ipcRenderer.invoke('cr-graph:vizStart', workspacePath),
+    vizStop: (pid: number): Promise<boolean> =>
+      ipcRenderer.invoke('cr-graph:vizStop', pid),
   },
 
   // ─── Updates ─────────────────────────────────────────────────────

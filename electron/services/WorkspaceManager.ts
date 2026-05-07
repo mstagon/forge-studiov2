@@ -3,6 +3,7 @@ import path from 'path'
 import { v4 as uuid } from 'uuid'
 import { app } from 'electron'
 import { execFileSync } from 'child_process'
+import type { CodeReviewGraphManager } from './CodeReviewGraphManager'
 
 export interface Workspace {
   id: string
@@ -46,8 +47,10 @@ const STORE_PATH = () => path.join(app.getPath('userData'), 'workspaces.json')
 
 export class WorkspaceManager {
   private workspaces: Workspace[] = []
+  private crGraph: CodeReviewGraphManager | null
 
-  constructor() {
+  constructor(crGraph?: CodeReviewGraphManager) {
+    this.crGraph = crGraph ?? null
     this.load()
   }
 
@@ -78,6 +81,9 @@ export class WorkspaceManager {
     templatePath?: string
     claudeMdPath?: string
     splitRepos?: SplitReposOptions
+    /** Opt-in: kick off `code-review-graph build` once the workspace
+     *  scaffolding is in place. Failures are swallowed (best-effort). */
+    crGraph?: { autoBuild?: boolean }
   }): Promise<Workspace> {
     const projectPath = path.join(options.path, options.name)
 
@@ -137,6 +143,17 @@ export class WorkspaceManager {
 
     this.workspaces.unshift(workspace)
     this.save()
+
+    // Best-effort: kick off `code-review-graph build` in the background. We
+    // don't await — workspace creation should not block on a (potentially
+    // long) graph build. Errors are intentionally swallowed (the UI surfaces
+    // build status separately via cr-graph:stats / a manual rebuild button).
+    if (options.crGraph?.autoBuild && this.crGraph) {
+      this.crGraph.build(projectPath).catch(() => {
+        // graceful — CLI may not be installed yet
+      })
+    }
+
     return workspace
   }
 
