@@ -39,6 +39,48 @@ const agentTeamWatcher = new AgentTeamWatcher()
 const fsManager = new FsManager()
 const hookProfiler = new HookProfiler()
 const teamActivityTracker = new TeamActivityTracker()
+
+/**
+ * Track which team JSONL streams we've already wired up so the watcher's
+ * `teams` event can trigger start/stop without restarting healthy trackers
+ * every time the cache emits.
+ */
+const activityTrackerTeams = new Set<string>()
+
+/**
+ * Reconcile the activity tracker against the watcher's authoritative team
+ * list. Called on every `teams` emission (boot, workspace switch, create,
+ * remove). Without this, only teams created in the current process get a
+ * tracker — restored teams from disk show stale JSONL with no live edits.
+ */
+async function reconcileActivityTrackers(teams: { id: string; members: { agentId: string; name: string; worktreePath?: string; state?: 'active' | 'idle' }[] }[]): Promise<void> {
+  const liveIds = new Set(teams.map((t) => t.id))
+
+  for (const teamId of activityTrackerTeams) {
+    if (!liveIds.has(teamId)) {
+      await teamActivityTracker.stop(teamId).catch(() => {})
+      activityTrackerTeams.delete(teamId)
+    }
+  }
+
+  for (const team of teams) {
+    if (activityTrackerTeams.has(team.id)) continue
+    const configPath = agentTeamWatcher.configPathFor(team.id)
+    if (!configPath) continue
+    const memberSpecs: MemberSpec[] = team.members.map((m) => ({
+      agentId: m.agentId,
+      name: m.name,
+      worktreePath: m.worktreePath,
+      state: m.state,
+    }))
+    try {
+      await teamActivityTracker.start(team.id, memberSpecs, configPath)
+      activityTrackerTeams.add(team.id)
+    } catch (err) {
+      console.warn(`[teamActivityTracker] start failed for ${team.id} (non-fatal):`, err)
+    }
+  }
+}
 /**
  * ResourceMonitor reads the active workspace path lazily so a swap doesn't
  * leave us measuring a stale folder. Disk baseline is reset whenever the
@@ -1063,12 +1105,14 @@ ipcMain.handle(
   ) => {
     const result = await agentTeamWatcher.create(opts)
     // Spin up the activity tracker for the brand-new team. The watcher's
-    // create() already wrote config.json + worktrees, so we read the live
-    // member list back out instead of recomputing.
+    // create() already wrote config.json + worktrees + emitted 'teams',
+    // which triggered reconcileActivityTrackers — so this is normally a no-op.
+    // We keep the explicit start as a synchronous guarantee that the tracker
+    // is alive before the IPC returns (reconcile is fire-and-forget).
     try {
       const teams = agentTeamWatcher.list()
       const team = teams.find((t) => t.id === result.teamId)
-      if (team) {
+      if (team && !activityTrackerTeams.has(team.id)) {
         const memberSpecs: MemberSpec[] = team.members.map((m) => ({
           agentId: m.agentId,
           name: m.name,
@@ -1076,6 +1120,7 @@ ipcMain.handle(
           state: m.state,
         }))
         await teamActivityTracker.start(result.teamId, memberSpecs, result.configPath)
+        activityTrackerTeams.add(result.teamId)
       }
     } catch (err) {
       console.warn('[teamActivityTracker] start failed (non-fatal):', err)
@@ -1086,8 +1131,10 @@ ipcMain.handle(
 
 ipcMain.handle('teams:remove', async (_event, teamId: string) => {
   // Tear down activity tracking before the watcher rm's the team config so
-  // the JSONL stream flushes its tail line cleanly.
+  // the JSONL stream flushes its tail line cleanly. The watcher's remove()
+  // emits 'teams' afterward, which lets reconcile handle any leftovers.
   await teamActivityTracker.stop(teamId).catch(() => {})
+  activityTrackerTeams.delete(teamId)
   await agentTeamWatcher.remove(teamId)
 })
 
@@ -1234,6 +1281,9 @@ if (!gotTheLock) {
     })
     agentTeamWatcher.on('teams', (teams) => {
       mainWindow?.webContents.send('teams:update', teams)
+      reconcileActivityTrackers(teams).catch((err) => {
+        console.warn('[teamActivityTracker] reconcile failed (non-fatal):', err)
+      })
     })
 
     // Forward every activity event to the renderer. The renderer subscribes

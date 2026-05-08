@@ -174,7 +174,7 @@ export function RunLiveView({
   async function handlePauseMember(member: TeamMember) {
     const api = getTeamsControlApi()
     const agentName = member.name ?? member.agentId
-    const isPaused = member.state === 'idle' || member.state === 'queued'
+    const isPaused = member.state === 'paused'
     const fn = isPaused ? api?.resumeMember : api?.pauseMember
     const verb = isPaused ? 'Resume' : 'Pause'
     if (typeof fn !== 'function') {
@@ -226,7 +226,6 @@ export function RunLiveView({
   }
 
   function handleOpenAgentTerminal(member: TeamMember) {
-    const api = window.api?.teams
     if (!member.tmuxPaneId) {
       flash(
         'warn',
@@ -234,19 +233,17 @@ export function RunLiveView({
       )
       return
     }
-    if (typeof api?.openAgentTerminal !== 'function') {
-      console.warn('[RunLiveView] window.api.teams.openAgentTerminal() unavailable')
-      flash('error', '터미널 IPC 사용 불가')
-      return
-    }
+    // The LiveTerminalGrid already owns the live PTY attach for every
+    // member. Spawning another via openAgentTerminal() would leak a
+    // detached PTY that nothing reads from. Instead, ask the grid to
+    // fullscreen this agent's existing pane.
     const agentName = member.name ?? member.agentId
-    api
-      .openAgentTerminal({ teamId: team.id, agentName, cols: 80, rows: 24 })
-      .then(() => flash('success', `${agentName} 터미널에 attach`))
-      .catch((err) => {
-        console.error('[RunLiveView] openAgentTerminal failed:', err)
-        flash('error', '터미널 attach 실패 — see console')
-      })
+    setSelectedAgentId(member.agentId)
+    window.dispatchEvent(
+      new CustomEvent('forge:agent-fullscreen', {
+        detail: { agentId: member.agentId, agentName },
+      }),
+    )
   }
 
   return (
@@ -559,7 +556,7 @@ function AgentCard({
   const stateC = STATE_COLOR[member.state]
   if (!a) return null
   const blocked = member.state === 'blocked'
-  const isPaused = member.state === 'idle' || member.state === 'queued'
+  const isPaused = member.state === 'paused'
   return (
     <div
       onClick={onClick}

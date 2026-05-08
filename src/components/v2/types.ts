@@ -4,7 +4,7 @@
  */
 
 export type RunState = 'active' | 'paused' | 'idle' | 'blocked' | 'done' | 'queued'
-export type MemberState = 'active' | 'done' | 'blocked' | 'queued' | 'idle'
+export type MemberState = 'active' | 'done' | 'blocked' | 'queued' | 'idle' | 'paused'
 
 export interface Agent {
   id: string

@@ -405,6 +405,25 @@ export function LiveTerminalGrid({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [fullscreenAgentId])
 
+  // External request to fullscreen a specific agent (e.g. AgentCard's
+  // terminal icon in the sidebar). The grid already owns the live PTY attach,
+  // so we toggle our own fullscreen state instead of spawning a duplicate.
+  useEffect(() => {
+    const onAgentFullscreen = (e: Event) => {
+      const detail = (e as CustomEvent<{ agentName?: string; agentId?: string }>).detail
+      if (!detail) return
+      const target = detail.agentName ?? detail.agentId
+      if (!target) return
+      // Only toggle when the agent has a live pane registered — otherwise we'd
+      // open an empty fullscreen with no terminal to show.
+      const liveTarget = members.find((m) => (m.name ?? m.agentId) === target)
+      if (!liveTarget) return
+      setFullscreenAgentId((cur) => (cur === target ? null : target))
+    }
+    window.addEventListener('forge:agent-fullscreen', onAgentFullscreen)
+    return () => window.removeEventListener('forge:agent-fullscreen', onAgentFullscreen)
+  }, [members])
+
   // Members eligible for real PTY (have tmuxPaneId AND not in queued state).
   const liveAgentKeys = useMemo(() => {
     const keys = new Set<string>()

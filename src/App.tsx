@@ -25,6 +25,7 @@ import type { Workspace as WorkspaceModel, Team as StoreTeam, AgentStatus } from
 
 /** Map an inbox AgentStatus → the v2 MemberState used by RunLiveView etc. */
 function statusToMemberState(status: AgentStatus): MemberState {
+  if (status === 'paused') return 'paused'
   if (status === 'idle') return 'idle'
   if (status === 'shutdown') return 'done'
   return 'active'
@@ -33,28 +34,60 @@ function statusToMemberState(status: AgentStatus): MemberState {
 /**
  * Adapt the watcher-emitted Team (config.json + inbox-derived status) onto the
  * richer v2 Team shape consumed by WorkspaceV2 / TeamsRunSection / RunLiveView.
- * UI-only fields (progress, tokens, durationMin) get sensible placeholders;
- * we'll wire them to real telemetry once it exists.
+ *
+ * State precedence (most → least authoritative):
+ *   1. team.status === 'paused'              → every member becomes 'paused'
+ *   2. member.state (lifecycle, set by pause/resume backend) === 'idle'
+ *      → 'paused'  (the watcher's RawMember.state field semantically means
+ *        "explicitly paused" after pauseMember(); distinct from inbox idle)
+ *   3. inbox-derived AgentStatus              → fallback via statusToMemberState
+ *
+ * Without precedence #1 + #2, Pause backend changes are invisible to the UI:
+ * the inbox stays at the pre-pause activity, RunLiveView keeps showing
+ * 'active', and the Pause button never flips to Resume.
  */
 function toV2Team(team: StoreTeam): V2Team {
-  const members = team.members.map((m) => ({
-    agentId: m.agentId,
-    task: m.task ?? m.lastSummary ?? '',
-    state: statusToMemberState(m.status),
-    tokens: 0,
-    files: 0,
-    pane: m.name?.slice(0, 4).toUpperCase() ?? 'PANE',
-    name: m.name,
-    tmuxPaneId: m.tmuxPaneId,
-  }))
-  // Aggregate run status: blocked > active > idle > done.
-  const runStatus: V2Team['status'] = members.some((m) => m.state === 'blocked')
-    ? 'blocked'
-    : members.some((m) => m.state === 'active')
-      ? 'active'
-      : members.every((m) => m.state === 'done')
-        ? 'done'
-        : 'idle'
+  const teamPaused = team.status === 'paused'
+  const members = team.members.map((m) => {
+    let state: MemberState
+    if (teamPaused) {
+      state = 'paused'
+    } else if (m.state === 'idle') {
+      state = 'paused'
+    } else if (m.state === 'active') {
+      // Backend says active but inbox might still be reporting idle/shutdown —
+      // trust inbox for blocked/done/idle differentiation but never over-claim
+      // 'paused' once the lifecycle has been resumed.
+      state = statusToMemberState(m.status)
+      if (state === 'paused') state = 'active'
+    } else {
+      state = statusToMemberState(m.status)
+    }
+    return {
+      agentId: m.agentId,
+      task: m.task ?? m.lastSummary ?? '',
+      state,
+      tokens: 0,
+      files: 0,
+      pane: m.name?.slice(0, 4).toUpperCase() ?? 'PANE',
+      name: m.name,
+      tmuxPaneId: m.tmuxPaneId,
+    }
+  })
+  // Aggregate run status: paused (team) > blocked > active > paused (members)
+  // > idle > done. Team-level pause beats individual member states; otherwise
+  // pause is reported only when EVERY non-done member is paused.
+  const runStatus: V2Team['status'] = teamPaused
+    ? 'paused'
+    : members.some((m) => m.state === 'blocked')
+      ? 'blocked'
+      : members.some((m) => m.state === 'active')
+        ? 'active'
+        : members.every((m) => m.state === 'done')
+          ? 'done'
+          : members.length > 0 && members.every((m) => m.state === 'paused' || m.state === 'done')
+            ? 'paused'
+            : 'idle'
   return {
     id: team.id,
     name: team.name,
