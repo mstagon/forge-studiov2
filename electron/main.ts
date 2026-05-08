@@ -15,6 +15,8 @@ import { FsManager, type FsListOpts } from './services/FsManager'
 import { CodeReviewGraphManager, type InstallMethod } from './services/CodeReviewGraphManager'
 import { HookProfiler } from './services/HookProfiler'
 import { pathManager } from './services/PathManager'
+import { TeamActivityTracker, type ActivityEvent, type MemberSpec } from './services/TeamActivityTracker'
+import { ResourceMonitor } from './services/ResourceMonitor'
 
 const execFileAsync = promisify(execFile)
 
@@ -36,6 +38,18 @@ const updateChecker = new UpdateChecker()
 const agentTeamWatcher = new AgentTeamWatcher()
 const fsManager = new FsManager()
 const hookProfiler = new HookProfiler()
+const teamActivityTracker = new TeamActivityTracker()
+/**
+ * ResourceMonitor reads the active workspace path lazily so a swap doesn't
+ * leave us measuring a stale folder. Disk baseline is reset whenever the
+ * workspace pointer moves (see workspaceManager listener below).
+ */
+let activeWorkspacePathForMetrics: string | null = null
+const resourceMonitor = new ResourceMonitor({
+  cacheMs: 5000,
+  getPtyCount: () => ptyManager.activeCount(),
+  getWorkspacePath: () => activeWorkspacePathForMetrics,
+})
 harnessScanner.setProfiler(hookProfiler)
 
 /**
@@ -1022,6 +1036,13 @@ ipcMain.handle('teams:list', () => agentTeamWatcher.list())
 ipcMain.handle(
   'teams:setWorkspace',
   async (_event, workspacePath: string | null) => {
+    // Track the active workspace so ResourceMonitor measures the right
+    // directory for `du` baseline. Switching workspaces resets the baseline
+    // so the bar doesn't show a phantom "free GB" bump.
+    if (activeWorkspacePathForMetrics !== workspacePath) {
+      activeWorkspacePathForMetrics = workspacePath
+      resourceMonitor.resetDiskBaseline()
+    }
     await agentTeamWatcher.setWorkspace(workspacePath)
   }
 )
@@ -1040,11 +1061,33 @@ ipcMain.handle(
       mergeStrategy: 'squash' | 'sequential'
     }
   ) => {
-    return agentTeamWatcher.create(opts)
+    const result = await agentTeamWatcher.create(opts)
+    // Spin up the activity tracker for the brand-new team. The watcher's
+    // create() already wrote config.json + worktrees, so we read the live
+    // member list back out instead of recomputing.
+    try {
+      const teams = agentTeamWatcher.list()
+      const team = teams.find((t) => t.id === result.teamId)
+      if (team) {
+        const memberSpecs: MemberSpec[] = team.members.map((m) => ({
+          agentId: m.agentId,
+          name: m.name,
+          worktreePath: m.worktreePath,
+          state: m.state,
+        }))
+        await teamActivityTracker.start(result.teamId, memberSpecs, result.configPath)
+      }
+    } catch (err) {
+      console.warn('[teamActivityTracker] start failed (non-fatal):', err)
+    }
+    return result
   }
 )
 
 ipcMain.handle('teams:remove', async (_event, teamId: string) => {
+  // Tear down activity tracking before the watcher rm's the team config so
+  // the JSONL stream flushes its tail line cleanly.
+  await teamActivityTracker.stop(teamId).catch(() => {})
   await agentTeamWatcher.remove(teamId)
 })
 
@@ -1096,6 +1139,39 @@ ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; ag
   })
 
   return id
+})
+
+// ─── IPC Handlers: Team Activity ────────────────────────────────────
+
+ipcMain.handle('team-activity:list', async (_event, teamId: string, limit?: number) => {
+  if (!teamId || typeof teamId !== 'string') return []
+  const cap = typeof limit === 'number' && limit > 0 ? Math.min(limit, 1000) : 100
+  return teamActivityTracker.list(teamId, cap)
+})
+
+// ─── IPC Handlers: Resource Snapshot ────────────────────────────────
+
+ipcMain.handle('resource:snapshot', async () => {
+  try {
+    return await resourceMonitor.getSnapshot()
+  } catch (err) {
+    pushErrorToRenderer({
+      code: 'RESOURCE_SNAPSHOT_FAILED',
+      category: 'SYSTEM',
+      message: err instanceof Error ? err.message : String(err),
+    })
+    // Always return a well-formed snapshot so the renderer never has to
+    // defend against rejection — the bar just shows zeros until the next
+    // poll succeeds.
+    return {
+      cpu: 0,
+      memUsed: 0,
+      memTotal: 0,
+      diskDeltaGb: 0,
+      ptyCount: 0,
+      ts: Date.now(),
+    }
+  }
 })
 
 // ─── App Lifecycle ──────────────────────────────────────────────────
@@ -1160,6 +1236,14 @@ if (!gotTheLock) {
       mainWindow?.webContents.send('teams:update', teams)
     })
 
+    // Forward every activity event to the renderer. The renderer subscribes
+    // via `team-activity:event` (single channel for all teams) and filters by
+    // teamId in the store — keeps preload simpler than fanning out
+    // per-team channels.
+    teamActivityTracker.on('event', (event: ActivityEvent) => {
+      mainWindow?.webContents.send('team-activity:event', event)
+    })
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
@@ -1168,6 +1252,7 @@ if (!gotTheLock) {
   app.on('window-all-closed', () => {
     ptyManager.disposeAll()
     agentTeamWatcher.stop()
+    teamActivityTracker.stopAll().catch(() => {})
     crGraphManager.disposeAll()
     if (process.platform !== 'darwin') app.quit()
   })

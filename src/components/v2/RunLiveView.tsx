@@ -5,7 +5,7 @@
 // using mock terminal lines + a tick-driven activity feed. The real PTY wiring is
 // a future integration; for now it consumes seed data via props.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 // TODO: foundation import — provided by main session
 import { Icon } from './icons'
 import {
@@ -18,9 +18,14 @@ import {
   STATE_COLOR,
   STATE_LABEL,
 } from './primitives'
-import { AGENT_BY_ID, ACTIVITY, TERMINAL_LINES } from './data'
+import { AGENT_BY_ID, TERMINAL_LINES } from './data'
 import type { Team, TeamMember, ActivityItem, MemberState, TerminalLine } from './types'
 import { MergeConflictView, type ConflictItem } from './MergeConflictView'
+import { LiveTerminalGrid } from './LiveTerminalGrid'
+import {
+  useTeamActivityStore,
+  type ActivityEntry as RealActivityEntry,
+} from '@/stores/teamActivity'
 
 // ─── Optional team-control IPC (graceful when backend is unfinished) ─
 //
@@ -50,7 +55,12 @@ export interface RunLiveViewProps {
   team: Team
   onClose: () => void
   density?: 'compact' | 'normal' | 'spacious'
-  /** Optional override of the activity feed; defaults to seed `ACTIVITY`. */
+  /**
+   * Optional override of the activity feed. When omitted, the feed pulls
+   * real entries from the `teamActivity` zustand store (driven by main's
+   * TeamActivityTracker) and falls back to an empty-state placeholder if
+   * nothing has been observed yet.
+   */
   activity?: ActivityItem[]
   /** Optional override of pane terminal lines by agentId; defaults to seed `TERMINAL_LINES`. */
   terminalLines?: Record<string, TerminalLine[]>
@@ -59,7 +69,7 @@ export interface RunLiveViewProps {
 export function RunLiveView({
   team,
   onClose,
-  activity = ACTIVITY,
+  activity,
   terminalLines = TERMINAL_LINES,
 }: RunLiveViewProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -91,6 +101,43 @@ export function RunLiveView({
     const id = setInterval(() => setTick((t) => t + 1), 1200)
     return () => clearInterval(id)
   }, [paused])
+
+  // ── Real activity feed (TeamActivityTracker → store) ──────────────
+  //
+  // When the caller doesn't override `activity` we subscribe to live events
+  // for this team. The store ref-counts subscribers + tears down the IPC
+  // listener when the last consumer unmounts.
+  const subscribeActivity = useTeamActivityStore((s) => s.subscribe)
+  const unsubscribeActivity = useTeamActivityStore((s) => s.unsubscribe)
+  const teamEntries = useTeamActivityStore((s) => s.entries[team.id])
+  useEffect(() => {
+    if (activity) return // override active — don't double-fetch
+    let cancelled = false
+    subscribeActivity(team.id).catch(() => {
+      // hydrate failure is non-fatal — live stream still works
+    })
+    return () => {
+      cancelled = true
+      // Defer unsubscribe so back-to-back remounts don't thrash IPC. Effect
+      // cleanup runs synchronously, microtask is enough.
+      Promise.resolve().then(() => {
+        if (cancelled) unsubscribeActivity(team.id)
+      })
+    }
+  }, [team.id, activity, subscribeActivity, unsubscribeActivity])
+
+  /**
+   * Render-time mapping from the persistence shape to the v2 `ActivityItem`
+   * the feed renderer already understands. We always return a stable list:
+   *   - explicit `activity` prop wins (used by the design demo)
+   *   - else live store entries, mapped via realToActivityItem
+   *   - else an empty array → empty-state placeholder in <ActivityFeed/>
+   */
+  const feedItems = useMemo<ActivityItem[]>(() => {
+    if (activity) return activity
+    if (!teamEntries || teamEntries.length === 0) return []
+    return teamEntries.map(realToActivityItem)
+  }, [activity, teamEntries])
 
   // ── Action handlers (all IPC-optional) ──────────────────────────
   async function handlePauseAll() {
@@ -350,8 +397,9 @@ export function RunLiveView({
             background: '#06080b',
           }}
         >
-          <TmuxGrid
+          <LiveTerminalGrid
             members={team.members}
+            teamId={team.id}
             tick={tick}
             selectedAgentId={selectedAgentId}
             onSelect={setSelectedAgentId}
@@ -394,7 +442,7 @@ export function RunLiveView({
                 </button>
               }
             />
-            <ActivityFeed tick={tick} paused={paused} items={activity} />
+            <ActivityFeed tick={tick} paused={paused} items={feedItems} />
           </div>
         )}
       </div>
@@ -717,272 +765,6 @@ function CardIconBtn({ children, title, disabled, danger, dim, onClick }: CardIc
   )
 }
 
-// ─── tmux split grid ────────────────────────────────────────────────
-
-interface TmuxGridProps {
-  members: TeamMember[]
-  tick: number
-  selectedAgentId: string | null
-  onSelect: (id: string | null) => void
-  terminalLines: Record<string, TerminalLine[]>
-}
-
-function TmuxGrid({ members, tick, selectedAgentId, onSelect, terminalLines }: TmuxGridProps) {
-  const layout = useMemo(() => {
-    const n = members.length
-    if (n <= 1) return { cols: 1, rows: 1 }
-    if (n === 2) return { cols: 2, rows: 1 }
-    if (n === 3) return { cols: 3, rows: 1 }
-    if (n === 4) return { cols: 2, rows: 2 }
-    if (n <= 6) return { cols: 3, rows: 2 }
-    return { cols: 4, rows: Math.ceil(n / 4) }
-  }, [members.length])
-
-  if (selectedAgentId) {
-    const focused = members.find((m) => m.agentId === selectedAgentId)
-    const others = members.filter((m) => m.agentId !== selectedAgentId)
-    if (!focused) return null
-    return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          padding: 8,
-          gap: 8,
-          minHeight: 0,
-        }}
-      >
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <TmuxPane
-            member={focused}
-            tick={tick}
-            expanded
-            onClose={() => onSelect(null)}
-            terminalLines={terminalLines}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 8, height: 110 }}>
-          {others.map((m) => (
-            <div key={m.agentId} style={{ flex: 1, minWidth: 0 }}>
-              <TmuxPane
-                member={m}
-                tick={tick}
-                compact
-                onClick={() => onSelect(m.agentId)}
-                terminalLines={terminalLines}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'grid',
-        gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
-        gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
-        gap: 6,
-        padding: 8,
-        minHeight: 0,
-      }}
-    >
-      {members.map((m) => (
-        <TmuxPane
-          key={m.agentId}
-          member={m}
-          tick={tick}
-          onClick={() => onSelect(m.agentId)}
-          terminalLines={terminalLines}
-        />
-      ))}
-    </div>
-  )
-}
-
-interface TmuxPaneProps {
-  member: TeamMember
-  tick: number
-  compact?: boolean
-  expanded?: boolean
-  onClick?: () => void
-  onClose?: () => void
-  terminalLines: Record<string, TerminalLine[]>
-}
-
-function TmuxPane({
-  member,
-  tick,
-  compact,
-  expanded,
-  onClick,
-  onClose,
-  terminalLines,
-}: TmuxPaneProps) {
-  const a = AGENT_BY_ID[member.agentId]
-  const lines: TerminalLine[] =
-    terminalLines[member.agentId] ?? [
-      { c: 'var(--text-3)', t: '$ # waiting…' },
-      { c: 'var(--text-3)', t: '$ _' },
-    ]
-  const visibleCount = compact ? 4 : expanded ? 18 : 9
-  const offset = member.state === 'active' ? tick : 0
-  const slice: TerminalLine[] = []
-  for (let i = 0; i < visibleCount; i++) {
-    const idx = (offset + i) % lines.length
-    slice.push(lines[idx])
-  }
-
-  const stateC = STATE_COLOR[member.state]
-  const isActive = member.state === 'active'
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        borderRadius: 6,
-        background: '#0a0d12',
-        border: `1px solid ${
-          isActive
-            ? 'color-mix(in oklab, var(--success) 30%, var(--line-2))'
-            : 'var(--line-1)'
-        }`,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        cursor: onClick ? 'pointer' : 'default',
-        position: 'relative',
-        boxShadow: isActive
-          ? '0 0 0 1px color-mix(in oklab, var(--success) 18%, transparent), inset 0 0 32px rgba(74,222,128,0.04)'
-          : 'none',
-      }}
-    >
-      {/* pane title */}
-      <div
-        className="ns"
-        style={{
-          height: 22,
-          flexShrink: 0,
-          background: 'var(--bg-2)',
-          borderBottom: '1px solid var(--line-1)',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 8px',
-          gap: 6,
-          fontSize: 10.5,
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-3)',
-        }}
-      >
-        <AgentBadge agentId={member.agentId} size={14} />
-        <span style={{ color: 'var(--text-2)' }}>{a?.name ?? member.agentId}</span>
-        <span>·</span>
-        <span
-          style={{
-            color: 'var(--text-3)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {member.pane}
-        </span>
-        <div style={{ flex: 1 }} />
-        <Dot color={stateC} pulse={isActive || member.state === 'blocked'} />
-        <span
-          style={{
-            color: stateC,
-            fontSize: 9,
-            fontWeight: 600,
-            letterSpacing: 0.3,
-          }}
-        >
-          {STATE_LABEL[member.state]}
-        </span>
-        {expanded && onClose && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClose()
-            }}
-            style={{
-              width: 18,
-              height: 18,
-              marginLeft: 4,
-              borderRadius: 3,
-              background: 'transparent',
-              border: '1px solid transparent',
-              color: 'var(--text-3)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-          >
-            <Icon.X size={11} />
-          </button>
-        )}
-      </div>
-      {/* body */}
-      <div
-        style={{
-          flex: 1,
-          padding: compact ? '6px 8px' : '8px 10px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: compact ? 9.5 : expanded ? 12 : 10.5,
-          lineHeight: 1.5,
-          color: 'var(--text-2)',
-          overflow: 'hidden',
-          minHeight: 0,
-        }}
-      >
-        {slice.map((l, i) => (
-          <div
-            key={i}
-            style={{
-              color: l.c,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {l.t}
-            {i === slice.length - 1 && isActive && (
-              <span className="blink" style={{ color: 'var(--text-1)' }}>
-                ▍
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-      {/* blocked overlay */}
-      {member.state === 'blocked' && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 22,
-            right: 8,
-            padding: '3px 7px',
-            background: 'color-mix(in oklab, var(--danger) 15%, var(--bg-2))',
-            border: '1px solid color-mix(in oklab, var(--danger) 35%, var(--line-2))',
-            borderRadius: 4,
-            fontSize: 10,
-            color: 'var(--danger)',
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 600,
-          }}
-        >
-          ⚠ 결정 대기
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Activity feed (right column) ───────────────────────────────────
 
 interface ActivityFeedProps {
@@ -1012,8 +794,48 @@ const KIND_LABEL: Record<ActivityItem['kind'], string> = {
 }
 
 function ActivityFeed({ tick, paused, items }: ActivityFeedProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  // Auto-scroll-to-top when a new entry is prepended. We compare lengths +
+  // the head item identity (text+timestamp) to avoid scrolling on every
+  // re-render unrelated to insertion.
+  const prevHeadKeyRef = useRef<string>('')
+  useEffect(() => {
+    if (!items.length) return
+    const head = items[0]
+    const key = `${head.t}:${head.text}:${items.length}`
+    if (key !== prevHeadKeyRef.current) {
+      prevHeadKeyRef.current = key
+      const el = scrollRef.current
+      if (el) {
+        // requestAnimationFrame so the DOM has the new node before we move.
+        requestAnimationFrame(() => {
+          el.scrollTop = 0
+        })
+      }
+    }
+  }, [items])
+
+  if (items.length === 0) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px 16px',
+          textAlign: 'center',
+          color: 'var(--text-4)',
+          fontSize: 11.5,
+          lineHeight: 1.5,
+        }}
+      >
+        활동 없음 — 첫 변경을 기다리는 중
+      </div>
+    )
+  }
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+    <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
       {items.map((it, i) => {
         const a = AGENT_BY_ID[it.agent]
         const isNew = !paused && i === tick % 3 && i < 3
@@ -1021,7 +843,7 @@ function ActivityFeed({ tick, paused, items }: ActivityFeedProps) {
         const kindLabel = KIND_LABEL[it.kind]
         return (
           <div
-            key={i}
+            key={`${it.t}-${i}`}
             style={{
               display: 'flex',
               gap: 10,
@@ -1084,6 +906,58 @@ function ActivityFeed({ tick, paused, items }: ActivityFeedProps) {
       })}
     </div>
   )
+}
+
+// ─── Real activity → ActivityItem mapping ───────────────────────────
+//
+// TeamActivityTracker emits structured records; the v2 ActivityItem feed
+// expects { t, agent, kind, text }. We collapse the structured fields into
+// a one-line `text` per kind:
+//   edit   → "<file> +A -R"
+//   commit → "<sha> <subject> · N files"
+//   state  → "state: <from> → <to>"
+//
+// Kind is mapped onto the existing palette (edit/commit/decision/queued/done)
+// — state-change becomes 'decision' so it picks up the accent colour.
+
+function realToActivityItem(e: RealActivityEntry): ActivityItem {
+  const time = formatHHMMSS(e.ts)
+  if (e.kind === 'edit') {
+    const parts: string[] = [e.file ?? '(unknown)']
+    if (typeof e.added === 'number' || typeof e.removed === 'number') {
+      const a = typeof e.added === 'number' ? `+${e.added}` : ''
+      const r = typeof e.removed === 'number' ? `-${e.removed}` : ''
+      parts.push([a, r].filter(Boolean).join(' '))
+    }
+    return { t: time, agent: e.agent, kind: 'edit', text: parts.join(' ') }
+  }
+  if (e.kind === 'commit') {
+    const fileCount = e.files?.length ?? 0
+    const fileSuffix = fileCount > 0 ? ` · ${fileCount} files` : ''
+    const subj = e.message?.trim() || '(no message)'
+    const sha = e.sha ? `${e.sha} ` : ''
+    return {
+      t: time,
+      agent: e.agent,
+      kind: 'commit',
+      text: `${sha}${subj}${fileSuffix}`,
+    }
+  }
+  // state-change
+  return {
+    t: time,
+    agent: e.agent,
+    kind: 'decision',
+    text: `state: ${e.from ?? '?'} → ${e.to ?? '?'}`,
+  }
+}
+
+function formatHHMMSS(ms: number): string {
+  const d = new Date(ms)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${hh}:${mm}:${ss}`
 }
 
 // Re-exports for convenience

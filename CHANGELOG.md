@@ -4,6 +4,42 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] — 2026-05-08
+
+\"진짜 동작\" 라운드 — RunLiveView 의 mock 영역 3개 (grid + Activity feed
++ ResourceBar) 를 모두 실 데이터로 교체.
+
+### Changed — RunLiveView 풀 라이브 동작
+- **tmux split grid 실제 PTY attach** — 기존 fake TERMINAL_LINES cycling
+  → 멤버 tmux 세션의 라이브 PTY 표시. `LiveTerminalGrid.tsx` 신규,
+  paneId(=agentName) 별 single XTerminal 인스턴스 + persistent host
+  portal (TerminalAreaV2 패턴 재사용) 로 grid ↔ focus mode ↔ fullscreen
+  레이아웃 전환 시에도 PTY 보존. ResizeObserver + FitAddon. tmux 미설치
+  / queued 멤버는 기존 fake cycling fallback
+- **Activity feed 실 데이터** — chokidar 가 멤버 worktreePath watch +
+  1s 간격 git HEAD polling + config.json state 추적. edit/commit/
+  state-change 이벤트 stream. `~/.claude-forge/team-activity/<id>.jsonl`
+  미러링 (영속성). 빈 상태 \"활동 없음 — 첫 변경을 기다리는 중\"
+- **ResourceBar 실 메트릭** — 5s polling. CPU `ps -A -o %cpu` 코어 정규화,
+  MEM `vm_stat + sysctl`, DISK 워크스페이스 `du -sk` baseline delta,
+  PTY `ptyManager.activeCount()`. 임계 색상 (CPU>80% warning/>90%
+  danger, MEM>85% warning/>95% danger)
+
+### Added — 인프라
+- `electron/services/TeamActivityTracker.ts` — chokidar + git polling +
+  jsonl 영속화. teams:create/remove 에 자동 wire
+- `electron/services/ResourceMonitor.ts` — 5s 캐시. macOS 명령 + non-
+  darwin os.loadavg fallback
+- `PtyManager.activeCount()` 헬퍼
+- IPC: `team-activity:list/event`, `resource:snapshot`
+- `src/stores/teamActivity.ts` — refcounted subscribe + 팀별 ring buffer
+  (max 200, 최신순). 단일 글로벌 IPC 리스너 fanout
+
+### Fixed — Graceful degradation
+- chokidar/git 미가용 — 이벤트 stream 정지 (앱 안 죽음)
+- system.resourceSnapshot 미존재 — 0 값 표시 (fake 안 띄움)
+- team-activity:list 실패 — 빈 상태 + 라이브 stream 시도 계속
+
 ## [0.5.2] — 2026-05-08
 
 \"진짜 완벽\" 라운드 — 4개 영역의 미완성 부분 풀.
