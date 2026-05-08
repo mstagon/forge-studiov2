@@ -4,6 +4,69 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] — 2026-05-08
+
+\"진짜 완벽\" 라운드 — 4개 영역의 미완성 부분 풀.
+
+### Fixed — 번들 도구 packaged 동작 보장
+- **cr-graph venv portable 화** — 절대경로 shebang/symlink 가 packaged
+  DMG 에서 깨지던 문제. console script 를 path-relative polyglot
+  exec wrapper 로 교체 (`#!/usr/bin/env bash` + dirname 계산),
+  `bin/python*` 모두 relative symlink 로 변환
+- **first-run self-repair** — `PathManager.ensureVenvUsable()`
+  (idempotent) 이 절대경로 흔적 감지 후 자동 in-place 재작성.
+  cr-graph-venv-repair.flag 로 한 번만 실행
+- **SLIM_LANGUAGES=1** 환경변수 — tree-sitter language pack 슬림화
+  옵션 (기본 OFF, CI DMG size 최적화 시 활성)
+
+### Added — 하네스 저작 GUI 풀 마무리
+- **CommandEditor / HookEditor / McpServerEditor / PermissionsEditor**
+  4개 신규 — frontmatter + body 편집, 6 이벤트별 matcher 힌트, transport
+  전환, allow/deny 두 컬럼 chip 등
+- **LibraryRowMenu** 공유 컴포넌트 — ⋯ dropdown (편집/복제/삭제) +
+  DeleteConfirmModal + UndoToast (5초 카운트다운)
+- AgentEditor/SkillEditor 에 `duplicateFrom` + `initialName` props
+- LibraryTabs 4탭 (Agents/Skills/Commands/Hooks) — 디스크 실데이터
+  row 에 ⋯메뉴 + 헤더 \"+ 새 X\" 버튼. Built-in commands 보호
+- Hooks 탭 전면 재작성 — listHooks IPC 직접 호출 → per-event 인덱스
+  재계산 → (event, perEventIndex) 로 add/remove/update
+- Settings → Harness 신규 3카드: MCP servers / Permissions / Hooks
+
+### Added — 하네스 검증 / 프리뷰 / 프리셋
+- **HarnessLintPanel** — Settings 카드 + 풀 모달, severity stat tiles
+  + 파일별 그룹 + fix 힌트
+- **HarnessUpdatePreview** — HarnessBanner \"View diff\" 클릭 → 풀스크린
+  added/removed/modified 트리 + unified diff (3-color)
+- **SessionPreview** — 글자수 + 추정 토큰 + CLAUDE.md/8 rules/hooks 섹션 접기/펼치기
+- **My Presets 탭** — Library 6번째 탭. bundled + user preset 카드 +
+  Apply/Delete + \"Save current as preset\" 다이얼로그
+- **NewWorkspaceDialog** Advanced 의 \"Harness preset\" 셀렉터
+
+### Added — 관측성
+- **HookProfileDashboard** — hook 별 평균/p95/성공률 + 최근 10회 CSS
+  막대 그래프 + 최근 실패 펼치기. 5초 자동 refresh
+- **SettingsErrorLog** — Settings 6번째 사이드바. 200 ring buffer +
+  카테고리 필터 + 검색 + [Copy]/[Details]
+- electron main 의 workspace:create / harness:update / git:commit
+  핸들러 try/catch + pushErrorToRenderer wrap
+
+### Added — i18n 실 적용 (85+ 키)
+- SidebarV2 5개 nav + Settings 5섹션 + Wizard + CommandPalette 그룹 헤더
+- locales/ko.json + en.json 키 확장
+- Settings → General 에 Language dropdown (한/영)
+
+### Added — GitHub templates + 잡티
+- `.github/` 디렉터리 신규:
+  - `ISSUE_TEMPLATE/{bug,feature}.md` (한글, 라벨 자동)
+  - `ISSUE_TEMPLATE/config.yml` (blank issue 비활성)
+  - `PULL_REQUEST_TEMPLATE.md` (Summary/Test plan/영향 스택/closes #)
+  - `dependabot.yml` (npm + actions weekly KST 09:00)
+  - `labels.yml` (type/priority/status/cross-cutting)
+  - `FUNDING.yml` (placeholder)
+- TerminalAreaV2 — TabStrip 우측 ≡ 드롭다운 (모든 탭 리스트 + 닫기,
+  외부 클릭/ESC 닫힘) — 이슈 #2-3
+- README.md — labels.yml 부트스트랩 명령 안내
+
 ## [0.5.1] — 2026-05-08
 
 ### Added — 필수 도구 사전 번들 (DMG +~90MB)
