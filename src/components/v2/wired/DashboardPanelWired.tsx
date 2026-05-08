@@ -154,11 +154,13 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
 
   // Graceful defaults for missing data — a freshly-opened workspace whose
   // scan hasn't completed yet, or a workspace without `.claude/` at all.
-  const agents = harnessInfo?.agents.length ?? 0
-  const skills = harnessInfo?.skills.length ?? 0
-  const commands = harnessInfo?.commands.length ?? 0
-  const scripts = harnessInfo?.scripts.length ?? 0
-  const rules = harnessInfo?.rules.length ?? 0
+  // Defensive optional chaining — backend may push partial info during the
+  // first scan tick, and the dev stub may omit fields entirely.
+  const agents = harnessInfo?.agents?.length ?? 0
+  const skills = harnessInfo?.skills?.length ?? 0
+  const commands = harnessInfo?.commands?.length ?? 0
+  const scripts = harnessInfo?.scripts?.length ?? 0
+  const rules = harnessInfo?.rules?.length ?? 0
   const hooks = harnessInfo
     ? Object.values(harnessInfo.hooks).reduce((a, b) => a + b, 0)
     : 0
