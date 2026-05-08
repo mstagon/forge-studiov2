@@ -4,6 +4,52 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.4] — 2026-05-08
+
+### Fixed — Codex adversarial review 결함 4개 (0.5.3 hotfix)
+
+#### H1. tmux 진짜 pane ID 캡처 — 라이브 터미널 attach 동작
+이전엔 멤버 config 의 `tmuxPaneId` 가 `\"session:0.0\"` 형식. 그런데
+`PtyManager.createTmuxAttach` 는 `%`/`@`/`$` 시작 target 만 받음 →
+\"Invalid tmux target\" 으로 라이브 터미널 unmount. 사실상 UI-only.
+
+수정: 세션 생성 직후 `tmux display-message -p '#{pane_id}'` 로 진짜
+`%N` 캡처. 정규식 검증 후 저장. 캡처 실패 시 `tmuxPaneId` 미저장 →
+UI 가 \"unavailable\" 배너 graceful.
+
+#### H2. Pause 가 진짜 프로세스 정지 (SIGSTOP/SIGCONT)
+이전엔 `tmux detach-client` 만 호출. tmux 세션 + Claude/agent 프로세스
+계속 실행 → 사용자는 paused UI 보지만 agent 가 토큰 소비 + 파일 편집
+계속 (위험).
+
+수정: `tmux display-message -p '#{pane_pid}'` 로 PID 추출 →
+`process.kill(-pid, SIGSTOP|SIGCONT)` 프로세스 그룹 (자식 포함). 실패
+시 fallback (detach-client + `degraded: true` + `pause:degraded`
+이벤트 emit).
+
+#### H3. Merge commit 실패를 머지 실패로 처리
+이전엔 squash mode 의 `git commit` 실패 swallow → `ok: true` 반환하지만
+repo 는 미커밋 + staged 상태 (UI 거짓말).
+
+수정: commit 결과 명시 체크 — 실패 시 stderr 캡처 + `git reset --merge`
++ `{ ok: false, error }`. 새 `workspaceDirty()` 헬퍼로 머지 진입 / 멤버
+머지 후 `git status --porcelain` 검증 → dirty 면 abort.
+
+#### M1. PathManager 통합 — 번들 tmux 우선
+이전엔 `AgentTeamWatcher` 가 inherited PATH 의 plain `tmux` 호출. Dock
+launched 앱에서 시스템 tmux 없으면 onboarding \"Bundled\" 인데 팀 생성은
+\"unavailable\" 처리하는 모순.
+
+수정: `tmuxBin() = pathManager.getTmux() ?? 'tmux'` + `tmuxEnv() =
+pathManager.augmentEnv(process.env)`. 24개 `execFileAsync` 호출 모두
+번들 binary + augmented env 사용. `hasTmux()` 도 번들 우선 체크.
+
+### Notes
+- `merge()` 이제 dirty workspace 거부 (이전엔 WIP 를 silent 하게 squash
+  에 fold). 안전한 default 지만 호출자는 새 에러 string 대비 필요.
+- `pause()/resume()` 의 `degraded: true` 응답을 renderer 가 토스트로
+  surface 하는 wiring 은 후속 작업 (UI 0.5.5 또는 0.6.0).
+
 ## [0.5.3] — 2026-05-08
 
 \"진짜 동작\" 라운드 — RunLiveView 의 mock 영역 3개 (grid + Activity feed
