@@ -353,6 +353,18 @@ export class AgentTeamWatcher extends EventEmitter {
     return Array.from(this.cache.values()).sort((a, b) => b.createdAt - a.createdAt)
   }
 
+  /**
+   * Return the on-disk config.json path for a team, or null if the team is
+   * unknown or the watcher has no active workspace. Used by main.ts to
+   * reconcile activity trackers against the live team list on boot/workspace
+   * switch — the activity tracker tails this file for state changes.
+   */
+  configPathFor(teamId: string): string | null {
+    if (!this.workspacePath) return null
+    if (!this.cache.has(teamId)) return null
+    return path.join(this.workspacePath, '.claude/teams', teamId, 'config.json')
+  }
+
   // ── External tool gating ─────────────────────────────────────────────
 
   /** Return true when `git` resolves on PATH and is invokable. */
@@ -909,6 +921,11 @@ export class AgentTeamWatcher extends EventEmitter {
    * `git status --porcelain` returns one line per untracked/modified path.
    * Empty stdout = clean tree. Used to gate merge entry/exit so we never
    * report success while the index has staged-but-uncommitted changes.
+   *
+   * Forge-owned runtime paths (`.claude/teams/**`, worktree directories the
+   * watcher itself creates) are filtered out — otherwise the merge gate would
+   * deterministically fail in workspaces where `.claude` is tracked, because
+   * `create()` itself dirties the same tree that `merge()` requires clean.
    */
   private async workspaceDirty(wsPath: string): Promise<boolean> {
     try {
@@ -917,11 +934,30 @@ export class AgentTeamWatcher extends EventEmitter {
         ['-C', wsPath, 'status', '--porcelain'],
         { timeout: 5000, env: tmuxEnv() }
       )
-      return stdout.trim().length > 0
+      const lines = stdout.split('\n').map((l) => l.trimEnd()).filter(Boolean)
+      const userDirty = lines.filter((line) => {
+        // Porcelain v1 format: XY<space>path  (renames have ` -> ` separator)
+        const rest = line.slice(3)
+        const arrow = rest.indexOf(' -> ')
+        const filePath = (arrow >= 0 ? rest.slice(arrow + 4) : rest).replace(/^"(.*)"$/, '$1')
+        return !this.isForgeOwnedPath(filePath)
+      })
+      return userDirty.length > 0
     } catch {
       // If status itself fails we can't trust the tree — treat as dirty.
       return true
     }
+  }
+
+  /** Paths the watcher itself writes inside a workspace. */
+  private isForgeOwnedPath(rel: string): boolean {
+    const normalized = rel.replace(/\\/g, '/')
+    return (
+      normalized === '.claude/teams' ||
+      normalized.startsWith('.claude/teams/') ||
+      normalized === '.claude/worktrees' ||
+      normalized.startsWith('.claude/worktrees/')
+    )
   }
 
   private async collectConflicts(
