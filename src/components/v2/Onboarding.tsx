@@ -330,6 +330,7 @@ function Step2Dependencies() {
         {deps.map((dep) => {
           const installed = typeof dep.resolved === 'string'
           const checking = dep.resolved === null && checkingDeps
+          const bundled = installed && !!dep.bundled
           return (
             <Card
               key={dep.key}
@@ -375,6 +376,11 @@ function Step2Dependencies() {
               </div>
               {checking ? (
                 <Pill color="var(--text-3)">확인 중…</Pill>
+              ) : bundled ? (
+                // Forge Studio shipped this binary inside the DMG — no user
+                // action needed and no install button (since the bundled path
+                // is the canonical one we want them to use).
+                <Pill color="var(--success)">번들됨</Pill>
               ) : installed ? (
                 <Pill color="var(--success)">설치됨</Pill>
               ) : (

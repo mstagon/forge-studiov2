@@ -178,9 +178,30 @@ npm run electron:build       # → release/Forge Studio-<version>-arm64.dmg
 
 ### 요구 사항
 
-- macOS 12+ (Apple Silicon 또는 Intel)
-- Node 20+
-- Xcode Command Line Tools (네이티브 node-pty 리빌드용)
+- macOS 12+ (Apple Silicon — 번들 빌드는 arm64 전용)
+- Node 20+ (소스 빌드 시)
+- Xcode Command Line Tools (`git` + 네이티브 node-pty 리빌드)
+- [Claude Code CLI](https://docs.claude.com/claude-code) — Anthropic 공식
+  가이드를 따라 별도 설치. 잦은 업데이트 + 라이선스 문제로 번들에 포함하지 않음.
+
+그 외 도구는 DMG 안에 모두 번들되어 있습니다 (아래 "번들 도구" 섹션 참고).
+
+### 번들 도구
+
+v0.5.1 부터 DMG 안에 자체 완결된 바이너리 툴체인이 들어 있어서, 깨끗한 macOS
+설치 환경에서도 별도 세팅 없이 Agent Team / code-review-graph 를 즉시 사용할
+수 있습니다. 번들로 ~85 MB 압축 추가됩니다 (DMG ~134 MB → ~220 MB).
+
+| 도구 | 용도 | 출처 |
+|---|---|---|
+| `tmux` | Agent Team 격리 워크트리 멀티 페인 백엔드 | Homebrew bottle (~1 MB) |
+| `uv` | Python 패키지 매니저 (code-review-graph 내부에서 사용) | astral-sh/uv release (~10 MB) |
+| `python` 3.12 | cr-graph 전용 standalone 인터프리터 | indygreg/python-build-standalone (~80 MB 풀린 용량) |
+| `code-review-graph` | 저장소 의존성 + 호출 그래프 시각화 | 번들 python 위에 미리 빌드된 venv (~50 MB) |
+
+번들된 바이너리는 `Contents/Resources/bundled-tools/` 에 위치하며, Forge 가
+모든 spawn 셸의 `PATH` 앞에 추가하기 때문에 사용자 터미널에서도
+`tmux` / `uv` / `code-review-graph` 가 그대로 보입니다 (`brew install` 불필요).
 
 ---
 
