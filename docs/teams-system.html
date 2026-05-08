@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forge Studio · 팀 시스템</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg-0: #07090d; --bg-1: #0b0e13; --bg-2: #11151c; --bg-3: #161b24; --bg-4: #1d242f;
+    --line-1: #1c222c; --line-2: #262e3a; --line-3: #313a48;
+    --text-1: #e6e9ef; --text-2: #9aa3b2; --text-3: #6b7280; --text-4: #4a525e;
+    --accent: #ff6b35; --accent-2: #ff8758;
+    --accent-dim: rgba(255,107,53,0.14); --accent-line: rgba(255,107,53,0.32);
+    --success: #4ade80; --warning: #f5a524; --danger: #f87171; --info: #60a5fa; --violet: #a78bfa;
+    --role-fe: #60a5fa; --role-be: #a78bfa; --role-db: #f59e0b; --role-test: #34d399;
+    --role-review: #f472b6; --role-infra: #fb923c; --role-arch: #22d3ee; --role-doc: #facc15;
+    --font-ui: 'Geist', -apple-system, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  body { background-image: radial-gradient(1200px 600px at 50% -200px, rgba(255,107,53,0.08), transparent 70%); }
+  ::selection { background: var(--accent-dim); color: var(--text-1); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 60px 32px 120px; }
+  .mono { font-family: var(--font-mono); font-feature-settings: "calt" 0; }
+
+  /* HERO */
+  .hero { padding: 64px 0 56px; text-align: center; border-bottom: 1px solid var(--line-1); margin-bottom: 64px; }
+  .hero .badge { display: inline-block; padding: 4px 10px; border: 1px solid var(--accent-line); background: var(--accent-dim); color: var(--accent); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; margin-bottom: 18px; }
+  .hero h1 { font-size: 48px; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.5px; }
+  .hero .sub { font-size: 17px; color: var(--text-2); max-width: 700px; margin: 0 auto; }
+  .hero .meta { margin-top: 22px; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+  .hero .meta span + span { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line-2); }
+
+  section { margin-bottom: 80px; }
+  section h2 { font-size: 28px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.3px; }
+  section .lead { font-size: 15px; color: var(--text-2); margin: 0 0 28px; max-width: 720px; }
+  section h3 { font-size: 17px; font-weight: 600; margin: 36px 0 12px; }
+  section h4 { font-size: 13px; font-weight: 600; margin: 20px 0 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; font-family: var(--font-mono); }
+  p { color: var(--text-2); margin: 8px 0; }
+  strong { color: var(--text-1); font-weight: 600; }
+  code { font-family: var(--font-mono); font-size: 12.5px; padding: 1px 5px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 3px; color: var(--text-1); }
+  a { color: var(--accent-2); text-decoration: none; border-bottom: 1px dashed var(--accent-line); }
+
+  .grid { display: grid; gap: 14px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 800px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } }
+  .card { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 8px; padding: 18px 20px; }
+  .card h5 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .card .desc { font-size: 13px; color: var(--text-2); margin: 0; line-height: 1.55; }
+  .card .key { display: inline-block; margin-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); padding: 2px 6px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 3px; }
+
+  .diagram { background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 8px; padding: 22px; margin: 18px 0; }
+  .diagram .caption { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+  svg { display: block; width: 100%; height: auto; }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; font-size: 10.5px; font-weight: 500; letter-spacing: 0.2px; text-transform: uppercase; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--line-2); border-radius: 4px; font-family: var(--font-mono); }
+  .pill.accent { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-line); }
+  .pill.success { background: rgba(74,222,128,0.12); color: var(--success); border-color: rgba(74,222,128,0.28); }
+  .pill.danger { background: rgba(248,113,113,0.12); color: var(--danger); border-color: rgba(248,113,113,0.28); }
+  .pill.warning { background: rgba(245,165,36,0.12); color: var(--warning); border-color: rgba(245,165,36,0.28); }
+  .pill.info { background: rgba(96,165,250,0.12); color: var(--info); border-color: rgba(96,165,250,0.28); }
+  .pill.violet { background: rgba(167,139,250,0.12); color: var(--violet); border-color: rgba(167,139,250,0.28); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-1); vertical-align: top; }
+  th { color: var(--text-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-mono); background: var(--bg-2); }
+  td { color: var(--text-2); }
+  td strong { color: var(--text-1); }
+  tr:hover td { background: var(--bg-2); }
+  .table-wrap { background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 8px; overflow: hidden; margin: 14px 0; }
+
+  .timeline { position: relative; padding-left: 28px; margin: 18px 0; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--line-2); }
+  .step { position: relative; padding: 12px 0 12px 14px; }
+  .step::before { content: ''; position: absolute; left: -27px; top: 16px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg-1); border: 2px solid var(--accent); box-shadow: 0 0 0 4px var(--bg-0); }
+  .step .num { display: inline-block; padding: 1px 7px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-line); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+  .step h6 { display: inline; font-size: 14px; font-weight: 600; color: var(--text-1); margin: 0; }
+  .step p { font-size: 13px; color: var(--text-2); margin: 6px 0 0; }
+
+  .callout { padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 4px; margin: 18px 0; font-size: 13.5px; color: var(--text-1); }
+  .callout strong { color: var(--accent); }
+  .callout.warn { border-color: var(--warning); background: rgba(245,165,36,0.08); }
+  .callout.warn strong { color: var(--warning); }
+  .callout.future { border-color: var(--violet); background: rgba(167,139,250,0.08); }
+  .callout.future strong { color: var(--violet); }
+
+  .badge-block { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 4px; font-size: 11.5px; color: var(--text-2); margin: 2px 4px 2px 0; }
+  .badge-block .glyph { font-family: var(--font-mono); font-weight: 700; width: 16px; height: 16px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; }
+
+  /* Agent role colors visual */
+  .role-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
+  @media (max-width: 800px) { .role-grid { grid-template-columns: repeat(2, 1fr); } }
+  .role-cell { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+  .role-cell .swatch { width: 28px; height: 28px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  .role-cell .name { font-size: 12.5px; font-weight: 500; color: var(--text-1); }
+  .role-cell .role { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono); margin-top: 2px; }
+
+  .toc { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 8px; padding: 18px 22px; margin-bottom: 56px; }
+  .toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  @media (max-width: 800px) { .toc ol { columns: 1; } }
+  .toc li { font-size: 13.5px; margin: 4px 0; color: var(--text-2); }
+  .toc a { color: var(--text-1); border-bottom: none; }
+  .toc a:hover { color: var(--accent); }
+
+  footer { text-align: center; padding: 40px 0 0; font-size: 12px; color: var(--text-3); border-top: 1px solid var(--line-1); margin-top: 80px; font-family: var(--font-mono); }
+
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  .pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+  @media (max-width: 800px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 6px; padding: 14px 16px; }
+  .stat .v { font-size: 24px; font-weight: 700; color: var(--text-1); font-family: var(--font-mono); letter-spacing: -0.5px; }
+  .stat .l { font-size: 11px; color: var(--text-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="badge">v0.5.2 · TEAM SYSTEM</div>
+    <h1>Agent Team — Run · Composition · Council</h1>
+    <p class="sub">Forge Studio 의 팀 시스템 — Wizard 한 번 → 멤버별 격리 worktree + tmux 자동 spawn + Claude Code 자동 시작 + 라이브 모니터링 + 충돌 해결까지 풀 자동화. 0.5.3 부터 Council (모델 토론) 마일스톤.</p>
+    <div class="meta mono">
+      <span>18 agents · 8 role colors · 2 strategies × 2 merge</span>
+      <span>chokidar watcher · git worktree · tmux 자동</span>
+      <span>workspace-scoped Run + global Composition</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <ol>
+      <li><a href="#two-identities">두 정체성 — Run vs Composition</a></li>
+      <li><a href="#agents">18 agents + 8 role colors</a></li>
+      <li><a href="#data-model">데이터 모델 (config.json)</a></li>
+      <li><a href="#workspace-scope">워크스페이스 격리</a></li>
+      <li><a href="#lifecycle">Run 라이프사이클</a></li>
+      <li><a href="#wizard">Wizard 4-step</a></li>
+      <li><a href="#create">create() — worktree + tmux 자동</a></li>
+      <li><a href="#liveview">Run 라이브뷰</a></li>
+      <li><a href="#pause-resume">Pause / Resume — tmux detach</a></li>
+      <li><a href="#merge">Merge + Conflict view</a></li>
+      <li><a href="#remove">Remove — cleanup 단계별</a></li>
+      <li><a href="#council">곧 — Council (0.5.3)</a></li>
+      <li><a href="#summary">요약 + 한계</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section id="two-identities">
+    <h2>1. 두 정체성 — Run vs Composition</h2>
+    <p class="lead">v0.4.0 의 가장 큰 구조 변화. \"Team\" 단일 개념을 두 정체성으로 분리. <strong>Run</strong> = 워크스페이스 안에서 진행 중인 인스턴스, <strong>Composition</strong> = 글로벌 재사용 템플릿. 0.5.3 부터 <strong>Council</strong> 이라는 세 번째 정체성이 추가됨.</p>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <span class="pill info">RUN</span>
+        <h5 style="margin-top: 8px;">인스턴스 (워크스페이스 스코프)</h5>
+        <p class="desc">이 워크스페이스에서 지금 돌아가는 N명 agent + worktree + 진행도. <code>&lt;wsPath&gt;/.claude/teams/&lt;id&gt;/config.json</code></p>
+        <h4>UI 위치</h4>
+        <p class="desc">Workspace 패널 좌측 \"Teams\" 섹션 → 카드 클릭 → 풀스크린 RunLiveView</p>
+      </div>
+      <div class="card">
+        <span class="pill violet">COMPOSITION</span>
+        <h5 style="margin-top: 8px;">템플릿 (글로벌 재사용)</h5>
+        <p class="desc">\"이런 멤버 조합으로 일하는 패턴\" 재사용 단위. <code>~/.claude/team-compositions/&lt;name&gt;.json</code></p>
+        <h4>UI 위치</h4>
+        <p class="desc">Library 사이드바 → Compositions 탭 → \"Apply to workspace\" → Wizard prefilled</p>
+      </div>
+      <div class="card" style="border-color: var(--violet); border-style: dashed;">
+        <span class="pill violet">COUNCIL · 0.5.3</span>
+        <h5 style="margin-top: 8px;">토론 (다중 모델)</h5>
+        <p class="desc">같은 task 를 N개 모델 (Claude Opus + Codex + Sonnet 등) 이 보고 토론 라운드 → 합의 / 의견 차이 노출</p>
+        <h4>UI 위치</h4>
+        <p class="desc">RunLiveView 의 새 \"Discussion\" 탭 + Wizard Step 2 \"Council mode\" 토글 (계획)</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>왜 분리?</strong> Run 은 git worktree 에 묶여 한 워크스페이스 안에서만 의미 있고, Composition 은 \"다음 프로젝트에서 또 쓰고 싶은 멤버 조합\" 이라 글로벌이어야 한다. Council 은 \"같은 작업을 여러 모델이 비교\" 라는 또 다른 차원.
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="agents">
+    <h2>2. 18 agents + 8 role colors</h2>
+    <p class="lead">팀 멤버는 18개 agent 풀에서 선택. 각 agent 는 8개 역할 그룹 (frontend / backend / database / test / review / infra / architect / docs) 에 매핑된 색상으로 시각화.</p>
+
+    <h3>역할별 컬러 토큰</h3>
+    <div class="role-grid">
+      <div class="role-cell"><div class="swatch" style="background: rgba(96,165,250,0.18); color: var(--role-fe); border: 1px solid rgba(96,165,250,0.4);">F</div><div><div class="name">frontend</div><div class="role">flutter-ui · flutter-state · next-app · tailwind-ui</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(167,139,250,0.18); color: var(--role-be); border: 1px solid rgba(167,139,250,0.4);">B</div><div><div class="name">backend</div><div class="role">nestjs-backend · nestjs-auth · next-api</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(245,158,11,0.18); color: var(--role-db); border: 1px solid rgba(245,158,11,0.4);">D</div><div><div class="name">database</div><div class="role">prisma-schema · prisma-seed</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(52,211,153,0.18); color: var(--role-test); border: 1px solid rgba(52,211,153,0.4);">T</div><div><div class="name">test</div><div class="role">test-unit · test-e2e</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(244,114,182,0.18); color: var(--role-review); border: 1px solid rgba(244,114,182,0.4);">R</div><div><div class="name">review</div><div class="role">reviewer</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(251,146,60,0.18); color: var(--role-infra); border: 1px solid rgba(251,146,60,0.4);">I</div><div><div class="name">infra</div><div class="role">infra-docker · infra-k8s</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(34,211,238,0.18); color: var(--role-arch); border: 1px solid rgba(34,211,238,0.4);">A</div><div><div class="name">architect</div><div class="role">architect · perf-profiler</div></div></div>
+      <div class="role-cell"><div class="swatch" style="background: rgba(250,204,21,0.18); color: var(--role-doc); border: 1px solid rgba(250,204,21,0.4);">P</div><div><div class="name">docs</div><div class="role">doc-writer · i18n</div></div></div>
+    </div>
+
+    <h3>전체 18 agents</h3>
+    <p style="font-size: 13px;">
+      <span class="badge-block"><span class="glyph" style="background: rgba(96,165,250,0.18); color: var(--role-fe);">F</span>flutter-ui</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(96,165,250,0.18); color: var(--role-fe);">F</span>flutter-state</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(167,139,250,0.18); color: var(--role-be);">N</span>nestjs-backend</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(167,139,250,0.18); color: var(--role-be);">N</span>nestjs-auth</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(245,158,11,0.18); color: var(--role-db);">P</span>prisma-schema</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(245,158,11,0.18); color: var(--role-db);">P</span>prisma-seed</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(96,165,250,0.18); color: var(--role-fe);">N</span>next-app</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(167,139,250,0.18); color: var(--role-be);">N</span>next-api</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(96,165,250,0.18); color: var(--role-fe);">T</span>tailwind-ui</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(52,211,153,0.18); color: var(--role-test);">T</span>test-unit</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(52,211,153,0.18); color: var(--role-test);">E</span>test-e2e</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(244,114,182,0.18); color: var(--role-review);">R</span>reviewer</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(251,146,60,0.18); color: var(--role-infra);">D</span>infra-docker</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(251,146,60,0.18); color: var(--role-infra);">K</span>infra-k8s</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(34,211,238,0.18); color: var(--role-arch);">A</span>architect</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(250,204,21,0.18); color: var(--role-doc);">D</span>doc-writer</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(34,211,238,0.18); color: var(--role-arch);">P</span>perf-profiler</span>
+      <span class="badge-block"><span class="glyph" style="background: rgba(250,204,21,0.18); color: var(--role-doc);">i</span>i18n</span>
+    </p>
+  </section>
+
+  <!-- 3 -->
+  <section id="data-model">
+    <h2>3. 데이터 모델 — config.json</h2>
+    <p class="lead">팀이 디스크에 어떻게 저장되나. chokidar 가 이 파일을 감시 → 변경 감지 → store 자동 갱신 → UI 즉시 반영.</p>
+
+    <div class="diagram">
+      <div class="caption">&lt;workspace&gt;/.claude/teams/&lt;teamId&gt;/config.json</div>
+      <pre style="font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); margin: 0; line-height: 1.6;"><span style="color: var(--text-3);">{</span>
+  <span style="color: var(--accent);">"id"</span>: <span style="color: var(--success);">"team-1746604800123-a3f9b2"</span>,
+  <span style="color: var(--accent);">"name"</span>: <span style="color: var(--success);">"회원가입 피처 팀"</span>,
+  <span style="color: var(--accent);">"goal"</span>: <span style="color: var(--success);">"이메일/소셜 로그인 + 온보딩 3단계"</span>,
+  <span style="color: var(--accent);">"workspaceId"</span>: <span style="color: var(--success);">"ws-forge"</span>,
+  <span style="color: var(--accent);">"worktreeStrategy"</span>: <span style="color: var(--success);">"isolated"</span>,  <span style="color: var(--text-3);">// "isolated" | "shared"</span>
+  <span style="color: var(--accent);">"mergeStrategy"</span>: <span style="color: var(--success);">"squash"</span>,         <span style="color: var(--text-3);">// "squash" | "sequential"</span>
+  <span style="color: var(--accent);">"baseBranch"</span>: <span style="color: var(--success);">"team/team-1746604800123-a3f9b2"</span>,
+  <span style="color: var(--accent);">"status"</span>: <span style="color: var(--success);">"active"</span>,                    <span style="color: var(--text-3);">// active | paused | idle | blocked | done</span>
+  <span style="color: var(--accent);">"createdAt"</span>: <span style="color: var(--info);">1746604800123</span>,
+  <span style="color: var(--accent);">"members"</span>: [
+    <span style="color: var(--text-3);">{</span>
+      <span style="color: var(--accent);">"agentId"</span>: <span style="color: var(--success);">"architect"</span>,
+      <span style="color: var(--accent);">"task"</span>: <span style="color: var(--success);">"auth flow ADR 작성"</span>,
+      <span style="color: var(--accent);">"state"</span>: <span style="color: var(--success);">"done"</span>,                  <span style="color: var(--text-3);">// active | done | blocked | queued | idle</span>
+      <span style="color: var(--accent);">"branch"</span>: <span style="color: var(--success);">"team/team-.../architect"</span>,
+      <span style="color: var(--accent);">"worktreePath"</span>: <span style="color: var(--success);">"&lt;ws&gt;/.claude/teams/team-.../worktrees/architect"</span>,
+      <span style="color: var(--accent);">"tmuxPaneId"</span>: <span style="color: var(--success);">"forge-team-team-...-architect:0.0"</span>,
+      <span style="color: var(--accent);">"tokens"</span>: <span style="color: var(--info);">22400</span>,
+      <span style="color: var(--accent);">"files"</span>: <span style="color: var(--info);">3</span>
+    <span style="color: var(--text-3);">},</span>
+    <span style="color: var(--text-3);">{ ... 나머지 멤버 ... }</span>
+  ]
+<span style="color: var(--text-3);">}</span></pre>
+    </div>
+
+    <p>chokidar 가 <code>&lt;wsPath&gt;/.claude/teams/</code> 디렉터리를 감시. 새 config.json 생성/수정/삭제 → <code>AgentTeamWatcher</code> 가 캐시 갱신 → <code>'change'</code> 이벤트 emit → renderer 의 <code>useAgentTeamStore</code> subscribe 콜백이 list 재로드 → UI 즉시 반영.</p>
+  </section>
+
+  <!-- 4 -->
+  <section id="workspace-scope">
+    <h2>4. 워크스페이스 격리</h2>
+    <p class="lead"><code>setActiveWorkspace</code> 시 chokidar 가 새 디렉터리로 자동 재포인트. 한 워크스페이스의 팀이 다른 워크스페이스 UI 에 새지 않음.</p>
+
+    <div class="diagram">
+      <div class="caption">workspace switch → AgentTeamWatcher.setWorkspace()</div>
+      <svg viewBox="0 0 1000 280" xmlns="http://www.w3.org/2000/svg">
+        <rect x="40" y="20" width="280" height="240" rx="8" fill="#161b24" stroke="#60a5fa40"/>
+        <text x="180" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#60a5fa">WORKSPACE ws-A</text>
+        <text x="180" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">~/projects/ws-A/.claude/teams/</text>
+        <rect x="60" y="80" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="75" y="98" font-family="Geist" font-size="12" fill="#e6e9ef">team-1 (회원가입 팀)</text>
+        <text x="75" y="115" font-family="JetBrains Mono" font-size="10" fill="#6b7280">5 members · isolated · squash</text>
+        <rect x="60" y="134" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="75" y="152" font-family="Geist" font-size="12" fill="#e6e9ef">team-2 (리팩토링 팀)</text>
+        <text x="75" y="169" font-family="JetBrains Mono" font-size="10" fill="#6b7280">4 members · isolated · sequential</text>
+        <text x="180" y="220" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">Teams 섹션: 2개 표시</text>
+
+        <text x="500" y="135" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#ff6b35">Workspace 전환</text>
+        <path d="M 320 140 L 680 140" stroke="#ff6b35" stroke-width="2" marker-end="url(#wa)"/>
+        <text x="500" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">setWorkspace(\"ws-B\")</text>
+        <text x="500" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">chokidar → 새 디렉터리로 재포인트</text>
+
+        <rect x="680" y="20" width="280" height="240" rx="8" fill="#161b24" stroke="#a78bfa40"/>
+        <text x="820" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#a78bfa">WORKSPACE ws-B</text>
+        <text x="820" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">~/projects/ws-B/.claude/teams/</text>
+        <rect x="700" y="80" width="240" height="44" rx="5" fill="#1d242f" stroke="#262e3a"/>
+        <text x="715" y="98" font-family="Geist" font-size="12" fill="#e6e9ef">team-3 (디자인 팀)</text>
+        <text x="715" y="115" font-family="JetBrains Mono" font-size="10" fill="#6b7280">3 members · shared · squash</text>
+        <text x="820" y="220" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">Teams 섹션: 1개 표시</text>
+        <text x="820" y="240" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">team-1, team-2 는 안 보이지만 디스크에 그대로</text>
+
+        <defs>
+          <marker id="wa" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="lifecycle">
+    <h2>5. Run 라이프사이클 — 5단계</h2>
+    <div class="timeline">
+      <div class="step">
+        <span class="num">01</span> <h6>Wizard 4-step</h6>
+        <p>이름·목표 → 멤버 → worktree/merge 전략 → 확인</p>
+      </div>
+      <div class="step">
+        <span class="num">02</span> <h6>Create — 자동 worktree + tmux</h6>
+        <p>config.json 작성 + isolated 시 멤버별 git worktree add + forge-team-&lt;id&gt;-&lt;agent&gt; tmux 세션 spawn + autoStartClaude</p>
+      </div>
+      <div class="step">
+        <span class="num">03</span> <h6>Live monitoring</h6>
+        <p>RunLiveView 풀스크린 — 멤버 사이드바 + tmux split grid + Activity feed + 컨트롤 바. ESC 로 복귀</p>
+      </div>
+      <div class="step">
+        <span class="num">04</span> <h6>Pause / Resume / Merge</h6>
+        <p>tmux detach (kill 안 함, context 유지) / merge 충돌 시 MergeConflictView 풀스크린 모달</p>
+      </div>
+      <div class="step">
+        <span class="num">05</span> <h6>Remove — 단계별 cleanup</h6>
+        <p>tmux kill-session → worktree --force 제거 → 브랜치 삭제 → config 디렉터리 제거. 단계별 graceful</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="wizard">
+    <h2>6. Wizard 4-step</h2>
+    <p class="lead">Workspace 패널 \"+\" 또는 ⌘N → 모달 → 4 단계.</p>
+
+    <div class="grid cols-4">
+      <div class="card">
+        <span class="pill accent">Step 1</span>
+        <h5 style="margin-top: 8px;">이름 + 목표</h5>
+        <p class="desc">팀 이름 (필수) + 자연어 한 줄 목표 (옵션)</p>
+        <span class="key">예: \"회원가입 피처 팀\"</span>
+      </div>
+      <div class="card">
+        <span class="pill accent">Step 2</span>
+        <h5 style="margin-top: 8px;">멤버 선택</h5>
+        <p class="desc">18 agent 풀에서 chip multi-select. 0.5.3 부터 같은 agent 의 다른 모델 사본 가능</p>
+        <span class="key">3~7 명 권장</span>
+      </div>
+      <div class="card">
+        <span class="pill accent">Step 3</span>
+        <h5 style="margin-top: 8px;">전략</h5>
+        <p class="desc">worktree (isolated/shared) + merge (squash/sequential) — 각 옵션 옆 한 줄 설명</p>
+        <span class="key">기본: isolated + squash</span>
+      </div>
+      <div class="card">
+        <span class="pill accent">Step 4</span>
+        <h5 style="margin-top: 8px;">확인</h5>
+        <p class="desc">예상 동작 표시 (\"5명 분리 worktree + 5개 tmux 세션 spawn\")</p>
+        <span class="key">→ Start</span>
+      </div>
+    </div>
+
+    <h3>전략 옵션 — 결정 가이드</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>옵션</th><th>의미</th><th>언제</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Isolated worktree</strong></td><td>멤버별 git worktree + tmux 세션 자동 spawn</td><td>멤버 ≥ 2명, 동시 다른 영역 작업</td></tr>
+          <tr><td><strong>Shared worktree</strong></td><td>같은 worktree 공유</td><td>소규모 팀 (1~2명) 또는 sequential 작업</td></tr>
+          <tr><td><strong>Squash merge</strong></td><td>모든 멤버 작업을 한 커밋으로 합침</td><td>피처 전체를 한 커밋으로 보고 싶을 때</td></tr>
+          <tr><td><strong>Sequential merge</strong></td><td>멤버 순서대로 머지 (history 보존)</td><td>각 멤버 기여를 별도 커밋으로 추적</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="create">
+    <h2>7. <code>create()</code> — worktree + tmux 자동</h2>
+    <p class="lead">Wizard \"Start\" 클릭 시 일어나는 모든 일. 풀 라운드트립.</p>
+
+    <div class="diagram">
+      <div class="caption">Create flow — Wizard → AgentTeamWatcher.create() → live UI</div>
+      <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+        <!-- Wizard -->
+        <rect x="20" y="20" width="180" height="50" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="110" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">USER</text>
+        <text x="110" y="58" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">Wizard Start 클릭</text>
+
+        <path d="M 110 70 L 110 100" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ca)"/>
+
+        <!-- Store -->
+        <rect x="20" y="100" width="180" height="50" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="110" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">RENDERER</text>
+        <text x="110" y="138" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">store.create(opts)</text>
+
+        <path d="M 200 125 L 240 125" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ca)"/>
+
+        <!-- IPC -->
+        <rect x="240" y="100" width="180" height="50" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="330" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">IPC</text>
+        <text x="330" y="138" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">teams:create</text>
+
+        <path d="M 420 125 L 460 125" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#ca)"/>
+
+        <!-- Watcher.create -->
+        <rect x="460" y="100" width="280" height="50" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="600" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">ELECTRON MAIN</text>
+        <text x="600" y="138" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">AgentTeamWatcher.create(opts)</text>
+
+        <!-- Steps -->
+        <path d="M 600 150 L 600 175" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#ca-o)"/>
+
+        <rect x="280" y="180" width="640" height="34" rx="5" fill="#11151c" stroke="#262e3a"/>
+        <text x="600" y="202" text-anchor="middle" font-family="Geist" font-size="12" fill="#9aa3b2">1. teamId = team-&lt;ts&gt;-&lt;rand6&gt; · mkdir &lt;wsPath&gt;/.claude/teams/&lt;teamId&gt;</text>
+
+        <rect x="280" y="222" width="640" height="34" rx="5" fill="#11151c" stroke="#262e3a"/>
+        <text x="600" y="244" text-anchor="middle" font-family="Geist" font-size="12" fill="#9aa3b2">2. config.json 작성 (멤버 + worktree/merge 전략)</text>
+
+        <rect x="280" y="264" width="640" height="34" rx="5" fill="#11151c" stroke="#60a5fa60"/>
+        <text x="600" y="286" text-anchor="middle" font-family="Geist" font-size="12" fill="#60a5fa">3. (isolated) git checkout -b team/&lt;teamId&gt; · 베이스 브랜치 생성</text>
+
+        <rect x="280" y="306" width="640" height="34" rx="5" fill="#11151c" stroke="#60a5fa60"/>
+        <text x="600" y="328" text-anchor="middle" font-family="Geist" font-size="12" fill="#60a5fa">4. (isolated) 멤버마다 git worktree add &lt;path&gt; -b team/&lt;teamId&gt;/&lt;agent&gt;</text>
+
+        <rect x="280" y="348" width="640" height="34" rx="5" fill="#11151c" stroke="#a78bfa60"/>
+        <text x="600" y="370" text-anchor="middle" font-family="Geist" font-size="12" fill="#a78bfa">5. (tmux 가용) 멤버마다 tmux new-session forge-team-&lt;teamId&gt;-&lt;agent&gt;</text>
+
+        <rect x="280" y="390" width="640" height="34" rx="5" fill="#11151c" stroke="#a78bfa60"/>
+        <text x="600" y="412" text-anchor="middle" font-family="Geist" font-size="12" fill="#a78bfa">6. (autoStartClaude) tmux send-keys 'claude' Enter — 자동 시작</text>
+
+        <!-- Feedback to UI -->
+        <path d="M 280 405 L 110 405 L 110 380" stroke="#4ade80" stroke-width="2" fill="none" marker-end="url(#ca-g)"/>
+        <text x="100" y="445" font-family="JetBrains Mono" font-size="10" fill="#4ade80">chokidar emit('change')</text>
+
+        <rect x="20" y="380" width="180" height="50" rx="6" fill="#161b24" stroke="#4ade80"/>
+        <text x="110" y="400" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4ade80">UI UPDATE</text>
+        <text x="110" y="418" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">TeamsRunSection 갱신</text>
+
+        <defs>
+          <marker id="ca" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/></marker>
+          <marker id="ca-o" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/></marker>
+          <marker id="ca-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#4ade80"/></marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="callout warn">
+      <strong>Graceful degradation:</strong> git/tmux 미설치 환경에서는 단계 3~6 이 skip 되고 config.json 만 작성됨. <code>hasGit()</code>/<code>hasTmux()</code> 사전 검사. <strong>Path traversal 방지:</strong> <code>isPathInside(teamRoot, worktreePath)</code> + agentId 정규식 sanitize <code>[^A-Za-z0-9_-]</code>.
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="liveview">
+    <h2>8. Run 라이브뷰 — 4영역 풀스크린</h2>
+    <p class="lead">Workspace 패널의 Run 카드 클릭 시 메인 영역 전체가 풀스크린으로 전환. 777genius 레퍼런스 차용.</p>
+
+    <div class="diagram">
+      <div class="caption">RunLiveView Layout · 회원가입 피처 팀 (5 members)</div>
+      <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+        <rect x="20" y="20" width="960" height="36" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <rect x="30" y="28" width="80" height="20" rx="3" fill="#1d242f" stroke="#313a48"/>
+        <text x="70" y="42" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">← Back</text>
+        <text x="42" y="50" font-family="JetBrains Mono" font-size="9" fill="#6b7280">esc</text>
+        <text x="140" y="42" font-family="Geist" font-size="13" font-weight="600" fill="#e6e9ef">회원가입 피처 팀</text>
+        <circle cx="252" cy="38" r="4" fill="#4ade80"/>
+        <text x="900" y="42" font-family="Geist" font-size="11" fill="#9aa3b2">Pause All  ·  Diff  ·  Merge  ·  ✕</text>
+
+        <rect x="20" y="66" width="180" height="350" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="36" y="86" font-family="JetBrains Mono" font-size="10" fill="#6b7280">MEMBERS</text>
+
+        <g transform="translate(30, 96)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#262e3a"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#22d3ee20" stroke="#22d3ee60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#22d3ee" font-weight="700">A</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">architect</text>
+          <circle cx="148" cy="14" r="3" fill="#9aa3b2"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">ADR 작성</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">22.4k tk · 3 files</text>
+        </g>
+        <g transform="translate(30, 156)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#60a5fa40"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#60a5fa20" stroke="#60a5fa60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#60a5fa" font-weight="700">F</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">flutter-ui</text>
+          <circle cx="148" cy="14" r="3" fill="#4ade80" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">SignupForm UI</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">41.9k tk · 6 files</text>
+        </g>
+        <g transform="translate(30, 216)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#a78bfa40"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#a78bfa20" stroke="#a78bfa60"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#a78bfa" font-weight="700">N</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">nestjs-auth</text>
+          <circle cx="148" cy="14" r="3" fill="#4ade80" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">JWT issue</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">38.1k tk · 4 files</text>
+        </g>
+        <g transform="translate(30, 276)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#f5a52440"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#f5a52420" stroke="#f5a52460"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#f5a524" font-weight="700">P</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">prisma-schema</text>
+          <circle cx="148" cy="14" r="3" fill="#f87171" class="pulse"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#f87171">⚠ blocked</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">12.8k tk · 2 files</text>
+        </g>
+        <g transform="translate(30, 336)">
+          <rect width="160" height="50" rx="4" fill="#161b24" stroke="#262e3a"/>
+          <rect x="8" y="8" width="20" height="20" rx="3" fill="#34d39920" stroke="#34d39960"/>
+          <text x="18" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#34d399" font-weight="700">E</text>
+          <text x="36" y="20" font-family="Geist" font-size="11" fill="#e6e9ef">test-e2e</text>
+          <circle cx="148" cy="14" r="3" fill="#6b7280"/>
+          <text x="36" y="34" font-family="JetBrains Mono" font-size="9" fill="#6b7280">queued</text>
+          <text x="36" y="44" font-family="JetBrains Mono" font-size="9" fill="#6b7280">0 tk · 0 files</text>
+        </g>
+
+        <g transform="translate(210, 66)">
+          <text x="0" y="20" font-family="JetBrains Mono" font-size="10" fill="#6b7280">TMUX SPLIT GRID — 2×2</text>
+          <rect x="0" y="30" width="280" height="170" rx="4" fill="#0b0e13" stroke="#262e3a"/>
+          <text x="10" y="46" font-family="JetBrains Mono" font-size="10" fill="#22d3ee">[ARCH] done</text>
+          <text x="10" y="62" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ # ADR-0007 written</text>
+          <text x="10" y="78" font-family="JetBrains Mono" font-size="10" fill="#4ade80">✓ 3 files</text>
+          <text x="10" y="94" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ _</text>
+
+          <rect x="290" y="30" width="280" height="170" rx="4" fill="#0b0e13" stroke="#60a5fa60"/>
+          <text x="300" y="46" font-family="JetBrains Mono" font-size="10" fill="#60a5fa">[UI] active</text>
+          <text x="300" y="62" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ flutter analyze lib/auth</text>
+          <text x="300" y="78" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">Analyzing auth...</text>
+          <text x="300" y="94" font-family="JetBrains Mono" font-size="10" fill="#4ade80">No issues found</text>
+          <text x="300" y="110" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">$ flutter test</text>
+          <text x="300" y="126" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ ✓ ✓</text>
+          <text x="300" y="142" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">› hot reload (124ms)_</text>
+
+          <rect x="0" y="210" width="280" height="170" rx="4" fill="#0b0e13" stroke="#a78bfa60"/>
+          <text x="10" y="226" font-family="JetBrains Mono" font-size="10" fill="#a78bfa">[API] active</text>
+          <text x="10" y="242" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ pnpm test:watch auth</text>
+          <text x="10" y="258" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">PASS auth.service.spec.ts</text>
+          <text x="10" y="274" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ hashes password</text>
+          <text x="10" y="290" font-family="JetBrains Mono" font-size="10" fill="#4ade80">  ✓ issues JWT</text>
+
+          <rect x="290" y="210" width="280" height="170" rx="4" fill="#0b0e13" stroke="#f8717160"/>
+          <text x="300" y="226" font-family="JetBrains Mono" font-size="10" fill="#f87171">[DB] blocked</text>
+          <text x="300" y="242" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ prisma migrate dev</text>
+          <text x="300" y="258" font-family="JetBrains Mono" font-size="10" fill="#f5a524">⚠ Drift detected</text>
+          <text x="300" y="274" font-family="JetBrains Mono" font-size="10" fill="#f87171">Error: Unique constraint</text>
+          <text x="300" y="290" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">     conflict on email</text>
+          <text x="300" y="320" font-family="JetBrains Mono" font-size="10" fill="#6b7280">$ # waiting on architect</text>
+        </g>
+
+        <rect x="800" y="66" width="180" height="350" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="816" y="86" font-family="JetBrains Mono" font-size="10" fill="#6b7280">ACTIVITY FEED</text>
+
+        <g transform="translate(810, 96)">
+          <text x="0" y="14" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:38:21</text>
+          <text x="0" y="28" font-family="Geist" font-size="11" fill="#60a5fa">flutter-ui edit</text>
+          <text x="0" y="42" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">signup_form.dart</text>
+          <text x="0" y="55" font-family="JetBrains Mono" font-size="9" fill="#4ade80">+124 -8</text>
+
+          <line x1="0" y1="65" x2="160" y2="65" stroke="#262e3a"/>
+
+          <text x="0" y="80" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:38:04</text>
+          <text x="0" y="94" font-family="Geist" font-size="11" fill="#a78bfa">nestjs-auth commit</text>
+          <text x="0" y="108" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">feat(auth): bcrypt + jwt</text>
+          <text x="0" y="121" font-family="JetBrains Mono" font-size="9" fill="#4ade80">4 files</text>
+
+          <line x1="0" y1="131" x2="160" y2="131" stroke="#262e3a"/>
+
+          <text x="0" y="146" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:37:51</text>
+          <text x="0" y="160" font-family="Geist" font-size="11" fill="#f87171">prisma-schema blocked</text>
+          <text x="0" y="174" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">User.email unique</text>
+          <text x="0" y="187" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">충돌</text>
+
+          <line x1="0" y1="197" x2="160" y2="197" stroke="#262e3a"/>
+
+          <text x="0" y="212" font-family="JetBrains Mono" font-size="9" fill="#6b7280">00:37:29</text>
+          <text x="0" y="226" font-family="Geist" font-size="11" fill="#ff6b35">architect decision</text>
+          <text x="0" y="240" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">refresh = httpOnly</text>
+          <text x="0" y="253" font-family="JetBrains Mono" font-size="9" fill="#9aa3b2">cookie, 14d</text>
+        </g>
+
+        <rect x="20" y="426" width="960" height="40" rx="6" fill="#0b0e13" stroke="#262e3a"/>
+        <text x="40" y="450" font-family="JetBrains Mono" font-size="11" fill="#9aa3b2">🔋  CPU 47%   ·   MEM 6.2 / 16 GB   ·   DISK +2.1 GB   ·   4 PTYs   ·   184.3k tokens   ·   38min</text>
+      </svg>
+    </div>
+
+    <h3>인터랙션</h3>
+    <ul style="font-size: 13.5px; color: var(--text-2);">
+      <li>멤버 카드 클릭 → 그 agent 의 pane 이 grid 에서 강조/확대 (focus mode)</li>
+      <li>pane 더블클릭 → 풀스크린, ESC 로 그리드 복귀</li>
+      <li>Activity Feed 항목 클릭 → 해당 파일 diff 인라인</li>
+      <li>멤버 카드 우상단 ⏸/▶ → pauseMember / resumeMember</li>
+      <li>멤버 \"터미널\" 아이콘 → 그 멤버의 tmux 세션 attach (새 터미널 탭)</li>
+    </ul>
+
+    <h3>멤버 state 시각</h3>
+    <div class="grid cols-3" style="margin-top: 12px;">
+      <div class="card"><span class="pill success">active</span><p class="desc" style="margin-top: 8px;">초록 도트 + pulse · 진행 중</p></div>
+      <div class="card"><span class="pill" style="color: var(--text-3);">done</span><p class="desc" style="margin-top: 8px;">회색 도트 · 작업 완료</p></div>
+      <div class="card"><span class="pill danger">blocked</span><p class="desc" style="margin-top: 8px;">빨강 도트 + pulse · 결정/입력 대기</p></div>
+      <div class="card"><span class="pill" style="color: var(--text-3);">queued</span><p class="desc" style="margin-top: 8px;">회색 도트 (no pulse) · 의존성 대기</p></div>
+      <div class="card"><span class="pill warning">paused</span><p class="desc" style="margin-top: 8px;">노랑 · 사용자가 일시정지</p></div>
+      <div class="card"><span class="pill" style="color: var(--text-4);">idle</span><p class="desc" style="margin-top: 8px;">대기 (할당 X)</p></div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="pause-resume">
+    <h2>9. Pause / Resume — tmux detach</h2>
+    <p class="lead">실제로 tmux 세션을 <strong>kill</strong> 하지 않음. <code>detach-client</code> 만 — agent 의 작업 컨텍스트 (history, 진행 중 커맨드) 그대로 유지.</p>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <span class="pill accent">pause(teamId)</span>
+        <h5 style="margin-top: 8px;">전체 일시정지</h5>
+        <p class="desc">모든 멤버 tmux 에 <code>detach-client</code> 보냄. config 의 <code>status: 'paused'</code>. 멤버별 state 도 'idle' 로</p>
+      </div>
+      <div class="card">
+        <span class="pill success">resume(teamId)</span>
+        <h5 style="margin-top: 8px;">전체 재개</h5>
+        <p class="desc">tmux 세션은 살아있으니 attach 만 끊긴 상태. status → 'active'. 사용자가 RunLiveView 열면 자동 재attach</p>
+      </div>
+      <div class="card">
+        <span class="pill accent">pauseMember(teamId, agentId)</span>
+        <h5 style="margin-top: 8px;">단일 멤버 일시정지</h5>
+        <p class="desc">한 멤버의 tmux 만 detach. 다른 멤버는 계속 진행. 의존 멤버가 있으면 자동 queued 로</p>
+      </div>
+      <div class="card">
+        <span class="pill success">resumeMember(teamId, agentId)</span>
+        <h5 style="margin-top: 8px;">단일 멤버 재개</h5>
+        <p class="desc">해당 멤버 state → 'active'. 의존 해제된 다른 queued 멤버도 자동 활성화</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="merge">
+    <h2>10. Merge + 충돌 해결</h2>
+    <p class="lead">팀 작업 끝나면 멤버 worktree 들의 변경을 베이스 브랜치 (<code>team/&lt;teamId&gt;</code>) 로 머지. 충돌 시 풀스크린 3-way diff 모달.</p>
+
+    <div class="diagram">
+      <div class="caption">Merge flow — RunLiveView Merge 버튼 → AgentTeamWatcher.merge()</div>
+      <svg viewBox="0 0 1000 220" xmlns="http://www.w3.org/2000/svg">
+        <rect x="20" y="20" width="180" height="50" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="110" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">USER</text>
+        <text x="110" y="58" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">Merge 클릭</text>
+
+        <path d="M 200 45 L 240 45" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#me)"/>
+
+        <rect x="240" y="20" width="280" height="50" rx="6" fill="#161b24" stroke="#262e3a"/>
+        <text x="380" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6b7280">CONFIRM DIALOG</text>
+        <text x="380" y="58" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">"멤버 X명 머지 확인"</text>
+
+        <path d="M 520 45 L 560 45" stroke="#9aa3b2" stroke-width="1.5" marker-end="url(#me)"/>
+
+        <rect x="560" y="20" width="280" height="50" rx="6" fill="#161b24" stroke="#ff6b35"/>
+        <text x="700" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#ff6b35">ELECTRON MAIN</text>
+        <text x="700" y="58" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">AgentTeamWatcher.merge()</text>
+
+        <!-- Branch -->
+        <path d="M 700 70 L 700 95" stroke="#ff6b35" stroke-width="1.5"/>
+
+        <rect x="120" y="100" width="320" height="50" rx="6" fill="#11151c" stroke="#4ade80"/>
+        <text x="280" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4ade80">SUCCESS PATH</text>
+        <text x="280" y="138" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">git merge --squash 또는 --no-ff</text>
+
+        <rect x="480" y="100" width="380" height="50" rx="6" fill="#11151c" stroke="#f87171"/>
+        <text x="670" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#f87171">CONFLICT PATH</text>
+        <text x="670" y="138" text-anchor="middle" font-family="Geist" font-size="11" fill="#e6e9ef">충돌 파일 추출 + git merge --abort</text>
+
+        <path d="M 280 150 L 280 175" stroke="#4ade80" stroke-width="1.5" marker-end="url(#me-g)"/>
+        <path d="M 670 150 L 670 175" stroke="#f87171" stroke-width="1.5" marker-end="url(#me-r)"/>
+
+        <rect x="120" y="180" width="320" height="34" rx="5" fill="#161b24" stroke="#4ade80"/>
+        <text x="280" y="202" text-anchor="middle" font-family="Geist" font-size="11" fill="#4ade80">토스트 + Run 종료 + cleanup</text>
+
+        <rect x="480" y="180" width="380" height="34" rx="5" fill="#161b24" stroke="#f87171"/>
+        <text x="670" y="202" text-anchor="middle" font-family="Geist" font-size="11" fill="#f87171">MergeConflictView 풀스크린 모달</text>
+
+        <defs>
+          <marker id="me" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#9aa3b2"/></marker>
+          <marker id="me-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#4ade80"/></marker>
+          <marker id="me-r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#f87171"/></marker>
+        </defs>
+      </svg>
+    </div>
+
+    <h3>MergeConflictView — 3-way diff</h3>
+    <p style="font-size: 13.5px;">풀스크린 오버레이 (z-index 200). 헤더 (충돌 카운트 + 닫기) + 좌측 충돌 파일 리스트 + 우측 3-column diff (ours / merged / theirs) + 푸터 액션 4개:</p>
+    <div class="grid cols-4">
+      <div class="card"><span class="pill info">Use ours</span><p class="desc" style="margin-top: 6px;">베이스 브랜치 버전 채택</p></div>
+      <div class="card"><span class="pill violet">Use theirs</span><p class="desc" style="margin-top: 6px;">멤버 브랜치 버전 채택</p></div>
+      <div class="card"><span class="pill accent">Manual resolve</span><p class="desc" style="margin-top: 6px;">에디터 열기 + 직접 편집</p></div>
+      <div class="card"><span class="pill danger">Abort merge</span><p class="desc" style="margin-top: 6px;">머지 취소, 멤버 worktree 그대로</p></div>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="remove">
+    <h2>11. Remove — 단계별 cleanup</h2>
+    <p class="lead">팀 삭제 = 디스크 정리 풀 체인. 각 단계 graceful — 실패해도 다음 단계 진행.</p>
+
+    <div class="timeline">
+      <div class="step">
+        <span class="num">1</span> <h6>tmux kill-session</h6>
+        <p>각 멤버의 <code>forge-team-&lt;id&gt;-&lt;agent&gt;</code> 세션 종료. 안 되면 다음으로</p>
+      </div>
+      <div class="step">
+        <span class="num">2</span> <h6>git worktree remove --force</h6>
+        <p>각 멤버 worktree 디렉터리 정리. 변경 미커밋 있어도 force 로 제거</p>
+      </div>
+      <div class="step">
+        <span class="num">3</span> <h6>git branch -D team/&lt;id&gt;/&lt;agent&gt;</h6>
+        <p>멤버 브랜치 삭제. 머지된 commit 도 brnach 만 사라짐</p>
+      </div>
+      <div class="step">
+        <span class="num">4</span> <h6>git branch -D team/&lt;id&gt;</h6>
+        <p>베이스 브랜치 삭제</p>
+      </div>
+      <div class="step">
+        <span class="num">5</span> <h6>rm -rf &lt;wsPath&gt;/.claude/teams/&lt;id&gt;</h6>
+        <p>config + 잔존 파일 통째 제거. chokidar 가 detect → store 갱신</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>주의:</strong> 5단계 모두 ignore-error. 어떤 단계가 실패해도 다음으로 진행. 결과는 \"부분 정리\" 가능 — 사용자가 직접 잔존 워크트리/세션 확인 필요할 수 있음.
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="council">
+    <h2>12. 곧 — Council 마일스톤 (v0.5.3)</h2>
+    <p class="lead">v0.5.2 까지가 \"한 모델 N명 멤버\" 라면, 0.5.3 은 \"한 task N개 모델\" — Council 패턴.</p>
+
+    <div class="callout future">
+      <strong>핵심 아이디어:</strong> 같은 task 를 Claude Opus + Codex GPT-5 + Sonnet 4.6 등 여러 모델이 보고 토론 라운드 → 합의 / 의견 차이를 사용자에게 노출.
+    </div>
+
+    <div class="diagram">
+      <div class="caption">Council Pattern (계획)</div>
+      <svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg">
+        <rect x="380" y="20" width="240" height="40" rx="6" fill="#161b24" stroke="#a78bfa"/>
+        <text x="500" y="44" text-anchor="middle" font-family="Geist" font-size="13" fill="#a78bfa">Task: \"PR 리뷰\"</text>
+
+        <path d="M 500 60 L 200 90" stroke="#9aa3b2" stroke-width="1.5"/>
+        <path d="M 500 60 L 500 90" stroke="#9aa3b2" stroke-width="1.5"/>
+        <path d="M 500 60 L 800 90" stroke="#9aa3b2" stroke-width="1.5"/>
+
+        <rect x="100" y="90" width="200" height="60" rx="6" fill="#161b24" stroke="#60a5fa"/>
+        <text x="200" y="112" text-anchor="middle" font-family="Geist" font-size="12" fill="#60a5fa" font-weight="600">Claude Opus 4.7</text>
+        <text x="200" y="132" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">정독, 보수적</text>
+
+        <rect x="400" y="90" width="200" height="60" rx="6" fill="#161b24" stroke="#34d399"/>
+        <text x="500" y="112" text-anchor="middle" font-family="Geist" font-size="12" fill="#34d399" font-weight="600">Codex GPT-5</text>
+        <text x="500" y="132" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">다른 접근</text>
+
+        <rect x="700" y="90" width="200" height="60" rx="6" fill="#161b24" stroke="#f59e0b"/>
+        <text x="800" y="112" text-anchor="middle" font-family="Geist" font-size="12" fill="#f59e0b" font-weight="600">Sonnet 4.6</text>
+        <text x="800" y="132" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">빠른 sanity check</text>
+
+        <path d="M 200 150 L 400 180" stroke="#9aa3b2" stroke-width="1.5"/>
+        <path d="M 500 150 L 500 180" stroke="#9aa3b2" stroke-width="1.5"/>
+        <path d="M 800 150 L 600 180" stroke="#9aa3b2" stroke-width="1.5"/>
+
+        <rect x="350" y="180" width="300" height="40" rx="6" fill="#11151c" stroke="#ff6b35"/>
+        <text x="500" y="204" text-anchor="middle" font-family="Geist" font-size="12" fill="#ff6b35">Round 2 — 서로 의견 보고 비판/동의</text>
+
+        <path d="M 500 220 L 500 250" stroke="#ff6b35" stroke-width="1.5" marker-end="url(#cl)"/>
+
+        <rect x="200" y="250" width="600" height="50" rx="6" fill="#11151c" stroke="#262e3a"/>
+        <text x="500" y="270" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#9aa3b2">SYNTHESIS</text>
+        <text x="500" y="288" text-anchor="middle" font-family="Geist" font-size="12" fill="#e6e9ef">✓ 3 동의 → 자동 진행 · ⚠ 2 vs 1 → 사용자 결정</text>
+
+        <defs>
+          <marker id="cl" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#ff6b35"/></marker>
+        </defs>
+      </svg>
+    </div>
+
+    <h3>0.5.3 에서 추가될 것</h3>
+    <div class="grid cols-2">
+      <div class="card">
+        <h5>Settings → Agent matrix</h5>
+        <p class="desc">18 agents × 모델 dropdown — 워크스페이스별 override. 보안 감사는 Codex, 테스트 작성은 Haiku, UI 는 Opus 같은 식의 자유 매핑</p>
+      </div>
+      <div class="card">
+        <h5>Council Composition 타입</h5>
+        <p class="desc">기존 Composition (멤버 = 다른 역할) + 새 타입 (멤버 = 같은 agent 다른 모델). Pre-built: \"Review council\", \"Implement comparison\", \"Architect council\"</p>
+      </div>
+      <div class="card">
+        <h5>Wizard Step 2 \"Council mode\" 토글</h5>
+        <p class="desc">활성 시 멤버 선택 = 모델 다양화. Step 4 확인 화면에 \"3 model rounds\" 같은 요약</p>
+      </div>
+      <div class="card">
+        <h5>RunLiveView \"Discussion\" 탭</h5>
+        <p class="desc">라운드별 발언 + 모델 배지 + 합의/반대 시각 분리. 합의 항목 ✓ / 충돌 항목 ⚠ 사용자 결정 highlight</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section id="summary">
+    <h2>13. 요약 + 한계</h2>
+
+    <div class="stats">
+      <div class="stat"><div class="v">18</div><div class="l">agent 풀</div></div>
+      <div class="stat"><div class="v">2 × 2</div><div class="l">전략 조합</div></div>
+      <div class="stat"><div class="v">5</div><div class="l">라이프사이클 단계</div></div>
+      <div class="stat"><div class="v">9</div><div class="l">IPC 채널</div></div>
+    </div>
+
+    <h3>구현된 것 (v0.5.2 기준)</h3>
+    <ul style="font-size: 13.5px; color: var(--text-2);">
+      <li>✅ Run vs Composition 분리 + 워크스페이스 격리</li>
+      <li>✅ Wizard 4-step 풀</li>
+      <li>✅ <code>create()</code> 시 worktree + tmux 자동 spawn + autoStartClaude</li>
+      <li>✅ RunLiveView 풀스크린 4영역</li>
+      <li>✅ Pause / Resume / pauseMember / resumeMember (tmux detach)</li>
+      <li>✅ Merge + MergeConflictView 풀스크린 3-way diff</li>
+      <li>✅ Remove 단계별 cleanup</li>
+      <li>✅ Library Compositions 탭 + Apply</li>
+      <li>✅ Workspace 격리 (chokidar setWorkspace)</li>
+    </ul>
+
+    <h3>아직 (한계)</h3>
+    <ul style="font-size: 13.5px; color: var(--text-2);">
+      <li>⏳ Council 패턴 (모델 토론) — v0.5.3 마일스톤</li>
+      <li>⏳ MergeConflictView 의 \"Manual resolve\" — 에디터 spawn 까지 미구현 (UI 만)</li>
+      <li>⏳ \"Save as Composition\" UI — 현재 Run 을 Composition 으로 저장하는 흐름 (RunLiveView 내 메뉴)</li>
+      <li>⏳ Run history — \"완료된 팀\" 목록 (현재는 active/paused/blocked 만 표시)</li>
+      <li>⏳ 팀 간 의존성 — 팀 A 끝나면 팀 B 자동 시작</li>
+      <li>⏳ 멤버 task 자동 분해 — 현재는 사용자가 task 텍스트 수동 입력. AI 가 goal → 멤버별 task 자동 생성</li>
+    </ul>
+
+    <div class="callout">
+      <strong>한 줄 정리:</strong> Wizard 한 번 → Forge Studio 가 worktree + tmux + Claude Code 까지 자동으로 N개 spawn → 라이브 모니터링 → 충돌 시 3-way diff → 정리까지 풀 자동화. 0.5.3 부터 \"같은 task 다중 모델 토론\" 까지 추가.
+    </div>
+  </section>
+
+  <footer>
+    Forge Studio v0.5.2 · 팀 시스템 문서 · 2026-05-08<br/>
+    <a href="https://github.com/mstagon/forge-studiov2" style="color: var(--text-3);">github.com/mstagon/forge-studiov2</a>
+    · <a href="harness-architecture.html" style="color: var(--text-3);">전체 하네스 아키텍처 문서</a>
+  </footer>
+
+</div>
+</body>
+</html>
