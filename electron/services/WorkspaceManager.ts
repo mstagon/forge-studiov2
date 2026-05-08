@@ -43,6 +43,137 @@ export interface SplitReposResult {
   ownerResolved: string | null
 }
 
+/**
+ * Update preview shapes — emitted by `previewHarnessUpdate` so the renderer
+ * can show added / removed / modified lists with a unified diff per modified
+ * file before the user actually applies the update.
+ */
+export interface UpdatePreviewFile {
+  /** POSIX-style relative path within `.claude/`. */
+  rel: string
+  size?: number
+}
+
+export interface UpdatePreviewModified {
+  rel: string
+  /** True when the file is binary (or differs in encoding) — diff omitted. */
+  binary: boolean
+  /** Unified diff (empty for binary). */
+  diff: string
+}
+
+export interface UpdatePreview {
+  added: UpdatePreviewFile[]
+  removed: UpdatePreviewFile[]
+  modified: UpdatePreviewModified[]
+  /** Count of files identical to the template. */
+  unchanged: number
+}
+
+/** Recursively walk `root` and return POSIX-style relative paths to every file. */
+async function listFilesRecursive(root: string): Promise<string[]> {
+  const out: string[] = []
+  const walk = async (dir: string): Promise<void> => {
+    let entries: import('fs').Dirent[]
+    try {
+      entries = (await fs.readdir(dir, { withFileTypes: true })) as import('fs').Dirent[]
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(abs)
+      } else if (entry.isFile() || entry.isSymbolicLink()) {
+        const rel = path.relative(root, abs).split(path.sep).join('/')
+        out.push(rel)
+      }
+    }
+  }
+  await walk(root)
+  return out
+}
+
+async function statSize(abs: string): Promise<number | undefined> {
+  try {
+    const st = await fs.stat(abs)
+    return st.size
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Read a file up to ~512KB. Files containing a NUL byte or exceeding the
+ * limit are flagged binary so the diff machinery can skip them.
+ */
+async function readFileLimited(
+  abs: string,
+  maxBytes = 512 * 1024,
+): Promise<{ content: string; binary: boolean }> {
+  try {
+    const st = await fs.stat(abs)
+    if (st.size > maxBytes) return { content: '', binary: true }
+    const buf = await fs.readFile(abs)
+    if (buf.includes(0)) return { content: '', binary: true }
+    return { content: buf.toString('utf-8'), binary: false }
+  } catch {
+    return { content: '', binary: true }
+  }
+}
+
+/**
+ * Minimal unified-diff generator. We avoid pulling in a diff dep — we emit
+ * a coarse "remove all old / add all new" hunk when files differ. The
+ * renderer just colours the output; precise hunking is non-essential for the
+ * preview UX.
+ */
+function unifiedDiff(rel: string, oldText: string, newText: string): string {
+  const oldLines = oldText.split(/\r?\n/)
+  const newLines = newText.split(/\r?\n/)
+  const hunks: string[] = []
+  hunks.push(`--- a/${rel}`)
+  hunks.push(`+++ b/${rel}`)
+  // Compute LCS-lite: walk both arrays in parallel, group equal runs together.
+  let i = 0
+  let j = 0
+  const lines: string[] = []
+  while (i < oldLines.length || j < newLines.length) {
+    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+      lines.push(' ' + oldLines[i])
+      i++
+      j++
+      continue
+    }
+    // Find next sync point — the next line that exists in both within a small window.
+    const window = 20
+    let synced = false
+    for (let k = 1; k < window && !synced; k++) {
+      if (i + k < oldLines.length && oldLines[i + k] === newLines[j]) {
+        for (let kk = 0; kk < k; kk++) lines.push('-' + oldLines[i + kk])
+        i += k
+        synced = true
+      } else if (j + k < newLines.length && newLines[j + k] === oldLines[i]) {
+        for (let kk = 0; kk < k; kk++) lines.push('+' + newLines[j + kk])
+        j += k
+        synced = true
+      }
+    }
+    if (!synced) {
+      if (i < oldLines.length) {
+        lines.push('-' + oldLines[i])
+        i++
+      }
+      if (j < newLines.length) {
+        lines.push('+' + newLines[j])
+        j++
+      }
+    }
+  }
+  hunks.push('@@ ' + `-1,${oldLines.length} +1,${newLines.length}` + ' @@')
+  return [...hunks, ...lines].join('\n')
+}
+
 const STORE_PATH = () => path.join(app.getPath('userData'), 'workspaces.json')
 
 export class WorkspaceManager {
@@ -239,6 +370,76 @@ export class WorkspaceManager {
     } catch {
       // Symlink failure shouldn't break workspace creation/update.
     }
+  }
+
+  /**
+   * Diff a workspace's `.claude/` against the bundled template so the renderer
+   * can show "what will change" before the user clicks Update. Walks every
+   * file under both trees and bucketises into added (only in template),
+   * removed (only in workspace), modified (different content), unchanged.
+   * For modified files we generate a unified diff; binary or huge files are
+   * marked binary and skip the diff payload.
+   */
+  async previewHarnessUpdate(options: {
+    workspacePath: string
+    templatePath: string
+  }): Promise<UpdatePreview> {
+    const { workspacePath, templatePath } = options
+    const claudeDir = path.join(workspacePath, '.claude')
+    const out: UpdatePreview = {
+      added: [],
+      removed: [],
+      modified: [],
+      unchanged: 0,
+    }
+    if (!(await fs.pathExists(templatePath))) return out
+    const tplFiles = await listFilesRecursive(templatePath)
+    const wsFiles = (await fs.pathExists(claudeDir)) ? await listFilesRecursive(claudeDir) : []
+    // Skip preserved patterns — these never come from the template.
+    const isPreserved = (rel: string) =>
+      rel.includes('settings.local.json') ||
+      rel.startsWith('agent-memory/') ||
+      rel.startsWith('.pdca-')
+
+    const tplSet = new Set(tplFiles)
+    const wsSet = new Set(wsFiles)
+
+    for (const rel of tplFiles) {
+      if (!wsSet.has(rel)) {
+        const abs = path.join(templatePath, rel)
+        const size = await statSize(abs)
+        out.added.push({ rel, size })
+        continue
+      }
+      const tplAbs = path.join(templatePath, rel)
+      const wsAbs = path.join(claudeDir, rel)
+      const tpl = await readFileLimited(tplAbs)
+      const ws = await readFileLimited(wsAbs)
+      if (tpl.binary || ws.binary) {
+        if (tpl.content !== ws.content) {
+          out.modified.push({ rel, binary: true, diff: '' })
+        } else {
+          out.unchanged++
+        }
+        continue
+      }
+      if (tpl.content === ws.content) {
+        out.unchanged++
+      } else {
+        out.modified.push({ rel, binary: false, diff: unifiedDiff(rel, ws.content, tpl.content) })
+      }
+    }
+    for (const rel of wsFiles) {
+      if (!tplSet.has(rel) && !isPreserved(rel)) {
+        const abs = path.join(claudeDir, rel)
+        const size = await statSize(abs)
+        out.removed.push({ rel, size })
+      }
+    }
+    out.added.sort((a, b) => a.rel.localeCompare(b.rel))
+    out.removed.sort((a, b) => a.rel.localeCompare(b.rel))
+    out.modified.sort((a, b) => a.rel.localeCompare(b.rel))
+    return out
   }
 
   /**
