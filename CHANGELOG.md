@@ -4,6 +4,81 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-05-08
+
+팀 시스템 풀 자동화 + 하네스 저작 GUI 첫 단계 + 다중 프리셋 + 첫 실행
+온보딩 + 관측성 인프라. 2개 PR (#8 #9) 의 변경.
+
+### Added — 팀 시스템 풀 자동화 (PR-E)
+- **워크트리 자동 생성** — Wizard 의 isolated 전략 시 `team/<id>` 베이스
+  브랜치 + 멤버별 `team/<id>/<agent>` 브랜치 + worktree 자동
+  (`<wsPath>/.claude/teams/<id>/worktrees/<agent>`)
+- **멤버별 tmux 자동 spawn** — `forge-team-<id>-<agent>` 세션 +
+  `autoStartClaude` (기본 true) 로 `claude` 명령 자동 실행
+- **팀 일시정지/재개** — `pause` / `resume` / `pauseMember` /
+  `resumeMember` IPC + tmux `detach-client` (kill X, context 유지)
+- **머지 충돌 3-way diff 뷰** — `merge()` IPC + 충돌 시
+  `MergeConflictView` 풀스크린 모달 (3-column ours/merged/theirs +
+  Use ours / Use theirs / Manual resolve / Abort)
+- **팀 삭제 정리** — tmux kill + worktree --force 제거 + 브랜치 삭제
+  단계별 graceful
+- 보안: `isPathInside` + agentId 정규식 sanitize 로 path traversal 방지
+- 미설치 환경 (git/tmux): graceful — config 자체는 항상 작성
+
+### Added — 하네스 저작 + 검증 + 프리셋 (PR-F)
+- **하네스 린트** — frontmatter 누락 / 깨진 참조 / 중복 이름 /
+  CLAUDE.md 라우팅 표 정합 / skill-injector grep ↔ SKILL.md 존재 /
+  mcp.json 유효성 / settings.json hooks 스크립트 존재 검사.
+  errors / warnings / info 분류
+- **업데이트 diff 프리뷰** — 번들 template vs 워크스페이스 .claude/
+  비교, added/removed/modified + unified diff 생성. HarnessUpdateBanner
+  의 \"View diff\" 버튼 (UI 후속)
+- **프리셋 시스템** — 다중 프리셋 (`flutter-nest` / `nextjs-only` /
+  `empty`) + 사용자 정의 (`~/.claude/my-presets/`). PresetManager 가
+  list/apply
+- **Agent / Skill 편집기 (CRUD UI 첫 단계)** — frontmatter 필드 +
+  body markdown 편집 모달. Settings → Harness → Authoring 카드에서
+  호출. 충돌 검증 + 필수 필드 검사
+
+### Added — 관측성
+- **HookProfiler** — 모든 훅 실행을 wrapping 해서 시간 / exit 코드 /
+  stdout 기록. JSONL 저장 (`~/.claude-forge/hook-profiles.jsonl`).
+  `recordExecution` / `getRecent` / `getStats` 메서드. 평균 실행 시간 /
+  성공률 / 최근 실패 집계
+- **에러 로그 인프라** — IPC / PTY / Git / MCP / FS / VALIDATION 6개
+  카테고리 `AppError` 클래스. preload `errorLog` 네임스페이스
+
+### Added — i18n 인프라
+- 한/영 두 locale 지원 인프라 (`src/i18n/`). 핵심 50개 문자열을
+  `ko.json` / `en.json` 으로 분리. localStorage 영속
+  (`forge-studio.language`)
+- 현재는 stub (i18next 의존성 미도입) — `setLanguage` / `getLanguage` /
+  `t(key)` API 안정. 후속 PR 에서 실제 i18next 교체
+
+### Added — 첫 실행 온보딩
+- 풀스크린 5-step 마법사 — 환영 / 의존성 체크 (git/tmux/claude-code/
+  code-review-graph) / 첫 워크스페이스 / 하네스 소개 + 단축키 /
+  첫 팀 \"Sample Run\"
+- `localStorage.forge.hasOnboarded` 영속, Settings → General 에
+  \"Show onboarding again\" 토글
+- Wizard 가 `initialMembers` prop 받아 멤버 prefilled 상태로 열림
+
+### Added — 문서
+- **하네스 아키텍처 문서** — `docs/harness-architecture.html` 단일
+  HTML, 12 섹션 + 8개 SVG 다이어그램 (3-tier / Hook sequence / Skill
+  injection / 워크스페이스 격리 / Wizard 흐름 / RunLiveView mockup /
+  Stop hook chain). 다크 테마 + Forge 디자인 토큰
+
+### 보류 (다음 마이너)
+- Command / Hook / MCP / Permissions 편집기 — EditorShell 패턴 그대로
+  재사용 가능, 짧은 작업
+- Library 5탭 행의 [편집][복제][삭제] 메뉴 wire
+- HarnessLintPanel UI / HarnessUpdatePreview UI / SessionPreview UI /
+  HookProfileDashboard UI / SettingsErrorLog UI (백엔드 모두 완성,
+  UI 컴포넌트만)
+- 실제 i18next 도입 + 한/영 번역 풀 진행
+- GitHub 라벨 / PR / ISSUE 템플릿 (#1-9)
+
 ## [0.4.1] — 2026-05-07
 
 ### Fixed
