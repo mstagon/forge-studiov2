@@ -25,6 +25,8 @@ interface QuickAction {
   i: React.ReactNode
   t: string
   k: string
+  action?: () => void | Promise<void>
+  disabled?: boolean
 }
 
 export interface DashboardPanelWiredProps {
@@ -97,7 +99,13 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
     activeWorkspace,
     scanHarness,
     scanMcp,
+    updateHarness,
   } = useWorkspaceStore()
+
+  const harnessUpdateAvailable =
+    !!installedHarnessVersion &&
+    !!bundledHarnessVersion &&
+    installedHarnessVersion !== bundledHarnessVersion
 
   // Make sure data is fresh whenever this panel mounts (e.g. via sidebar nav).
   useEffect(() => {
@@ -206,19 +214,66 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
     },
   ]
 
+  const wsPath = activeWorkspace?.path
   const actions: QuickAction[] = [
-    { i: <Icon.Plus size={13} />, t: '새 팀 만들기', k: '⌘N' },
-    { i: <Icon.Bolt size={13} />, t: '하네스 업데이트', k: '⌘⇧U' },
-    { i: <Icon.Sparkle size={13} />, t: 'skill 추가', k: '⌘⇧S' },
-    { i: <Icon.Cube size={13} />, t: 'MCP 추가', k: '⌘⇧M' },
-    { i: <Icon.Code size={13} />, t: 'command 작성', k: '⌘⇧C' },
-    { i: <Icon.Folder size={13} />, t: '워크스페이스 추가', k: '⌘O' },
+    {
+      i: <Icon.Plus size={13} />,
+      t: '새 팀 만들기',
+      k: '⌘N',
+      action: () => {
+        window.dispatchEvent(new CustomEvent('forge:new-run'))
+      },
+    },
+    {
+      i: <Icon.Bolt size={13} />,
+      t: '하네스 업데이트',
+      k: '',
+      disabled: !harnessUpdateAvailable,
+      action: () => {
+        if (!wsPath) return
+        void updateHarness()
+      },
+    },
+    {
+      i: <Icon.Sparkle size={13} />,
+      t: 'skill 추가',
+      k: '',
+      action: () => {
+        window.dispatchEvent(new CustomEvent('forge:nav-library', { detail: { tab: 'skills' } }))
+      },
+    },
+    {
+      i: <Icon.Cube size={13} />,
+      t: 'MCP 추가',
+      k: '',
+      action: () => {
+        window.dispatchEvent(new CustomEvent('forge:nav-settings', { detail: { section: 'harness', card: 'mcp-servers' } }))
+      },
+    },
+    {
+      i: <Icon.Code size={13} />,
+      t: 'command 작성',
+      k: '',
+      action: () => {
+        window.dispatchEvent(new CustomEvent('forge:nav-library', { detail: { tab: 'commands' } }))
+      },
+    },
+    {
+      i: <Icon.Folder size={13} />,
+      t: '워크스페이스 열기',
+      k: '',
+      action: async () => {
+        const result = await window.api.system
+          .showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: '기존 폴더 열기' })
+          .catch(() => null)
+        if (result && !result.canceled && result.filePaths[0]) {
+          window.dispatchEvent(new CustomEvent('forge:open-folder', { detail: { path: result.filePaths[0] } }))
+        }
+      },
+    },
   ]
 
-  const harnessUpdateAvailable =
-    installedHarnessVersion &&
-    bundledHarnessVersion &&
-    installedHarnessVersion !== bundledHarnessVersion
+
 
   return (
     <div
@@ -523,6 +578,8 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
             {actions.map((a, i) => (
               <button
                 key={i}
+                onClick={a.disabled ? undefined : () => void a.action?.()}
+                disabled={a.disabled}
                 style={{
                   width: '100%',
                   display: 'flex',
@@ -532,20 +589,21 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
                   borderRadius: 5,
                   background: 'transparent',
                   border: '1px solid transparent',
-                  color: 'var(--text-2)',
+                  color: a.disabled ? 'var(--text-4)' : 'var(--text-2)',
                   fontSize: 12.5,
-                  cursor: 'pointer',
+                  cursor: a.disabled ? 'not-allowed' : 'pointer',
+                  opacity: a.disabled ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-3)'
+                  if (!a.disabled) e.currentTarget.style.background = 'var(--bg-3)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
               >
-                <span style={{ color: 'var(--accent)' }}>{a.i}</span>
+                <span style={{ color: a.disabled ? 'var(--text-3)' : 'var(--accent)' }}>{a.i}</span>
                 <span style={{ flex: 1, textAlign: 'left' }}>{a.t}</span>
-                <Kbd>{a.k}</Kbd>
+                {a.k && <Kbd>{a.k}</Kbd>}
               </button>
             ))}
           </div>

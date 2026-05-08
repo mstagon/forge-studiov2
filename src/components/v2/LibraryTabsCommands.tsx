@@ -6,7 +6,7 @@
  * "+ 새 커맨드" to open CommandEditor in create mode.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Btn } from './primitives'
 import { Icon } from './icons'
 import { COMMANDS_LIB, type LibCommand } from './LibraryData'
@@ -36,6 +36,16 @@ export function CommandsTab() {
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [deleting, setDeleting] = useState<{ name: string } | null>(null)
   const [toast, setToast] = useState<{ message: string } | null>(null)
+
+  // Library-level "New" button → forge:library-new with tab='commands'.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab === 'commands' && workspacePath) setEditing({})
+    }
+    window.addEventListener('forge:library-new', handler)
+    return () => window.removeEventListener('forge:library-new', handler)
+  }, [workspacePath])
 
   const builtin = items.filter((c) => c.builtin)
   const custom = items.filter((c) => !c.builtin)

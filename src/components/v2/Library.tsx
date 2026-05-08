@@ -11,7 +11,7 @@
  * Source: design handoff at /tmp/forge_design/forge/project/src/library.jsx
  */
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 // TODO: foundation import — adjust if foundation barrels things differently.
 import { Btn, Pill, AvatarStack } from './primitives'
 import { Icon } from './icons'
@@ -58,6 +58,21 @@ interface TabSpec {
 
 export function Library({ workspace, onApplyComposition }: LibraryProps) {
   const [tab, setTab] = useState<TabId>('compositions')
+
+  // ── Listen for forge:library-tab events (from Dashboard quick actions /
+  // command palette) → switch tab so external nav lands on the right list.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (!detail?.tab) return
+      const valid: TabId[] = ['compositions', 'agents', 'skills', 'commands', 'hooks', 'presets']
+      if ((valid as string[]).includes(detail.tab)) {
+        setTab(detail.tab as TabId)
+      }
+    }
+    window.addEventListener('forge:library-tab', handler)
+    return () => window.removeEventListener('forge:library-tab', handler)
+  }, [])
   // Counts reflect real scanner data when present; seed otherwise.
   const realComps = useLibraryStore((s) => s.compositions)
   const realAgents = useLibraryStore((s) => s.agents)
@@ -111,10 +126,42 @@ export function Library({ workspace, onApplyComposition }: LibraryProps) {
             </div>
           </div>
           <div style={{ flex: 1 }} />
-          <Btn variant="ghost" icon={<Icon.Search size={13} />}>
+          <Btn
+            variant="ghost"
+            icon={<Icon.Search size={13} />}
+            onClick={() => {
+              // Cross-tab search lives in the Command Palette (⌘K) where the
+              // user can fuzzy-match agent / skill / command names regardless
+              // of the active tab. Each tab also has its own in-context search
+              // for finer filtering.
+              window.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'k',
+                metaKey: true,
+                bubbles: true,
+              }))
+            }}
+            title="Command Palette 열기 (⌘K) — 라이브러리 전체 검색"
+          >
             Search library
           </Btn>
-          <Btn variant="primary" icon={<Icon.Plus size={13} />}>
+          <Btn
+            variant="primary"
+            icon={<Icon.Plus size={13} />}
+            onClick={() => {
+              // Each tab owns its own create flow (uses LibraryRowMenu's
+              // editors). The fastest non-duplicating approach is to
+              // dispatch a custom event that the active tab listens for.
+              window.dispatchEvent(
+                new CustomEvent('forge:library-new', { detail: { tab } }),
+              )
+            }}
+            title={
+              tab === 'compositions'
+                ? 'compositions 생성은 v0.6.0 — 지금은 Wizard에서 팀을 만든 뒤 저장하세요'
+                : `새 ${tab.slice(0, -1)} 만들기`
+            }
+            disabled={tab === 'compositions' || tab === 'presets'}
+          >
             New {tab === 'compositions' ? 'composition' : tab.slice(0, -1)}
           </Btn>
         </div>

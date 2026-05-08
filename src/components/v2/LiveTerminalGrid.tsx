@@ -417,10 +417,14 @@ export function LiveTerminalGrid({
   }, [members])
 
   // Prune hosts for agents that vanish (member removed) or lose tmuxPaneId.
+  // Deps narrow to the actual triggers — without these, the effect runs every
+  // render and reattachAll() can fire during reconciliation, which together
+  // with the registry's force-render subscribe creates a render loop that
+  // surfaces as React error #310.
   useEffect(() => {
     registry.pruneHosts(liveAgentKeys)
     registry.reattachAll()
-  })
+  }, [liveAgentKeys, registry])
 
   const layout = useMemo(() => {
     const n = members.length
@@ -461,12 +465,18 @@ export function LiveTerminalGrid({
 
   let layoutNode: React.ReactNode
 
+  // If the fullscreen target vanishes (member removed while in fullscreen),
+  // exit fullscreen on the next render cycle. This effect-based recovery
+  // replaces a previous setTimeout-during-render that triggered React #310.
+  useEffect(() => {
+    if (!fullscreenAgentId) return
+    if (!members.some((m) => m.agentId === fullscreenAgentId)) {
+      setFullscreenAgentId(null)
+    }
+  }, [fullscreenAgentId, members])
+
   if (fullscreenAgentId) {
     const fs = members.find((m) => m.agentId === fullscreenAgentId)
-    if (!fs) {
-      // Member vanished while fullscreen — drop back to grid.
-      setTimeout(() => setFullscreenAgentId(null), 0)
-    }
     layoutNode = fs ? (
       <div style={{ flex: 1, minHeight: 0, padding: 8 }}>
         <PaneShell

@@ -319,19 +319,44 @@ export function TopBar({
       <div className="app-no-drag" style={{
         display: 'flex', alignItems: 'center', gap: 8, paddingRight: 10,
       }}>
-        <button style={{
-          height: 24, padding: '0 8px', borderRadius: 5,
-          background: 'transparent', border: '1px solid var(--line-2)',
-          display: 'flex', alignItems: 'center', gap: 6,
-          color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer',
-        }}>
+        <button
+          title="모델 선택은 v0.6.0에서 활성화됩니다 — 현재는 sonnet-4.5 고정"
+          onClick={() => {
+            // Model picker UI ships in v0.6.0 — for now route the user to
+            // Settings → Agents → "Models per role" where the per-role model
+            // dropdowns already render (read-only).
+            window.dispatchEvent(
+              new CustomEvent('forge:nav-settings', {
+                detail: { section: 'agents' },
+              }),
+            )
+          }}
+          style={{
+            height: 24, padding: '0 8px', borderRadius: 5,
+            background: 'transparent', border: '1px solid var(--line-2)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer',
+          }}
+        >
           <Icon.Sparkle size={12} style={{ color: 'var(--accent)' }} />
           <span className="mono" style={{ fontSize: 11 }}>{model}</span>
           <Pill style={{ background: 'transparent', border: '1px solid var(--line-2)' }}>
             {modelEffort}
           </Pill>
         </button>
-        <button title="Notifications" style={{ ...iconBtn, position: 'relative' }}>
+        <button
+          title="알림 — Error Log 열기"
+          onClick={() => {
+            // Bell currently routes to the Error Log section of settings; once
+            // a real notifications inbox lands it'll open a dropdown instead.
+            window.dispatchEvent(
+              new CustomEvent('forge:nav-settings', {
+                detail: { section: 'error-log' },
+              }),
+            )
+          }}
+          style={{ ...iconBtn, position: 'relative', cursor: 'pointer' }}
+        >
           <Icon.Bell size={14} />
           {hasNotifications && (
             <span style={{

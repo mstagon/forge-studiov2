@@ -10,7 +10,7 @@
  * fields that won't be in real agent files.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Btn, Pill, Dot } from './primitives'
 import { Icon } from './icons'
 import {
@@ -53,6 +53,17 @@ export function AgentsTab() {
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [deleting, setDeleting] = useState<{ name: string } | null>(null)
   const [toast, setToast] = useState<{ message: string } | null>(null)
+
+  // Library-level "New" button dispatches forge:library-new — each tab listens
+  // for its own kind so the editor opens without duplicating the modal.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab === 'agents' && workspacePath) setEditing({})
+    }
+    window.addEventListener('forge:library-new', handler)
+    return () => window.removeEventListener('forge:library-new', handler)
+  }, [workspacePath])
 
   const filtered = items.filter((a) => {
     if (filter !== 'all' && a.owner !== filter) return false
@@ -322,7 +333,21 @@ function AgentDetail({ agent, canEdit, onEdit }: AgentDetailProps) {
             Edit
           </Btn>
         )}
-        <Btn variant="primary" icon={<Icon.Plus size={11} />}>
+        <Btn
+          variant="primary"
+          icon={<Icon.Plus size={11} />}
+          onClick={() => {
+            // "Add to run" wires to the team-create wizard — prefill this
+            // single agent so the user can finalize team metadata. The
+            // global forge:new-run listener in App.tsx receives the prefill.
+            window.dispatchEvent(
+              new CustomEvent('forge:new-run', {
+                detail: { prefillMembers: [agent.id] },
+              }),
+            )
+          }}
+          title="이 agent로 새 팀 위저드 열기"
+        >
           Add to run
         </Btn>
       </div>

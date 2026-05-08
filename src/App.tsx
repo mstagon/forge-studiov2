@@ -225,6 +225,58 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // ── Dashboard quick action bus ──────────────────────────────────
+  // DashboardPanel emits CustomEvent('forge:*') to request app-level actions
+  // since the panel itself doesn't own the wizard / sidebar / dialog state.
+  useEffect(() => {
+    const handleNewRun = (e: Event) => {
+      const detail = (e as CustomEvent<{ prefillMembers?: string[] }>).detail
+      // Library "Add to run" passes a single-member prefill — preserve it so
+      // the wizard opens with that agent already selected. Dashboard's plain
+      // "새 팀 만들기" still emits with no detail, so we fall back to undefined.
+      setWizardPrefill(
+        detail?.prefillMembers && detail.prefillMembers.length > 0
+          ? detail.prefillMembers
+          : undefined,
+      )
+      setWizardOpen(true)
+    }
+    const handleOpenFolder = (e: Event) => {
+      const detail = (e as CustomEvent<{ path: string }>).detail
+      if (detail?.path) void openWorkspace(detail.path)
+    }
+    const handleNavLibrary = (e: Event) => {
+      setView('library')
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab) {
+        // Library tab is owned by Library component — broadcast a follow-up
+        // event it can pick up after mount.
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('forge:library-tab', { detail: { tab: detail.tab } }))
+        }, 50)
+      }
+    }
+    const handleNavSettings = (e: Event) => {
+      setView('settings')
+      const detail = (e as CustomEvent<{ section?: string; card?: string }>).detail
+      if (detail) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('forge:settings-target', { detail }))
+        }, 50)
+      }
+    }
+    window.addEventListener('forge:new-run', handleNewRun)
+    window.addEventListener('forge:open-folder', handleOpenFolder)
+    window.addEventListener('forge:nav-library', handleNavLibrary)
+    window.addEventListener('forge:nav-settings', handleNavSettings)
+    return () => {
+      window.removeEventListener('forge:new-run', handleNewRun)
+      window.removeEventListener('forge:open-folder', handleOpenFolder)
+      window.removeEventListener('forge:nav-library', handleNavLibrary)
+      window.removeEventListener('forge:nav-settings', handleNavSettings)
+    }
+  }, [openWorkspace])
+
   // ── Run + palette wiring ────────────────────────────────────────
   const onSwitchWorkspace = (id: string) => {
     const ws = workspaces.find((w) => w.id === id)
@@ -454,15 +506,14 @@ export default function App() {
     bundledHarnessVersion &&
     installedHarnessVersion !== bundledHarnessVersion
 
-  // Real teams from the watcher, scoped to the active workspace. When empty,
-  // we keep the seed list so the design demo still has something to render.
+  // Real teams from the watcher, scoped to the active workspace.
+  // No seed fallback — empty workspace gets an empty Teams section, not fake
+  // \"회원가입 피처팀\" cards. Lying to the user is worse than an empty list.
   const realTeams = useAgentTeamStore((s) => s.teams)
   const runs = useMemo<V2Team[]>(() => {
-    const wsTeams = realTeams.filter(
-      (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id,
-    )
-    if (wsTeams.length === 0) return SEED_TEAMS
-    return wsTeams.map(toV2Team)
+    return realTeams
+      .filter((t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id)
+      .map(toV2Team)
   }, [realTeams, activeWorkspace])
 
   // Map current view → main content
@@ -541,14 +592,130 @@ export default function App() {
         items={DEFAULT_PALETTE_ITEMS}
         onAction={(action) => {
           setPaletteOpen(false)
-          // Map common palette actions to existing handlers.
-          if (action === 'new-run') onNewRun()
-          else if (action === 'new-workspace') setNewWorkspaceDialog(true)
-          else if (action === 'open-settings') setView('settings')
-          else if (action === 'view-workspace') setView('workspace')
-          else if (action === 'view-git') setView('git')
-          else if (action === 'view-dashboard') setView('dashboard')
-          else if (action === 'view-library') setView('library')
+          // ── Navigation
+          if (action === 'go-workspace' || action === 'view-workspace') {
+            setView('workspace')
+          } else if (action === 'go-git' || action === 'view-git') {
+            setView('git')
+          } else if (action === 'go-dashboard' || action === 'view-dashboard') {
+            setView('dashboard')
+          } else if (action === 'go-teams') {
+            setView('workspace')
+          } else if (action === 'go-library' || action === 'view-library') {
+            setView('library')
+          } else if (action === 'go-settings' || action === 'open-settings') {
+            setView('settings')
+          }
+          // ── Library deep-links
+          else if (action === 'lib-compositions') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'compositions' } }),
+              )
+            }, 50)
+          } else if (action === 'lib-agents' || action === 'add-agent') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'agents' } }),
+              )
+              if (action === 'add-agent') {
+                setTimeout(() => {
+                  window.dispatchEvent(
+                    new CustomEvent('forge:library-new', { detail: { tab: 'agents' } }),
+                  )
+                }, 50)
+              }
+            }, 50)
+          } else if (action === 'lib-skills' || action === 'add-skill') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'skills' } }),
+              )
+              if (action === 'add-skill') {
+                setTimeout(() => {
+                  window.dispatchEvent(
+                    new CustomEvent('forge:library-new', { detail: { tab: 'skills' } }),
+                  )
+                }, 50)
+              }
+            }, 50)
+          } else if (action === 'lib-commands') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'commands' } }),
+              )
+            }, 50)
+          } else if (action === 'lib-hooks') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'hooks' } }),
+              )
+            }, 50)
+          }
+          // ── Run actions
+          else if (action === 'create-team' || action === 'new-run') {
+            onNewRun()
+          } else if (action === 'new-workspace') {
+            setNewWorkspaceDialog(true)
+          } else if (action === 'push') {
+            // Open Git view; user reviews changes before pushing.
+            setView('git')
+          } else if (action === 'diff') {
+            setView('git')
+          } else if (action === 'harness-update') {
+            if (harnessUpdateAvailable) {
+              setUpdatePreviewOpen(true)
+            } else {
+              setToast({ name: '하네스가 이미 최신 버전입니다', count: 0 })
+              setTimeout(() => setToast(null), 3000)
+            }
+          } else if (
+            action === 'slash-clear' ||
+            action === 'slash-compact' ||
+            action === 'slash-cost'
+          ) {
+            // Slash commands are executed inside an active terminal — surface a
+            // breadcrumb toast so the user knows to type it themselves once
+            // we don't yet auto-route to a terminal.
+            setToast({
+              name: `${action.replace('slash-', '/')} — 활성 터미널에 직접 입력하세요`,
+              count: 0,
+            })
+            setTimeout(() => setToast(null), 4000)
+          }
+          // ── Settings deep-links
+          else if (action === 'model') {
+            setView('settings')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:settings-target', {
+                  detail: { section: 'agents' },
+                }),
+              )
+            }, 50)
+          } else if (action === 'theme-toggle') {
+            setToast({
+              name: '테마 토글은 v0.6.0 — 현재 dark only',
+              count: 0,
+            })
+            setTimeout(() => setToast(null), 3000)
+          } else if (action === 'keys') {
+            // Re-open onboarding step 4 (shortcut tour).
+            void window.api?.system?.openExternal(
+              'https://github.com/anthropics/forge-studio#shortcuts',
+            )
+          }
+          // ── Recent (best-effort no-op for now — surfaces existing nav)
+          else if (action === 'open-active') {
+            setView('workspace')
+          } else if (action === 'recent-last-run') {
+            setView('workspace')
+          }
         }}
       />
 

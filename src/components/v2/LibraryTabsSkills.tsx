@@ -6,7 +6,7 @@
  * carries a "⋯" menu (편집 / 복제 / 삭제) when the skill exists on disk.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Btn, Pill, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import { SKILLS_LIB } from './LibraryData'
@@ -37,6 +37,16 @@ export function SkillsTab() {
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [deleting, setDeleting] = useState<{ name: string } | null>(null)
   const [toast, setToast] = useState<{ message: string } | null>(null)
+
+  // Library-level "New" button → forge:library-new with tab='skills'.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab === 'skills' && workspacePath) setEditing({})
+    }
+    window.addEventListener('forge:library-new', handler)
+    return () => window.removeEventListener('forge:library-new', handler)
+  }, [workspacePath])
 
   const filtered = items.filter(
     (s) => !q || (s.name + ' ' + s.desc).toLowerCase().includes(q.toLowerCase()),
