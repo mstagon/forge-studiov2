@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { VscClose } from 'react-icons/vsc'
+
+interface PresetOption {
+  id: string
+  name: string
+  source: 'bundled' | 'user'
+}
 
 export function NewWorkspaceDialog() {
   const { newWorkspaceDialogVisible, setNewWorkspaceDialog, createWorkspace } = useWorkspaceStore()
@@ -16,6 +22,29 @@ export function NewWorkspaceDialog() {
   // code-review-graph: opt-in auto build right after scaffolding. Requires the
   // CLI to be installed (Settings → MCP / Tools panel handles install).
   const [crGraphAutoBuild, setCrGraphAutoBuild] = useState(false)
+  // Harness preset selector — `__default__` keeps the bundled
+  // `harness-template/.claude/` (Flutter + NestJS + Prisma + Next.js).
+  const [preset, setPreset] = useState<string>('__default__')
+  const [presetOptions, setPresetOptions] = useState<PresetOption[]>([])
+
+  // Lazy-load presets from the IPC bridge whenever the dialog opens — this
+  // keeps the bundle slim and lets newly-saved user presets show up without a
+  // full app reload.
+  useEffect(() => {
+    if (!newWorkspaceDialogVisible) return
+    const api = (window as unknown as {
+      api?: {
+        preset?: {
+          list?: () => Promise<{ id: string; name: string; source: 'bundled' | 'user' }[]>
+        }
+      }
+    }).api
+    if (!api?.preset?.list) return
+    api.preset
+      .list()
+      .then((items) => setPresetOptions(items.map((p) => ({ id: p.id, name: p.name, source: p.source }))))
+      .catch(() => setPresetOptions([]))
+  }, [newWorkspaceDialogVisible])
 
   if (!newWorkspaceDialogVisible) return null
 
@@ -50,7 +79,8 @@ export function NewWorkspaceDialog() {
               autoCreateRepos,
             }
           : undefined,
-        crGraphAutoBuild ? { autoBuild: true } : undefined
+        crGraphAutoBuild ? { autoBuild: true } : undefined,
+        preset === '__default__' ? undefined : preset
       )
       setName('')
       setDirPath('')
@@ -59,6 +89,7 @@ export function NewWorkspaceDialog() {
       setBaseName('')
       setAutoCreateRepos(false)
       setCrGraphAutoBuild(false)
+      setPreset('__default__')
     } finally {
       setCreating(false)
     }
@@ -197,9 +228,32 @@ export function NewWorkspaceDialog() {
             )}
           </div>
 
-          {/* Advanced options: code-review-graph build (opt-in) */}
+          {/* Advanced options: harness preset selector + code-review-graph build (opt-in) */}
           <div className="bg-surface-0 rounded-lg p-3 border border-border">
             <div className="text-xs text-text-secondary mb-2">Advanced</div>
+
+            <div className="mb-3">
+              <label className="text-2xs text-text-secondary mb-1 block">
+                Harness preset
+              </label>
+              <select
+                value={preset}
+                onChange={(e) => setPreset(e.target.value)}
+                className="w-full bg-surface-1 text-text-primary text-xs px-2.5 py-1.5 rounded-md border border-border focus:border-accent outline-none"
+              >
+                <option value="__default__">Default (flutter + nest + cms)</option>
+                {presetOptions.map((p) => (
+                  <option key={`${p.source}:${p.id}`} value={p.id}>
+                    {p.name} ({p.source})
+                  </option>
+                ))}
+              </select>
+              <div className="text-2xs text-text-muted mt-1.5 leading-relaxed">
+                Preset 을 고르면 번들된 default 대신 해당 프리셋의 .claude/ 가 복사됩니다.
+                Library → My Presets 에서 직접 만들 수도 있습니다.
+              </div>
+            </div>
+
             <label className="flex items-start gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"

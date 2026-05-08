@@ -28,6 +28,7 @@ import { AgentsTab } from './LibraryTabsAgents'
 import { SkillsTab } from './LibraryTabsSkills'
 import { CommandsTab } from './LibraryTabsCommands'
 import { HooksTab } from './LibraryTabsHooks'
+import { PresetsTab } from './LibraryTabsPresets'
 import { useLibraryStore } from '@/stores/library'
 
 export interface LibraryWorkspace {
@@ -46,7 +47,7 @@ export interface LibraryProps {
   density?: 'compact' | 'comfortable'
 }
 
-type TabId = 'compositions' | 'agents' | 'skills' | 'commands' | 'hooks'
+type TabId = 'compositions' | 'agents' | 'skills' | 'commands' | 'hooks' | 'presets'
 
 interface TabSpec {
   id: TabId
@@ -70,6 +71,8 @@ export function Library({ workspace, onApplyComposition }: LibraryProps) {
     { id: 'skills',       label: 'Skills',       count: (realSkills ?? SKILLS_LIB).length,   icon: Icon.Sparkle },
     { id: 'commands',     label: 'Commands',     count: (realCommands ?? COMMANDS_LIB).length, icon: Icon.Terminal },
     { id: 'hooks',        label: 'Hooks',        count: (realHooks ?? HOOKS_LIB).length,    icon: Icon.Bolt },
+    // Workspace harness presets — bundled + user-saved snapshots of `.claude/`.
+    { id: 'presets',      label: 'My Presets',   count: 0,                                  icon: Icon.Layers },
   ]
 
   return (
@@ -165,6 +168,7 @@ export function Library({ workspace, onApplyComposition }: LibraryProps) {
       {tab === 'skills' && <SkillsTab />}
       {tab === 'commands' && <CommandsTab />}
       {tab === 'hooks' && <HooksTab />}
+      {tab === 'presets' && <PresetsTab workspace={workspace} />}
     </div>
   )
 }

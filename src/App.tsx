@@ -4,6 +4,7 @@ import { useAppUpdateStore } from './stores/appUpdate'
 import { useGitStore } from './stores/git'
 import { useAgentTeamStore } from './stores/agentTeam'
 import { useLibraryStore } from './stores/library'
+import { subscribeToMainErrors } from './stores/errorLog'
 
 import { Shell } from './components/v2/Shell'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
@@ -15,6 +16,7 @@ import { GitPanelWired } from './components/v2/wired/GitPanelWired'
 import { DashboardPanelWired } from './components/v2/wired/DashboardPanelWired'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
 import { Onboarding } from './components/v2/Onboarding'
+import { HarnessUpdatePreview } from './components/v2/HarnessUpdatePreview'
 
 import { TEAMS as SEED_TEAMS } from './components/v2/data'
 import type { ViewKey, WorkspaceSummary, Team as V2Team, MemberState } from './components/v2/types'
@@ -115,6 +117,9 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState<{ name: string; count: number } | null>(null)
   const [model] = useState({ id: 'sonnet-4.5', label: 'sonnet-4.5' })
+  // Harness update preview modal — opened from the orange HarnessBanner's
+  // "diff 보기" button. Renders the file tree + per-file unified diff.
+  const [updatePreviewOpen, setUpdatePreviewOpen] = useState(false)
 
   // ── Boot — load workspaces + auto-activate most recently opened ──
   useEffect(() => {
@@ -192,6 +197,11 @@ export default function App() {
       window.api.on('navigate', (target: string) => {
         if (target === 'settings') setView('settings')
       }),
+      // Pipe main-process errors into the in-app log so the Settings →
+      // Error Log view can show them without each component subscribing
+      // individually. The handler ignores its return when the bridge is
+      // missing (older dev builds).
+      subscribeToMainErrors(),
     ]
     return () => cleanups.forEach((c) => c())
   }, [openWorkspace, setNewWorkspaceDialog])
@@ -506,6 +516,7 @@ export default function App() {
                 onUpdate: () => {
                   void updateHarness()
                 },
+                onViewDiff: () => setUpdatePreviewOpen(true),
                 updating: harnessUpdating,
               }
             : null
@@ -542,6 +553,20 @@ export default function App() {
       />
 
       <NewWorkspaceDialog />
+
+      {updatePreviewOpen && activeWorkspace && (
+        <HarnessUpdatePreview
+          workspacePath={activeWorkspace.path}
+          fromVersion={installedHarnessVersion ?? undefined}
+          toVersion={bundledHarnessVersion ?? undefined}
+          applying={harnessUpdating}
+          onClose={() => setUpdatePreviewOpen(false)}
+          onApply={async () => {
+            await updateHarness()
+            setUpdatePreviewOpen(false)
+          }}
+        />
+      )}
     </>
   )
 }
