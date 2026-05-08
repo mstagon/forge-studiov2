@@ -50,6 +50,7 @@ export interface LiveTerminalsRegistry {
 interface InternalRegistry extends LiveTerminalsRegistry {
   pruneHosts(activeKeys: ReadonlySet<string>): void
   reattachAll(): void
+  setHomeElement(el: HTMLDivElement | null): void
 }
 
 function createRegistry(): InternalRegistry {
@@ -58,11 +59,29 @@ function createRegistry(): InternalRegistry {
   const listeners = new Set<() => void>()
   const notify = () => listeners.forEach((l) => l())
 
+  /**
+   * Persistent off-screen home for hosts that aren't currently adopted by a
+   * grid cell. Set by LiveTerminalsRoot via the hidden div ref. Hosts MUST
+   * land here on cell unmount — otherwise the React-managed grid cell DOM
+   * carries the host (and its xterm children) down with it on tear-down,
+   * which is the exact "터미널이 초기화" symptom users hit when navigating
+   * away from RunLiveView and back.
+   */
+  let homeElement: HTMLDivElement | null = null
+
   const reattach = (key: string) => {
     const slot = slots.get(key)
     const host = hosts.get(key)
     if (!slot || !host) return
     if (host.parentElement !== slot) slot.appendChild(host)
+  }
+
+  const sendHome = (key: string) => {
+    const host = hosts.get(key)
+    if (!host) return
+    if (homeElement && host.parentElement !== homeElement) {
+      homeElement.appendChild(host)
+    }
   }
 
   return {
@@ -72,6 +91,11 @@ function createRegistry(): InternalRegistry {
         reattach(key)
       } else if (slots.has(key)) {
         slots.delete(key)
+        // CRITICAL: park the host back at home before the cell DOM is torn
+        // down. Without this, the host follows the unmounting grid cell into
+        // detachment, the xterm renderer goes with it, and the next mount
+        // sees an empty container — exactly the regression we're fixing.
+        sendHome(key)
       }
       notify()
     },
@@ -82,6 +106,9 @@ function createRegistry(): InternalRegistry {
         host.style.height = '100%'
         host.style.width = '100%'
         hosts.set(key, host)
+        // New hosts also start at home so the React portal has a valid
+        // parent to render into before any slot adopts them.
+        if (homeElement) homeElement.appendChild(host)
       }
       return host
     },
@@ -95,6 +122,18 @@ function createRegistry(): InternalRegistry {
     },
     reattachAll() {
       for (const k of slots.keys()) reattach(k)
+    },
+    setHomeElement(el) {
+      homeElement = el
+      // When the home becomes available (first mount), pull every orphan
+      // host that isn't currently in a slot back to the home node.
+      if (el) {
+        for (const [k, host] of hosts) {
+          if (!slots.has(k)) {
+            if (host.parentElement !== el) el.appendChild(host)
+          }
+        }
+      }
     },
     subscribe(listener) {
       listeners.add(listener)
@@ -137,6 +176,14 @@ export function LiveTerminalsRoot({ children }: LiveTerminalsRootProps) {
   if (!registryRef.current) registryRef.current = createRegistry()
   const registry = registryRef.current
 
+  // Hidden home div ref — registry parks unattached hosts here so they
+  // don't ride a destroyed grid cell DOM into oblivion.
+  const homeRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    registry.setHomeElement(homeRef.current)
+    return () => registry.setHomeElement(null)
+  }, [registry])
+
   // Force re-render when slots change so portals re-mount their host parents
   // (no actual remount happens — just the bookkeeping that triggers reattach).
   const [, force] = useState(0)
@@ -169,20 +216,23 @@ export function LiveTerminalsRoot({ children }: LiveTerminalsRootProps) {
   return (
     <RegistryContext.Provider value={registry}>
       {children}
-      {/* Hidden home for unparented hosts. Visibility hidden + zero-size
-          keeps xterm WebGL/canvas alive without affecting layout. Hosts are
-          reparented into LiveTerminalGrid CellSlot DOM elements when active. */}
+      {/* Hidden home for unparented hosts. Off-screen but with real size so
+          xterm.js + fitAddon don't compute cols/rows = 0 while parked here.
+          Hosts are reparented into LiveTerminalGrid CellSlot DOM when active,
+          then sent back here on cell unmount (so a tear-down grid doesn't
+          drag the host into detachment). */}
       <div
+        ref={homeRef}
         aria-hidden="true"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 0,
-          height: 0,
+          top: '-99999px',
+          left: '-99999px',
+          width: 800,
+          height: 600,
           overflow: 'hidden',
-          visibility: 'hidden',
           pointerEvents: 'none',
+          opacity: 0,
         }}
       >
         {liveMembers.map((m) => {
