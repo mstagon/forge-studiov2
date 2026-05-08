@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import { v4 as uuid } from 'uuid'
 import os from 'os'
 import { execFileSync } from 'child_process'
+import { pathManager } from './PathManager'
 
 interface PtyInstance {
   process: pty.IPty
@@ -20,12 +21,15 @@ export class PtyManager {
 
   private buildEnv(): Record<string, string> {
     // GUI-launched apps on macOS often miss /opt/homebrew/bin and /usr/local/bin
-    // in PATH, breaking rbenv/nvm/pyenv/fvm/etc. Prepend them on darwin.
+    // in PATH, breaking rbenv/nvm/pyenv/fvm/etc. Prepend them on darwin. Then
+    // pathManager.augmentEnv prepends our bundled bin/cr-graph-venv/python so
+    // tmux/uv/code-review-graph resolve from the DMG without a separate user
+    // install. Order: bundled > brew/local > inherited PATH.
     const basePath = process.env.PATH || ''
     const augmentedPath = os.platform() === 'darwin'
       ? ['/opt/homebrew/bin', '/usr/local/bin', basePath].filter(Boolean).join(':')
       : basePath
-    return {
+    const baseEnv: Record<string, string> = {
       ...process.env,
       PATH: augmentedPath,
       TERM: 'xterm-256color',
@@ -33,6 +37,7 @@ export class PtyManager {
       TERM_PROGRAM: 'ForgeStudio',
       LANG: process.env.LANG || 'en_US.UTF-8',
     } as Record<string, string>
+    return pathManager.augmentEnv(baseEnv)
   }
 
   create(options: { cols: number; rows: number; cwd: string; shell?: string }): string {
@@ -69,10 +74,15 @@ export class PtyManager {
       throw new Error(`Invalid tmux target: ${options.paneId}`)
     }
     const id = uuid()
+    // Resolve tmux from the bundled toolchain when available so users on a
+    // bare macOS install (no Homebrew) still get a working agent-team backend.
+    // Falls back to plain `tmux` (resolved via PATH) when running an older
+    // build or when the bundle is absent.
+    const tmuxBin = pathManager.getTmux() ?? 'tmux'
     // select-pane then attach-session: `-t <pane-id>` on attach resolves the
     // pane's session automatically. The select-pane focuses the right pane so
     // the user sees that agent's output, not whatever was last viewed.
-    const cmd = `tmux select-pane -t ${options.paneId} 2>/dev/null; exec tmux attach-session -t ${options.paneId}`
+    const cmd = `'${tmuxBin}' select-pane -t ${options.paneId} 2>/dev/null; exec '${tmuxBin}' attach-session -t ${options.paneId}`
     const ptyProcess = pty.spawn('/bin/sh', ['-c', cmd], {
       name: 'xterm-256color',
       cols: options.cols,

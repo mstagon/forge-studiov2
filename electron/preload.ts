@@ -464,6 +464,14 @@ const api = {
       ipcRenderer.invoke('system:getTheme'),
     which: (cmd: string) =>
       ipcRenderer.invoke('system:which', cmd),
+    /**
+     * Absolute path of the bundled-tools root (Contents/Resources/bundled-tools
+     * in a packaged app, resources/bundled-tools/darwin-arm64 in dev), or
+     * `null` when the bundle isn't present. Onboarding uses this to decide
+     * whether a `which` hit lives inside the DMG (→ "Bundled" pill).
+     */
+    bundledToolsRoot: () =>
+      ipcRenderer.invoke('system:bundledToolsRoot') as Promise<string | null>,
   },
 
   // ─── Events ──────────────────────────────────────────────────────
