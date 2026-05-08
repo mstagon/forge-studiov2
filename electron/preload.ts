@@ -386,13 +386,17 @@ const api = {
     }> => ipcRenderer.invoke('teams:create', opts),
     remove: (teamId: string): Promise<void> =>
       ipcRenderer.invoke('teams:remove', teamId),
-    pause: (teamId: string): Promise<{ ok: boolean }> =>
+    // `degraded: true` means we couldn't actually SIGSTOP/SIGCONT the agent's
+    // process tree (no valid pane id, kill failed, etc.) — the UI flagged
+    // paused/resumed but the underlying claude process is still running.
+    // Renderer should surface a warning toast in that case.
+    pause: (teamId: string): Promise<{ ok: boolean; degraded?: boolean }> =>
       ipcRenderer.invoke('teams:pause', teamId),
-    resume: (teamId: string): Promise<{ ok: boolean }> =>
+    resume: (teamId: string): Promise<{ ok: boolean; degraded?: boolean }> =>
       ipcRenderer.invoke('teams:resume', teamId),
-    pauseMember: (teamId: string, agentId: string): Promise<{ ok: boolean }> =>
+    pauseMember: (teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> =>
       ipcRenderer.invoke('teams:pauseMember', teamId, agentId),
-    resumeMember: (teamId: string, agentId: string): Promise<{ ok: boolean }> =>
+    resumeMember: (teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> =>
       ipcRenderer.invoke('teams:resumeMember', teamId, agentId),
     merge: (
       teamId: string,
