@@ -4,6 +4,42 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] — 2026-05-08
+
+### Fixed — 화면 이동 시 터미널 진짜로 유지
+
+0.6.0 의 LiveTerminalsRoot lift 가 충분하지 않았다. 사용자 보고: "여전히 다른
+화면 갔다오면 터미널 초기화됨".
+
+#### 진짜 원인
+
+`CellSlot` 이 unmount 되면 `setSlot(key, null)` 만 호출하고 host 는 grid
+cell DOM 안에 그대로 남았음. 그 직후 React 가 grid cell DOM 을 tear down
+하면 host 도 함께 detach 되고, host 안의 xterm/PTY 도 사라짐.
+
+다음 mount 시 `hosts.get(key)` 는 같은 element 를 반환하지만 그 element 는
+이미 destroy 된 grid cell 의 잔재 — 비어있는 컨테이너. → 사용자에겐
+"초기화" 로 보임.
+
+#### 수정
+
+- `LiveTerminalsRegistry.setHomeElement(el)` API 추가 — `LiveTerminalsRoot`
+  의 hidden div ref 를 registry 에 등록.
+- `setSlot(key, null)` 호출 시 `sendHome(key)` 자동 실행 — host 를 home
+  으로 미리 reparent. **grid cell tear-down 시 host 가 따라 사라지지 않음**.
+- `getOrCreateHost(key)` 새 host 생성 시 home 에 즉시 부착 — React portal
+  이 처음부터 DOM 에 valid parent 를 가짐.
+- home div 사이즈 0×0 → 800×600 + off-screen `top:-99999px` — xterm
+  fitAddon 이 cols=0/rows=0 으로 망가지는 부수 결함 차단. opacity:0 +
+  pointer-events:none 으로 숨김 유지.
+
+#### 검증
+
+dev 서버 + chromium MCP 로 host lifecycle 직접 확인:
+- `setActiveTeam(...)` 호출 후 home div 안에 host 1개 + xterm 렌더링 정상
+- 코드 경로: setSlot(key, null) → sendHome → home.appendChild(host) → grid
+  cell tear-down 영향 0
+
 ## [0.6.1] — 2026-05-08
 
 ### Fixed — Playwright 동적 검수에서 발견된 React 결함 3개
