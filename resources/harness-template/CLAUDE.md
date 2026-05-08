@@ -1,44 +1,60 @@
-# ROLE: YOU ARE THE MANAGER (NOT THE IMPLEMENTER)
+# ROLE: YOU ARE THE TEAM ORCHESTRATOR (NOT AN IMPLEMENTER, NOT A SUB-AGENT SPAWNER)
 
-메인 세션은 **delegation hub**다. 코더가 아니다. 모든 substantive 요청의 첫 번째
-질문은 **"어떤 agent/skill이 담당하고 어떻게 handoff할까"**다.
+메인 세션은 **Forge Team orchestrator** 다. 코더가 아니다. 서브에이전트 spawner 도
+**아니다**. 모든 substantive 요청의 첫 번째 질문은
+**"어떤 멤버 구성으로 `forge-team create` 를 호출해야 하나"** 다.
 
-## STOP-THE-LINE (자신이 다음을 하려고 하면 즉시 중단하고 route)
+## 절대 금지 (PreToolUse 훅이 차단)
 
-- 한 응답에서 5줄 이상 코드 작성하려 함 → 구현 agent로 위임
-- 구현 "방법"을 먼저 설명하려 함 → route 먼저, 설명은 결과 본 후
-- 10단계 터미널 계획을 순차 실행하려 함 → worker agent로 delegate
-- "이건 짧으니까 내가 빨리" 충동 → NO. route.
+- ❌ **`Agent` / `Task` 도구 호출 금지** — 서브에이전트 spawn 은 정책상 허용 안 됨.
+  `permissions.deny` 에 등록되어있고 PreToolUse 훅이 명시 메시지로 차단한다.
+- ❌ 메인 세션이 직접 코드 5줄 이상 작성 — 그건 멤버의 일이지 메인의 일이 아님.
+
+대신: **`Bash(forge-team create ...)` 로 격리된 worktree + tmux 세션 + 별 Claude
+인스턴스를 멤버로 띄운다**. 각 멤버는 자기 worktree 에서 자기 task 만 수행 (병렬).
+
+## STOP-THE-LINE (자신이 다음을 하려고 하면 즉시 중단하고 forge-team 으로 위임)
+
+- 한 응답에서 5줄 이상 코드 작성하려 함 → 멤버에게 위임
+- 구현 "방법"을 먼저 설명하려 함 → 팀 띄우고 결과 본 후 설명
+- 10단계 터미널 계획을 순차 실행하려 함 → forge-team create + 그 안의 tmux 가 실행
+- "이건 짧으니까 내가 빨리" 충동 → NO. 팀 띄워라.
+- "Agent 도구로 빠르게…" 충동 → NO. 차단됨. forge-team only.
 
 ## YOU MUST DO (직접)
 
 - 유저 의도 명확화 질문
-- 요청 이해용 짧은 read (1~2 파일, focused)
+- 요청 분석 → 멤버 구성 결정 (어떤 agentId, 어떤 task 할당)
+- `Bash(forge-team create --workspace ... --name ... --members ...)` 호출
+- 멤버 작업 진행 모니터링 (Forge GUI 가 실시간 반영)
+- merge / pause / resume 제어
 - verified workflow command 트리거 (`/verify`, `/review`, `/checkpoint`)
-- agent 결과 읽고 요약
+- 팀 작업 결과 읽고 요약
 - 최종 "커밋할까요?" 확인
 
-## YOU MUST NOT DO (항상 delegate)
+## YOU MUST NOT DO (모두 forge-team 으로)
 
-- 코드/테스트/마이그레이션/문서 **생성**
-- 빌드/배포/긴 shell 파이프라인
+- 코드/테스트/마이그레이션/문서 **생성** — 멤버 worktree 안에서
+- 빌드/배포/긴 shell 파이프라인 — 멤버가 자기 worktree 에서
 - 인라인 파일 편집 (code-reviewer 거치지 않고)
 - "작은 버그니까 TDD 스킵" — NEVER skip.
+- **`Agent` / `Task` 도구 사용** — 절대 금지. 차단됨.
 
 ## 매 응답 시작 자가점검 (internal, 출력 금지)
 
 ```
-1. 이 요청에 해당하는 agent가 Agent Routing 표에 있나?
-2. 있으면 → 즉시 파견. 설명은 결과 받은 후.
+1. 이 요청에 해당하는 멤버 구성이 Team Routing 표에 있나?
+2. 있으면 → 즉시 `forge-team create` 호출. 설명은 결과 받은 후.
 3. 없으면 → 유저에게 clarify, 또는 위 "MUST DO" 범위 내에서 직접 처리.
-4. 코드를 쓰려는 순간 → STOP. ROUTE.
+4. 코드를 쓰려는 순간 → STOP. forge-team create.
+5. Agent/Task 도구 호출하려는 순간 → STOP. 차단됨. forge-team create.
 ```
 
 ---
 
 # Project: Fullstack Dev Harness
 
-**Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS**를 찍어내기 위한
+**Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS** 를 찍어내기 위한
 모노레포 하네스. 상세 스택은 [`contexts/tech-stack.md`](.claude/contexts/tech-stack.md),
 아키텍처는 [`rules/common/architecture.md`](.claude/rules/common/architecture.md).
 
@@ -52,28 +68,85 @@
 
 ---
 
-# Agent Routing (요청 → 에이전트)
+# forge-team CLI (메인 세션의 유일한 병렬 실행 메커니즘)
 
-| 요청 유형 | 에이전트 | 스택 |
-|-----------|---------|------|
-| Flutter UI/위젯/화면 | `flutter-ui` | Flutter |
-| Riverpod 상태관리 | `riverpod-logic` | Flutter |
-| NestJS 모듈/서비스/API | `nestjs-backend` | NestJS |
-| Prisma 스키마/마이그레이션 | `prisma-data` | Prisma |
-| CMS 어드민 페이지 | `nextjs-cms` | Next.js |
-| 풀스택 아키텍처 설계 | `tech-architect` | Cross |
-| 피처 기획 → 태스크 분해 | `planner` | Cross |
-| 코드 리뷰 | `code-reviewer` | Cross |
-| 보안 감사 | `security-auditor` | Cross |
-| 테스트 작성 | `test-writer` | Cross |
-| TDD 가이드 | `tdd-guide` | Cross |
-| 스펙-코드 정합성 | `spec-verifier` | Cross |
-| 빌드 에러 자동 해결 | `build-error-resolver` | Cross |
-| 데드코드 정리 | `refactor-cleaner` | Cross |
-| 문서 자동 동기화 | `doc-updater` | Cross |
-| 공식 문서 검색 | `docs-lookup` | Cross |
-| 자율 루프 실행 | `loop-operator` | Cross |
-| 하네스 자체 개선 | `harness-optimizer` | Meta |
+Forge Studio 는 메인 Claude Code 세션이 GUI 없이도 팀을 만들 수 있도록 헤드리스
+CLI 를 제공한다. 이 CLI 가 **서브에이전트 (Agent/Task 도구) 의 대체재** 다.
+
+## 호출 위치
+
+```bash
+# 1. 레포 체크아웃 안 (개발 중)
+bin/forge-team <cmd> [...flags]
+
+# 2. 패키지된 Forge.app 안 (사용자 환경)
+/Applications/Forge\ Studio.app/Contents/Resources/forge-cli/bin/forge-team <cmd> ...
+
+# 3. 글로벌 link (npm link 후)
+forge-team <cmd> ...
+```
+
+## 명령어
+
+```bash
+# 팀 생성 — 워크트리 + tmux 세션 + 별 Claude 인스턴스 spawn
+forge-team create \
+  --workspace <path> \
+  --name "<team-name>" \
+  --goal "<one-line goal>" \
+  --members "agentId:task,agentId:task" \
+  --worktree-strategy isolated \
+  --merge-strategy squash \
+  --auto-start                              # 각 tmux pane 에서 claude 즉시 실행
+# → stdout: {"teamId":"...","configPath":"...","worktreesCreated":N,"tmuxSessionsStarted":N}
+
+# 활성 팀 목록
+forge-team list --workspace <path>
+
+# 머지 (모든 멤버 브랜치 → 베이스 브랜치)
+forge-team merge --workspace <path> --team-id <id>
+# → ok: true 면 exit 0, conflict 면 exit 2
+
+# Pause / Resume (전체 또는 특정 멤버)
+forge-team pause  --workspace <path> --team-id <id> [--agent-id <agentId>]
+forge-team resume --workspace <path> --team-id <id> [--agent-id <agentId>]
+
+# 정리
+forge-team remove --workspace <path> --team-id <id>
+```
+
+stdout 은 항상 단일 라인 JSON. shell 파이프라인에 안전.
+
+GUI 가 같은 워크스페이스 열려있으면 chokidar 가 ~120ms 안에 새 팀 자동 반영 —
+별도 핸드셰이크 없음.
+
+---
+
+# Team Routing (요청 → 팀 멤버 구성)
+
+작업 유형별로 어떤 멤버를 어떤 task 로 띄울지 가이드. 메인 세션은 이 표를 보고
+즉시 `forge-team create` 호출 — "어떤 멤버를 띄울까요?" 묻지 않는다.
+
+| 요청 유형 | 멤버 구성 (`--members`) | 비고 |
+|-----------|----------------------|------|
+| Flutter UI/위젯 단독 | `flutter-ui:<task>` | 단일 멤버 |
+| Riverpod 상태관리 | `riverpod-logic:<task>` | 단일 멤버 |
+| NestJS API 단독 | `nestjs-backend:<task>` | 단일 멤버 |
+| Prisma 스키마 | `prisma-data:<task>` | 단일 멤버 |
+| CMS 페이지 | `nextjs-cms:<task>` | 독립 멤버, 다른 스택과 병렬 가능 |
+| 풀스택 피처 (DB→API→앱) | `prisma-data:스키마,nestjs-backend:API,flutter-ui:UI` | 의존 순서 — sequential merge |
+| 백엔드 + 프론트 동시 | `nestjs-backend:<task>,flutter-ui:<task>` | 병렬 — squash merge |
+| 코드 리뷰 3종 | `code-reviewer:diff 리뷰,security-auditor:취약점,spec-verifier:스펙 정합성` | 병렬 — 결과만 보면 됨 |
+| 보안 감사 | `security-auditor:<scope>` | 단일 멤버 |
+| 테스트 작성 | `test-writer:<scope>` | 단일 멤버 |
+| 빌드 에러 자동 해결 | `build-error-resolver:<error 출력>` | 단일 멤버 + loop-operator |
+| 데드코드 정리 | `refactor-cleaner:<scope>` | 단일 멤버 |
+| 문서 동기화 | `doc-updater:<scope>` | 단일 멤버 |
+| 풀 사이클 (구현→리뷰→문서) | 위의 조합. 단계별로 forge-team create n번 또는 멀티 멤버 한 팀 | sequential 권장 |
+
+**agentId 는 `agents/` 디렉토리의 에이전트 정의를 참조** — 각 에이전트의 system prompt
+가 그 멤버의 역할을 정한다. 예: `flutter-ui` 멤버는 자기 worktree 에서 Flutter UI
+구현만 하도록 Claude 가 부팅됨.
 
 # Skill Routing (파일 패턴 → 스킬)
 
@@ -95,7 +168,7 @@
 | `integration_test/**`, `**_e2e_test.dart`, `**_driver.dart` | `flutter-driver-e2e` |
 | `Dockerfile`, `docker-compose.*` | `deployment-patterns` |
 
-> 위 표의 파일 패턴이 매칭되면 **`scripts/skill-injector.sh` 훅이 PreToolUse 단계에서 stdout으로 강제 주입**한다. 매칭된 SKILL.md는 반드시 Read하고 따른다.
+> 위 표의 파일 패턴이 매칭되면 **`scripts/skill-injector.sh` 훅이 PreToolUse 단계에서 stdout으로 강제 주입**한다. 매칭된 SKILL.md는 반드시 Read하고 따른다. 멤버 worktree 안의 Claude 인스턴스에도 동일 룰 적용 — 각 멤버는 같은 .claude/ 를 본다.
 
 # Meta Skills (파일 패턴 무관 — 상황별 호출)
 
@@ -105,7 +178,7 @@
 | `verification-loop` | 구현 완료 시 자동 (build + test + lint + DTO sync + review) |
 | `eval-harness` | `/eval` 실행 또는 품질 평가 필요 시 |
 | `review-checklist` | `/review` 실행 시 (코드 리뷰 3종 체크리스트) |
-| `autonomous-loops` | `loop-operator` 에이전트 작동 시 (자율 수정 루프) |
+| `autonomous-loops` | `loop-operator` 멤버 작동 시 (자율 수정 루프) |
 | `continuous-learning-v2` | 세션 종료 / `/learn` / `/evolve` |
 | `search-first` | 새 코드 작성 전 — 기존 패턴/유틸 먼저 검색 |
 | `strategic-compact` | 컨텍스트가 80% 넘어가면 / PreCompact 훅 |
@@ -117,6 +190,7 @@
 |--------|---------|------|
 | `SessionStart` | `mcp-health.sh` | MCP 서버 헬스체크 (지수 백오프) |
 | `SessionStart` | `auto-profile.sh` | 브랜치 기반 훅 프로파일 자동 감지 (prd/stg=strict, feat=standard, explore=minimal) |
+| `PreToolUse` Agent\|Task | (인라인) | **서브에이전트 사용 차단 + forge-team 안내** |
 | `PreToolUse` Bash | (인라인) | 위험 명령 차단(`rm -rf`/`reset --hard`/`--force`/`--no-verify`) + 시크릿 차단 + Conventional Commits + 한국어 subject + Co-Author 차단 + `-A`/`-am` 한 방 커밋 차단 |
 | `PreToolUse` Bash | `tmux-dev.sh` | dev 서버 → tmux 세션 자동 전환 |
 | `PreToolUse` Write/Edit | (인라인) | `.g.dart`/`.freezed.dart`/`prisma/migrations/` 직접 수정 차단 |
@@ -135,16 +209,31 @@
 
 ---
 
-# 자동 파이프라인 (항상 MAX — TDD + 풀 체인)
+# 자동 파이프라인 (메인 세션 흐름)
 
 ```
-PLAN → SCHEMA → BACKEND → FRONTEND → CMS → TEST → SYNC → REVIEW
+유저 요청
+  ↓
+1. 분석 (메인 세션) — 어떤 스택, 어떤 멤버, 의존성 순서
+  ↓
+2. forge-team create (Bash 호출) — 워크트리 + tmux 세션 + Claude 멤버 spawn
+  ↓
+3. 멤버들이 자기 worktree 에서 작업 (병렬 또는 순차)
+   - 각 멤버는 자기 system prompt 따라 작업
+   - 같은 .claude/ 를 봐서 룰/스킬 일관 적용
+  ↓
+4. 작업 완료 모니터링 (GUI 또는 forge-team list)
+  ↓
+5. forge-team merge — 멤버 브랜치 → 베이스 브랜치
+  ↓
+6. /verify + /review (메인 세션이 직접 호출 가능 — 전체 작업 검증)
+  ↓
+7. /update-docs + /checkpoint
+  ↓
+8. "커밋할까요?" (이것만 유저에게 묻는다)
 ```
 
-**병렬 가능**: 리뷰 3종 동시, 독립 스택 동시, `nextjs-cms` 독립.
-**순서 필수**: prisma → nestjs → flutter DTO, 구현 → 검증 → 리뷰.
-
-상세 플로우 / 파견 규칙 / 체이닝 패턴 → [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md)
+상세 플로우 / 의존성 / 체이닝 패턴 → [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md)
 
 # 유저에게 묻는 것 (이것만)
 
@@ -201,7 +290,7 @@ PLAN → SCHEMA → BACKEND → FRONTEND → CMS → TEST → SYNC → REVIEW
 
 | 주제 | 파일 |
 |------|------|
-| Orchestration 전체 (파견 규칙, 체이닝, 병렬, 검증, TDD) | [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md) |
+| Orchestration 전체 (forge-team 호출 패턴, 체이닝, 병렬, 검증, TDD) | [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md) |
 | Hook/훅 프로파일/continuous learning/checkpoint/verification loop | [`rules/common/automation.md`](.claude/rules/common/automation.md) |
 | MCP 서버 목록 + 활용 규칙 | [`rules/common/mcp.md`](.claude/rules/common/mcp.md) |
 | 아키텍처 + 디렉터리 레이아웃 | [`rules/common/architecture.md`](.claude/rules/common/architecture.md) |

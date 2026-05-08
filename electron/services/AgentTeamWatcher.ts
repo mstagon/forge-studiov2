@@ -2,12 +2,17 @@ import * as chokidar from 'chokidar'
 import path from 'path'
 import os from 'os'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { EventEmitter } from 'events'
 import { pathManager } from './PathManager'
-
-const execFileAsync = promisify(execFile)
+import {
+  TeamOperations,
+  type RawConfig,
+  type TeamCreateOptions as OpsCreateOptions,
+  type TeamCreateResult as OpsCreateResult,
+  type TeamMergeOptions as OpsMergeOptions,
+  type TeamMergeResult as OpsMergeResult,
+  type TeamMergeConflict as OpsMergeConflict,
+} from './TeamOperations'
 
 /**
  * Resolve the tmux binary at call time. Falls back to PATH `tmux` so the
@@ -22,11 +27,6 @@ function tmuxEnv(): NodeJS.ProcessEnv {
   return pathManager.augmentEnv({ ...process.env })
 }
 
-/** Strict tmux pane-id form (`%42`, `@7`, `$3`). Anything else is rejected. */
-function isTmuxPaneId(value: string | undefined | null): value is string {
-  return !!value && /^[%@$][A-Za-z0-9_-]+$/.test(value)
-}
-
 export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
 export type TeamStatus = 'active' | 'paused'
 export type WorktreeStrategy = 'isolated' | 'shared'
@@ -37,17 +37,14 @@ export interface TeamCreateMember {
   task?: string
 }
 
-export interface TeamCreateOptions {
-  workspaceId: string
-  workspacePath: string
-  name: string
-  goal?: string
-  members: TeamCreateMember[]
-  worktreeStrategy: WorktreeStrategy
-  mergeStrategy: MergeStrategy
-  /** Automatically `claude` boot inside each tmux session. Defaults to true. */
-  autoStartClaude?: boolean
-}
+// Re-export the ops shapes so existing IPC handlers / consumers keep their
+// import sites stable. The watcher delegates to TeamOperations under the hood.
+export type TeamCreateOptions = OpsCreateOptions
+export type TeamCreateResult = OpsCreateResult
+export type TeamMergeOptions = OpsMergeOptions
+export type TeamMergeResult = OpsMergeResult
+export type TeamMergeConflict = OpsMergeConflict
+export type { TeamSummary } from './TeamOperations'
 
 export interface TeamMember {
   agentId: string
@@ -87,71 +84,6 @@ export interface Team {
   status?: TeamStatus
 }
 
-export interface TeamCreateResult {
-  teamId: string
-  configPath: string
-  worktreesCreated: number
-  tmuxSessionsStarted: number
-}
-
-export interface TeamMergeConflict {
-  file: string
-  theirsBranch: string
-  oursBranch: string
-  conflictMarkers: string
-}
-
-/**
- * Flat result envelope — chosen to match the renderer's `MergeResult` so the
- * IPC payload doesn't need bridging on the boundary. `ok: true` populates
- * `mergedBranch`/`commitSha`; `ok: false` populates `conflicts`/`error`.
- */
-export interface TeamMergeResult {
-  ok: boolean
-  mergedBranch?: string
-  commitSha?: string
-  conflicts?: TeamMergeConflict[]
-  error?: string
-}
-
-export interface TeamMergeOptions {
-  mergeStrategy?: MergeStrategy
-}
-
-interface RawMember {
-  agentId: string
-  name: string
-  agentType: string
-  model: string
-  cwd?: string
-  tmuxPaneId?: string
-  backendType?: string
-  joinedAt: number
-  color?: string
-  prompt?: string
-  task?: string
-  worktreePath?: string
-  branch?: string
-  state?: 'active' | 'idle'
-}
-
-interface RawConfig {
-  name: string
-  description?: string
-  goal?: string
-  workspaceId?: string
-  workspacePath?: string
-  worktreeStrategy?: WorktreeStrategy
-  mergeStrategy?: MergeStrategy
-  createdAt: number
-  leadAgentId: string
-  leadSessionId?: string
-  members: RawMember[]
-  status?: TeamStatus
-  /** Base branch carved out for the team — `team/<teamId>`. */
-  baseBranch?: string
-}
-
 interface InboxMessage {
   from: string
   text: string
@@ -161,18 +93,6 @@ interface InboxMessage {
   read?: boolean
 }
 
-/** Validate `child` is contained within `parent` to defend against path traversal. */
-function isPathInside(parent: string, child: string): boolean {
-  const rel = path.relative(parent, child)
-  return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel)
-}
-
-function teamSessionName(teamId: string, agentId: string): string {
-  // tmux session names: alphanumerics, dashes, underscores. Sanitize agent ids.
-  const safe = agentId.replace(/[^A-Za-z0-9_-]/g, '_')
-  return `forge-team-${teamId}-${safe}`
-}
-
 export class AgentTeamWatcher extends EventEmitter {
   /**
    * Active teams root. Defaults to ~/.claude/teams for legacy installs but is
@@ -180,9 +100,27 @@ export class AgentTeamWatcher extends EventEmitter {
    * so each workspace has its own scoped team registry.
    */
   private teamsDir = path.join(os.homedir(), '.claude', 'teams')
+  /**
+   * Currently-active workspace path the watcher is scoped to. `null` means the
+   * legacy `~/.claude/teams` fallback is in effect. Tracked separately from
+   * teamsDir so we can hand it to TeamOperations (which expects the workspace
+   * root, not the teams subdirectory).
+   */
+  private workspacePath: string | null = null
   private watcher: chokidar.FSWatcher | null = null
   private cache: Map<string, Team> = new Map()
   private refreshTimer: NodeJS.Timeout | null = null
+  private readonly ops = new TeamOperations({
+    tmuxBin,
+    tmuxEnv,
+    // Watcher-scoped teams root resolution: when the watcher has an active
+    // workspace, all ops route through that workspace; otherwise legacy
+    // `~/.claude/teams`. Keeps GUI parity with prior behaviour.
+    teamsDirFor: (ws) =>
+      ws
+        ? path.join(ws, '.claude', 'teams')
+        : path.join(os.homedir(), '.claude', 'teams'),
+  })
 
   /**
    * Switch the watcher to a workspace-scoped teams directory. Safe to call
@@ -194,6 +132,7 @@ export class AgentTeamWatcher extends EventEmitter {
       : path.join(os.homedir(), '.claude', 'teams')
     if (next === this.teamsDir && this.watcher) return
     this.teamsDir = next
+    this.workspacePath = workspacePath
     if (this.watcher) {
       await this.watcher.close().catch(() => {})
       this.watcher = null
@@ -365,637 +304,76 @@ export class AgentTeamWatcher extends EventEmitter {
     return path.join(this.workspacePath, '.claude/teams', teamId, 'config.json')
   }
 
-  // ── External tool gating ─────────────────────────────────────────────
-
-  /** Return true when `git` resolves on PATH and is invokable. */
-  private async hasGit(): Promise<boolean> {
-    try {
-      await execFileAsync('git', ['--version'], { timeout: 3000, env: tmuxEnv() })
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  /**
-   * Return true when `tmux` resolves — checking the bundled binary first so
-   * Dock-launched apps (which inherit a sparse PATH) still find the bundled
-   * tmux even when the system PATH lacks /opt/homebrew/bin.
-   */
-  private async hasTmux(): Promise<boolean> {
-    try {
-      await execFileAsync(tmuxBin(), ['-V'], { timeout: 3000, env: tmuxEnv() })
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  private async resolveBaseBranch(workspacePath: string): Promise<string> {
-    try {
-      const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'branch', '--show-current'], {
-        timeout: 5000,
-        env: tmuxEnv(),
-      })
-      const cur = stdout.trim()
-      if (cur) return cur
-    } catch {
-      // fall through
-    }
-    return 'main'
-  }
-
-  /** Best-effort `git branch <newBranch> <fromBranch>` — silent on failure. */
-  private async ensureBranch(workspacePath: string, newBranch: string, fromBranch: string): Promise<boolean> {
-    try {
-      // If branch already exists, just succeed.
-      await execFileAsync('git', ['-C', workspacePath, 'rev-parse', '--verify', newBranch], {
-        timeout: 4000,
-        env: tmuxEnv(),
-      })
-      return true
-    } catch {
-      // doesn't exist yet, create
-    }
-    try {
-      await execFileAsync('git', ['-C', workspacePath, 'branch', newBranch, fromBranch], {
-        timeout: 8000,
-        env: tmuxEnv(),
-      })
-      return true
-    } catch {
-      return false
-    }
-  }
-
   /**
    * Create a new team. Provisions:
    *   1. config.json under <workspacePath>/.claude/teams/<teamId>/
    *   2. (isolated) per-member git worktrees + branches off `team/<teamId>`
    *   3. tmux session per member, optionally auto-launching `claude`
    *
-   * All side effects are best-effort — missing git/tmux yields graceful
-   * degradation: config is still written so the team appears in the registry,
-   * just without worktree/tmux fields populated.
+   * Delegates the heavy lifting to TeamOperations, then nudges the cache so
+   * the renderer sees the new team without waiting for the chokidar tick.
    */
   async create(opts: TeamCreateOptions): Promise<TeamCreateResult> {
-    if (!opts.workspacePath) throw new Error('workspacePath is required')
-    if (!opts.name?.trim()) throw new Error('team name is required')
-    if (!Array.isArray(opts.members) || opts.members.length === 0) {
-      throw new Error('at least one member is required')
-    }
-
-    const teamId = `team-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const teamRoot = path.join(opts.workspacePath, '.claude', 'teams', teamId)
-    await fs.mkdir(teamRoot, { recursive: true })
-
-    const now = Date.now()
-    const leadAgentId = opts.members[0].agentId
-    const wsPath = opts.workspacePath
-    const gitOk = await this.hasGit()
-    const tmuxOk = await this.hasTmux()
-
-    let baseBranch: string | undefined
-    let teamBaseBranch: string | undefined
-    if (gitOk && opts.worktreeStrategy === 'isolated') {
-      baseBranch = await this.resolveBaseBranch(wsPath)
-      teamBaseBranch = `team/${teamId}`
-      // Carve out a stable base for member worktrees to branch from.
-      await this.ensureBranch(wsPath, teamBaseBranch, baseBranch)
-    } else if (gitOk) {
-      baseBranch = await this.resolveBaseBranch(wsPath)
-    }
-
-    let worktreesCreated = 0
-    let tmuxSessionsStarted = 0
-    const autoStart = opts.autoStartClaude !== false
-
-    const rawMembers: RawMember[] = []
-    for (let idx = 0; idx < opts.members.length; idx++) {
-      const m = opts.members[idx]
-      const safeAgentId = m.agentId.replace(/[^A-Za-z0-9_-]/g, '_')
-      const member: RawMember = {
-        agentId: m.agentId,
-        // Member `name` doubles as the inbox filename — keep it filesystem-safe
-        // and unique within the team.
-        name: m.agentId,
-        agentType: m.agentId,
-        model: 'sonnet-4.5',
-        joinedAt: now + idx,
-        task: m.task,
-        state: 'active',
-      }
-
-      // ── Worktree provisioning ──────────────────────────────────────
-      let memberCwd: string | null = null
-      if (opts.worktreeStrategy === 'isolated' && gitOk && teamBaseBranch) {
-        const worktreePath = path.join(teamRoot, 'worktrees', safeAgentId)
-        // Defense in depth: ensure path is contained in teamRoot which itself
-        // is under wsPath (constructed from workspacePath above).
-        if (!isPathInside(teamRoot, worktreePath)) {
-          // Skip silently — can't safely create. Member ends up shared-style.
-          member.worktreePath = wsPath
-          member.branch = baseBranch
-          memberCwd = wsPath
-        } else {
-          const memberBranch = `team/${teamId}/${safeAgentId}`
-          try {
-            await fs.mkdir(path.dirname(worktreePath), { recursive: true })
-            await execFileAsync(
-              'git',
-              ['-C', wsPath, 'worktree', 'add', '-b', memberBranch, worktreePath, teamBaseBranch],
-              { timeout: 30_000, env: tmuxEnv() }
-            )
-            member.worktreePath = worktreePath
-            member.branch = memberBranch
-            memberCwd = worktreePath
-            worktreesCreated++
-          } catch {
-            // Graceful — leave fields empty, fall back to wsPath for tmux cwd.
-            memberCwd = wsPath
-          }
-        }
-      } else {
-        // Shared strategy or no git: every member operates on the workspace.
-        member.worktreePath = wsPath
-        member.branch = baseBranch
-        memberCwd = wsPath
-      }
-
-      // ── tmux session ───────────────────────────────────────────────
-      if (tmuxOk && memberCwd) {
-        const session = teamSessionName(teamId, m.agentId)
-        const tmux = tmuxBin()
-        const env = tmuxEnv()
-        try {
-          await execFileAsync(
-            tmux,
-            ['new-session', '-d', '-s', session, '-c', memberCwd],
-            { timeout: 8000, env }
-          )
-          // Capture the real pane id (`%N`) of the freshly-created session so
-          // PtyManager.createTmuxAttach (which strictly validates the
-          // `%`/`@`/`$` form) can attach. The legacy `session:0.0` form was
-          // rejected as "Invalid tmux target", leaving the live terminal grid
-          // unable to mount any pane.
-          let realPaneId: string | null = null
-          try {
-            const { stdout } = await execFileAsync(
-              tmux,
-              ['display-message', '-p', '-t', session, '#{pane_id}'],
-              { timeout: 3000, env }
-            )
-            const candidate = stdout.trim()
-            if (isTmuxPaneId(candidate)) realPaneId = candidate
-          } catch {
-            // pane lookup failed — fall through; member ends up without a
-            // valid tmuxPaneId so the UI shows a degraded state instead of a
-            // bogus "session:0.0" target.
-          }
-          if (autoStart) {
-            try {
-              await execFileAsync(tmux, ['send-keys', '-t', session, 'claude', 'Enter'], {
-                timeout: 4000,
-                env,
-              })
-            } catch {
-              // ignore — session exists, claude just didn't auto-fire.
-            }
-          }
-          if (realPaneId) {
-            member.tmuxPaneId = realPaneId
-            member.backendType = 'tmux'
-            member.cwd = memberCwd
-            tmuxSessionsStarted++
-          } else {
-            // Session exists but we couldn't resolve a valid pane id. Keep
-            // the cwd so the UI can show the member, but omit tmuxPaneId so
-            // the renderer falls back to a non-tmux terminal instead of
-            // crashing on attach.
-            member.cwd = memberCwd
-          }
-        } catch {
-          // tmux unavailable / collision — leave tmuxPaneId unset.
-        }
-      } else if (memberCwd) {
-        member.cwd = memberCwd
-      }
-
-      rawMembers.push(member)
-    }
-
-    const config: RawConfig = {
-      name: opts.name,
-      goal: opts.goal,
-      workspaceId: opts.workspaceId,
-      workspacePath: wsPath,
-      worktreeStrategy: opts.worktreeStrategy,
-      mergeStrategy: opts.mergeStrategy,
-      createdAt: now,
-      leadAgentId,
-      members: rawMembers,
-      status: 'active',
-      baseBranch: teamBaseBranch,
-    }
-    const configPath = path.join(teamRoot, 'config.json')
-    await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
-
-    // chokidar is debounced; nudge the cache immediately so the renderer can
-    // see the new team without waiting for the next refresh tick.
+    const result = await this.ops.create(opts)
     await this.refresh()
     this.emit('teams', this.list())
-    return { teamId, configPath, worktreesCreated, tmuxSessionsStarted }
-  }
-
-  // ── Pause / Resume ───────────────────────────────────────────────────
-
-  /** Read+write the raw on-disk config for `teamId`. */
-  private async readConfig(teamId: string): Promise<{ configPath: string; config: RawConfig } | null> {
-    const teamDir = path.join(this.teamsDir, teamId)
-    const configPath = path.join(teamDir, 'config.json')
-    try {
-      const config = JSON.parse(await fs.readFile(configPath, 'utf-8')) as RawConfig
-      return { configPath, config }
-    } catch {
-      return null
-    }
-  }
-
-  private async writeConfig(configPath: string, config: RawConfig): Promise<void> {
-    await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    return result
   }
 
   /**
-   * Resolve the pane's foreground PID via `tmux display-message -p
-   * '#{pane_pid}'`. The pane_pid is the *direct child* of tmux (typically the
-   * shell), so SIGSTOP/SIGCONT on it pauses the shell and any descendants
-   * (claude, child agents) by virtue of process-group inheritance on most
-   * shells. Returns null when tmux can't be queried or the pid is unparsable.
-   */
-  private async resolvePanePid(paneId: string): Promise<number | null> {
-    if (!isTmuxPaneId(paneId)) return null
-    try {
-      const { stdout } = await execFileAsync(
-        tmuxBin(),
-        ['display-message', '-p', '-t', paneId, '#{pane_pid}'],
-        { timeout: 3000, env: tmuxEnv() }
-      )
-      const pid = parseInt(stdout.trim(), 10)
-      return Number.isFinite(pid) && pid > 0 ? pid : null
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Stop or continue the foreground process tree of a tmux pane. We send the
-   * signal to the pane's process group (`-PID`) so children (claude →
-   * sub-agents) get the signal too. Returns true when the signal landed.
-   *
-   * Falls back to no-op on platforms that don't support POSIX kill (Windows)
-   * — caller should treat false as "couldn't truly suspend, fell back to
-   * detach" and surface the degraded state to the user.
-   */
-  private signalPaneTree(pid: number, signal: 'SIGSTOP' | 'SIGCONT'): boolean {
-    try {
-      // Negative PID = process group. The shell tmux spawns is normally a
-      // session leader so this hits its descendants too. If group signaling
-      // fails (e.g. the pane child isn't a group leader), fall back to PID.
-      try {
-        process.kill(-pid, signal)
-        return true
-      } catch {
-        process.kill(pid, signal)
-        return true
-      }
-    } catch {
-      return false
-    }
-  }
-
-  /**
-   * Pause every member of a team. We send SIGSTOP to the foreground process
-   * group of each member's pane so the underlying agent (claude / hooks /
-   * children) actually halts — preventing further file edits and token spend.
-   * If pane PID resolution or signaling fails, we fall back to detach-client
-   * (cosmetic only) and emit a `pause:degraded` event so the UI can warn.
+   * Pause every member of a team. SIGSTOP is sent to the foreground process
+   * group of each tmux pane so the underlying agent (claude / hooks /
+   * children) actually halts. If signaling fails we fall back to detach-client
+   * and emit `pause:degraded` so the UI can warn.
    */
   async pause(teamId: string): Promise<{ ok: boolean; degraded?: boolean }> {
-    if (!teamId) throw new Error('teamId is required')
-    const found = await this.readConfig(teamId)
-    if (!found) return { ok: false }
-    const tmuxOk = await this.hasTmux()
-    found.config.status = 'paused'
-    let degraded = false
-    for (const m of found.config.members) {
-      m.state = 'idle'
-      if (!tmuxOk || !isTmuxPaneId(m.tmuxPaneId)) {
-        degraded = true
-        continue
-      }
-      const pid = await this.resolvePanePid(m.tmuxPaneId)
-      const stopped = pid != null && this.signalPaneTree(pid, 'SIGSTOP')
-      if (!stopped) {
-        // Fallback: detach the client so the user no longer sees it; warn the
-        // caller that the agent process is still running.
-        const session = teamSessionName(teamId, m.agentId)
-        await execFileAsync(tmuxBin(), ['detach-client', '-s', session], {
-          timeout: 3000,
-          env: tmuxEnv(),
-        }).catch(() => {})
-        degraded = true
-      }
-    }
-    await this.writeConfig(found.configPath, found.config)
+    const result = await this.ops.pause(this.workspacePath, teamId)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    if (degraded) this.emit('pause:degraded', teamId)
-    return { ok: true, degraded }
+    if (result.degraded) this.emit('pause:degraded', teamId)
+    return result
   }
 
   async resume(teamId: string): Promise<{ ok: boolean; degraded?: boolean }> {
-    if (!teamId) throw new Error('teamId is required')
-    const found = await this.readConfig(teamId)
-    if (!found) return { ok: false }
-    const tmuxOk = await this.hasTmux()
-    found.config.status = 'active'
-    let degraded = false
-    for (const m of found.config.members) {
-      m.state = 'active'
-      if (!tmuxOk || !isTmuxPaneId(m.tmuxPaneId)) continue
-      const pid = await this.resolvePanePid(m.tmuxPaneId)
-      const cont = pid != null && this.signalPaneTree(pid, 'SIGCONT')
-      if (!cont) degraded = true
-    }
-    await this.writeConfig(found.configPath, found.config)
+    const result = await this.ops.resume(this.workspacePath, teamId)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true, degraded }
+    return result
   }
 
-  async pauseMember(teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> {
-    if (!teamId || !agentId) throw new Error('teamId and agentId are required')
-    const found = await this.readConfig(teamId)
-    if (!found) return { ok: false }
-    const member = found.config.members.find((m) => m.agentId === agentId)
-    if (!member) return { ok: false }
-    member.state = 'idle'
-    let degraded = false
-    const tmuxOk = await this.hasTmux()
-    if (tmuxOk && isTmuxPaneId(member.tmuxPaneId)) {
-      const pid = await this.resolvePanePid(member.tmuxPaneId)
-      const stopped = pid != null && this.signalPaneTree(pid, 'SIGSTOP')
-      if (!stopped) {
-        const session = teamSessionName(teamId, agentId)
-        await execFileAsync(tmuxBin(), ['detach-client', '-s', session], {
-          timeout: 3000,
-          env: tmuxEnv(),
-        }).catch(() => {})
-        degraded = true
-      }
-    } else {
-      degraded = true
-    }
-    await this.writeConfig(found.configPath, found.config)
+  async pauseMember(
+    teamId: string,
+    agentId: string
+  ): Promise<{ ok: boolean; degraded?: boolean }> {
+    const result = await this.ops.pauseMember(this.workspacePath, teamId, agentId)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true, degraded }
+    return result
   }
 
-  async resumeMember(teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> {
-    if (!teamId || !agentId) throw new Error('teamId and agentId are required')
-    const found = await this.readConfig(teamId)
-    if (!found) return { ok: false }
-    const member = found.config.members.find((m) => m.agentId === agentId)
-    if (!member) return { ok: false }
-    member.state = 'active'
-    let degraded = false
-    const tmuxOk = await this.hasTmux()
-    if (tmuxOk && isTmuxPaneId(member.tmuxPaneId)) {
-      const pid = await this.resolvePanePid(member.tmuxPaneId)
-      const cont = pid != null && this.signalPaneTree(pid, 'SIGCONT')
-      if (!cont) degraded = true
-    }
-    await this.writeConfig(found.configPath, found.config)
+  async resumeMember(
+    teamId: string,
+    agentId: string
+  ): Promise<{ ok: boolean; degraded?: boolean }> {
+    const result = await this.ops.resumeMember(this.workspacePath, teamId, agentId)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true, degraded }
+    return result
   }
-
-  // ── Merge ────────────────────────────────────────────────────────────
 
   /**
    * Merge each member branch into the team base branch (`team/<teamId>`).
    * Strategy:
    *   - 'squash':     `git merge --squash <branch>` per member, single commit.
    *   - 'sequential': `git merge --no-ff <branch>` per member, ordered.
-   *
-   * On first conflict: aborts the in-flight merge, scrapes conflicted files,
-   * and returns conflict descriptors. Already-merged members are kept.
    */
   async merge(teamId: string, opts: TeamMergeOptions = {}): Promise<TeamMergeResult> {
-    if (!teamId) throw new Error('teamId is required')
-    const found = await this.readConfig(teamId)
-    if (!found) return { ok: false, conflicts: [], error: 'team not found' }
-    const cfg = found.config
-    const wsPath = cfg.workspacePath
-    if (!wsPath) {
-      return { ok: false, conflicts: [], error: 'workspacePath missing on team' }
-    }
-    if (!(await this.hasGit())) {
-      return { ok: false, conflicts: [], error: 'git not available' }
-    }
-
-    const baseBranch = cfg.baseBranch ?? `team/${teamId}`
-    const strategy: MergeStrategy = opts.mergeStrategy ?? cfg.mergeStrategy ?? 'squash'
-    const env = tmuxEnv()
-
-    // Refuse to merge into a dirty workspace — otherwise we'd silently fold
-    // the user's WIP into the team merge commit.
-    const dirty = await this.workspaceDirty(wsPath)
-    if (dirty) {
-      return {
-        ok: false,
-        conflicts: [],
-        error: 'workspace has uncommitted changes; commit or stash before merging the team',
-      }
-    }
-
-    // Move HEAD to baseBranch in the workspace so merges land there.
-    try {
-      await execFileAsync('git', ['-C', wsPath, 'checkout', baseBranch], { timeout: 10_000, env })
-    } catch (err) {
-      return {
-        ok: false,
-        conflicts: [],
-        error: `failed to checkout ${baseBranch}: ${(err as Error).message}`,
-      } satisfies TeamMergeResult
-    }
-
-    const memberBranches = cfg.members.map((m) => m.branch).filter((b): b is string => !!b && b !== baseBranch)
-
-    for (const branch of memberBranches) {
-      const args = strategy === 'squash'
-        ? ['-C', wsPath, 'merge', '--squash', branch]
-        : ['-C', wsPath, 'merge', '--no-ff', '--no-edit', branch]
-      try {
-        await execFileAsync('git', args, { timeout: 30_000, env })
-      } catch (err) {
-        // Inspect conflict state, abort, return descriptors.
-        const conflicts = await this.collectConflicts(wsPath, branch, baseBranch)
-        await execFileAsync('git', ['-C', wsPath, 'merge', '--abort'], {
-          timeout: 5000,
-          env,
-        }).catch(() => {})
-        return {
-          ok: false,
-          conflicts,
-          error: (err as Error).message,
-        }
-      }
-
-      if (strategy === 'squash') {
-        // --squash leaves changes staged; commit them before the next member.
-        // Failure here (missing identity, hook rejection, etc.) MUST abort —
-        // swallowing it leaves the workspace with staged-but-uncommitted
-        // changes while we report success, which is the H3 bug.
-        try {
-          await execFileAsync(
-            'git',
-            ['-C', wsPath, 'commit', '-m', `team(${teamId}): squash merge ${branch}`],
-            { timeout: 10_000, env }
-          )
-        } catch (err) {
-          const stderr = ((err as { stderr?: Buffer | string }).stderr ?? '').toString().trim()
-          // Reset the staged squash so we don't leave the index dirty for the
-          // user to clean up by hand. `git reset --merge` is the documented
-          // way to undo a squash that hasn't been committed.
-          await execFileAsync('git', ['-C', wsPath, 'reset', '--merge'], {
-            timeout: 5000,
-            env,
-          }).catch(() => {})
-          return {
-            ok: false,
-            conflicts: [],
-            error: `squash commit failed for ${branch}: ${stderr || (err as Error).message}`,
-          }
-        }
-      }
-
-      // After every merged branch, verify the workspace is clean. If it's
-      // not, something committed partial state (e.g. pre-commit hook silently
-      // unstaged files) and we should bail rather than continue stacking
-      // members on top of an inconsistent base.
-      const stillDirty = await this.workspaceDirty(wsPath)
-      if (stillDirty) {
-        return {
-          ok: false,
-          conflicts: [],
-          error: `workspace not clean after merging ${branch}; aborting`,
-        }
-      }
-    }
-
-    // Resolve final commit sha on the base branch.
-    let commitSha: string | undefined
-    try {
-      const { stdout } = await execFileAsync('git', ['-C', wsPath, 'rev-parse', 'HEAD'], {
-        timeout: 4000,
-        env,
-      })
-      commitSha = stdout.trim() || undefined
-    } catch {
-      // ignore
-    }
-
-    const result: TeamMergeResult = { ok: true, mergedBranch: baseBranch }
-    if (commitSha) result.commitSha = commitSha
-    return result
+    return this.ops.merge(this.workspacePath, teamId, opts)
   }
-
-  /**
-   * `git status --porcelain` returns one line per untracked/modified path.
-   * Empty stdout = clean tree. Used to gate merge entry/exit so we never
-   * report success while the index has staged-but-uncommitted changes.
-   *
-   * Forge-owned runtime paths (`.claude/teams/**`, worktree directories the
-   * watcher itself creates) are filtered out — otherwise the merge gate would
-   * deterministically fail in workspaces where `.claude` is tracked, because
-   * `create()` itself dirties the same tree that `merge()` requires clean.
-   */
-  private async workspaceDirty(wsPath: string): Promise<boolean> {
-    try {
-      const { stdout } = await execFileAsync(
-        'git',
-        ['-C', wsPath, 'status', '--porcelain'],
-        { timeout: 5000, env: tmuxEnv() }
-      )
-      const lines = stdout.split('\n').map((l) => l.trimEnd()).filter(Boolean)
-      const userDirty = lines.filter((line) => {
-        // Porcelain v1 format: XY<space>path  (renames have ` -> ` separator)
-        const rest = line.slice(3)
-        const arrow = rest.indexOf(' -> ')
-        const filePath = (arrow >= 0 ? rest.slice(arrow + 4) : rest).replace(/^"(.*)"$/, '$1')
-        return !this.isForgeOwnedPath(filePath)
-      })
-      return userDirty.length > 0
-    } catch {
-      // If status itself fails we can't trust the tree — treat as dirty.
-      return true
-    }
-  }
-
-  /** Paths the watcher itself writes inside a workspace. */
-  private isForgeOwnedPath(rel: string): boolean {
-    const normalized = rel.replace(/\\/g, '/')
-    return (
-      normalized === '.claude/teams' ||
-      normalized.startsWith('.claude/teams/') ||
-      normalized === '.claude/worktrees' ||
-      normalized.startsWith('.claude/worktrees/')
-    )
-  }
-
-  private async collectConflicts(
-    wsPath: string,
-    theirsBranch: string,
-    oursBranch: string
-  ): Promise<TeamMergeConflict[]> {
-    let files: string[] = []
-    try {
-      const { stdout } = await execFileAsync(
-        'git',
-        ['-C', wsPath, 'diff', '--name-only', '--diff-filter=U'],
-        { timeout: 5000, env: tmuxEnv() }
-      )
-      files = stdout.split('\n').map((s) => s.trim()).filter(Boolean)
-    } catch {
-      // ignore
-    }
-    const out: TeamMergeConflict[] = []
-    for (const file of files) {
-      let conflictMarkers = ''
-      try {
-        const buf = await fs.readFile(path.join(wsPath, file), 'utf-8')
-        // Extract just the first conflict block (≤ ~40 lines) for preview.
-        const start = buf.indexOf('<<<<<<<')
-        const end = buf.indexOf('>>>>>>>', start)
-        if (start >= 0 && end > start) {
-          conflictMarkers = buf.slice(start, end + 80).split('\n').slice(0, 60).join('\n')
-        }
-      } catch {
-        // unreadable — leave empty
-      }
-      out.push({ file, theirsBranch, oursBranch, conflictMarkers })
-    }
-    return out
-  }
-
-  // ── Remove ───────────────────────────────────────────────────────────
 
   /**
    * Tear down a team:
@@ -1003,64 +381,9 @@ export class AgentTeamWatcher extends EventEmitter {
    *   2. Remove each member git worktree (force).
    *   3. Delete `team/<teamId>` base branch.
    *   4. Remove the team config directory.
-   * Each step is independently best-effort.
    */
   async remove(teamId: string): Promise<void> {
-    if (!teamId) throw new Error('teamId is required')
-    const found = await this.readConfig(teamId)
-    const tmuxOk = await this.hasTmux()
-    const gitOk = await this.hasGit()
-
-    if (found) {
-      const cfg = found.config
-      const wsPath = cfg.workspacePath
-      const env = tmuxEnv()
-
-      // Kill tmux sessions (per member). Use the bundled tmux when available
-      // so this works in Dock-launched apps without /opt/homebrew on PATH.
-      if (tmuxOk) {
-        const tmux = tmuxBin()
-        for (const m of cfg.members) {
-          const session = teamSessionName(teamId, m.agentId)
-          await execFileAsync(tmux, ['kill-session', '-t', session], {
-            timeout: 3000,
-            env,
-          }).catch(() => {})
-        }
-      }
-
-      // Remove worktrees (only if isolated and within wsPath).
-      if (gitOk && wsPath) {
-        for (const m of cfg.members) {
-          if (!m.worktreePath || m.worktreePath === wsPath) continue
-          if (!isPathInside(wsPath, m.worktreePath)) continue
-          await execFileAsync(
-            'git',
-            ['-C', wsPath, 'worktree', 'remove', m.worktreePath, '--force'],
-            { timeout: 15_000, env }
-          ).catch(() => {})
-        }
-        // Delete member branches.
-        for (const m of cfg.members) {
-          if (!m.branch || !m.branch.startsWith(`team/${teamId}`)) continue
-          if (m.branch === cfg.baseBranch) continue
-          await execFileAsync('git', ['-C', wsPath, 'branch', '-D', m.branch], {
-            timeout: 5000,
-            env,
-          }).catch(() => {})
-        }
-        // Delete team base branch.
-        const teamBase = cfg.baseBranch ?? `team/${teamId}`
-        await execFileAsync('git', ['-C', wsPath, 'branch', '-D', teamBase], {
-          timeout: 5000,
-          env,
-        }).catch(() => {})
-      }
-    }
-
-    // Finally, drop the config directory.
-    const target = path.join(this.teamsDir, teamId)
-    await fs.rm(target, { recursive: true, force: true }).catch(() => {})
+    await this.ops.remove(this.workspacePath, teamId)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)

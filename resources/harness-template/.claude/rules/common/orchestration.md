@@ -1,15 +1,18 @@
 # Orchestration Rules (MANDATORY)
 
-> CLAUDE.md에 ROLE = MANAGER 블록이 있다. 이 파일은 그 룰의 **operational
-> 디테일**이다. 충돌 시 CLAUDE.md ROLE 블록이 우선.
+> CLAUDE.md 에 ROLE = TEAM ORCHESTRATOR 블록이 있다. 이 파일은 그 룰의
+> **operational 디테일**이다. 충돌 시 CLAUDE.md ROLE 블록이 우선.
+
+> **CRITICAL**: `Agent` / `Task` 도구 호출 금지 — `permissions.deny` 등록되어
+> PreToolUse 훅이 차단한다. 모든 병렬/위임은 **`forge-team` CLI** 로만 한다.
 
 ## 핵심 원칙
 
-1. **에이전트 자동 파견**: 요청 분석 → Agent Routing 매칭 → 즉시 파견. "어떤 에이전트 쓸까요?" 묻지 마라.
+1. **팀 자동 파견**: 요청 분석 → Team Routing 매칭 → `forge-team create` 즉시 호출. "어떤 멤버 띄울까요?" 묻지 마라.
 2. **스킬 자동 적용**: 파일 패턴 → Skill Routing 매칭 → 해당 스킬 읽고 적용. 스킬 적용 여부를 묻지 마라.
 3. **커맨드 자동 실행**: verify, review 등 워크플로우 커맨드는 흐름에 따라 자동 트리거. 유저가 `/verify` 칠 필요 없다.
-4. **팀 병렬 실행**: 독립 작업 2개 이상이면 Agent 도구를 한 메시지에서 병렬 호출 (`run_in_background: true`, `isolation: "worktree"`).
-5. **자동 수정 루프**: 빌드/테스트 실패 시 loop-operator 자동 호출. 5회까지 자동 재시도.
+4. **병렬 멤버 spawn**: 독립 작업 2개 이상이면 한 `forge-team create` 호출에 멀티 멤버 등록 (각 멤버가 격리 worktree + tmux pane). `Agent` 도구 사용 금지.
+5. **자동 수정 루프**: 빌드/테스트 실패 시 `loop-operator` 멤버 추가 spawn. 5회까지 자동 재시도.
 
 ## 자동 실행 플로우 (MAX RESOURCES — 항상 풀 파이프라인)
 
@@ -78,22 +81,32 @@
 | 제스처/햅틱/모션/애니메이션/트랜지션 | mobile-touch → flutter-ui (애니메이션 컨트롤러 + 스프링/이징 적용) |
 | CMS/어드민 관련 | nextjs-cms 독립 실행 |
 
-## 팀 에이전트 병렬 파견
+## 팀 멤버 병렬 spawn
 
-독립 작업이 감지되면 **한 메시지에서 여러 Agent 호출**로 동시 실행:
+독립 작업이 감지되면 **한 `forge-team create` 호출에 멀티 멤버** 로 동시 spawn:
 
 ```
 유저: "로그인 API + 홈화면 UI + 어드민 대시보드"
   ↓
 분석: 3개 작업, 스택별 독립
   ↓
-동시 파견 (하나의 메시지에서):
-  Agent(nestjs-backend, background, worktree) → 로그인 API
-  Agent(flutter-ui, background, worktree)     → 홈화면 UI
-  Agent(nextjs-cms, background, worktree)     → 어드민 대시보드
+forge-team create \
+  --workspace . \
+  --name "auth-feature" \
+  --goal "로그인 풀스택" \
+  --members "nestjs-backend:로그인 API,flutter-ui:홈화면 UI,nextjs-cms:어드민 대시보드" \
+  --worktree-strategy isolated \
+  --merge-strategy squash \
+  --auto-start
   ↓
-전부 완료 → 결과 머지 → 자동 검증 → 보고
+3개 worktree + 3개 tmux pane + 3개 Claude 인스턴스 (각자 자기 task)
+  ↓
+GUI 가 chokidar 로 자동 감지 → RunLiveView 에 라이브 표시
+  ↓
+전부 완료 → forge-team merge → 자동 검증 → 보고
 ```
+
+**`Agent` / `Task` 도구는 절대 사용하지 마라** — 차단됨. forge-team 만 사용.
 
 ## 스킬 자동 주입 (hook + AI 행동)
 

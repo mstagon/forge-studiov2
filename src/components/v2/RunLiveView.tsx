@@ -22,6 +22,7 @@ import { AGENT_BY_ID, TERMINAL_LINES } from './data'
 import type { Team, TeamMember, ActivityItem, MemberState, TerminalLine } from './types'
 import { MergeConflictView, type ConflictItem } from './MergeConflictView'
 import { LiveTerminalGrid } from './LiveTerminalGrid'
+import { useLiveTerminalsStore } from '@/stores/liveTerminals'
 import {
   useTeamActivityStore,
   type ActivityEntry as RealActivityEntry,
@@ -77,6 +78,22 @@ export function RunLiveView({
   // Local paused fallback for the design demo (when no real backend status).
   const [localPaused, setLocalPaused] = useState(false)
   const paused = team.status === 'paused' || localPaused
+
+  // Push the active team into LiveTerminalsRoot so XTerminal mounts survive
+  // navigation away from this view. Same teamId reuses existing hosts; a
+  // different teamId tears down the previous team's PTYs.
+  const setActiveTeam = useLiveTerminalsStore((s) => s.setActiveTeam)
+  useEffect(() => {
+    setActiveTeam({
+      teamId: team.id,
+      members: team.members.map((m) => ({
+        agentId: m.agentId,
+        name: m.name,
+        tmuxPaneId: m.tmuxPaneId,
+        state: m.state,
+      })),
+    })
+  }, [team.id, team.members, setActiveTeam])
 
   // Transient inline notice (success / warn) for IPC-triggered actions.
   const [notice, setNotice] = useState<{

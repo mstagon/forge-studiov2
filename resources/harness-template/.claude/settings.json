@@ -40,6 +40,8 @@
       "Bash(git remote *)"
     ],
     "deny": [
+      "Agent",
+      "Task",
       "Read(.env*)",
       "Read(.env.dev)",
       "Read(.env.stg)",
@@ -97,6 +99,15 @@
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🚫 BLOCKED: 서브에이전트(Agent/Task) 사용 금지. 이 하네스는 Forge Team(격리된 worktree + tmux 세션 + 별 Claude 인스턴스)으로만 병렬 작업한다. 팀 생성은 `forge-team create --workspace ... --members ...` (CLI) 또는 Forge Studio Run 탭(Cmd+N)으로 한다. 자세한 내용은 CLAUDE.md 의 Team Routing 섹션 참고.' >&2; exit 2"
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [

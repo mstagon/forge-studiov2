@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# forge-team — shell launcher for the Node-based CLI bridge.
+#
+# We intentionally don't ship a precompiled JS — the source is a single
+# TypeScript file and Node 22.6+ can strip types natively. The shim here
+# resolves to the .ts source relative to its own location so the launcher
+# works whether it's invoked from a sibling repo, a symlink in $PATH, or
+# the bundled `npm run team` script.
+#
+# Requires: Node ≥ 22.6 (for --experimental-strip-types).
+
+set -euo pipefail
+
+# Resolve the directory containing this script, even via symlinks.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+ENTRY="$SCRIPT_DIR/forge-team.ts"
+
+if [ ! -f "$ENTRY" ]; then
+  echo "forge-team: cannot find entry point: $ENTRY" >&2
+  exit 1
+fi
+
+# Verify Node supports --experimental-strip-types (≥ 22.6). Earlier Node
+# can't run this script without an extra transpiler, which we won't pull in
+# as a dep — fail loudly with an actionable hint instead.
+NODE_VER="$(node -v 2>/dev/null || echo 'v0.0.0')"
+NODE_MAJOR="${NODE_VER#v}"; NODE_MAJOR="${NODE_MAJOR%%.*}"
+NODE_MINOR_REST="${NODE_VER#v*.}"
+NODE_MINOR="${NODE_MINOR_REST%%.*}"
+if [ "${NODE_MAJOR:-0}" -lt 22 ] || { [ "${NODE_MAJOR}" -eq 22 ] && [ "${NODE_MINOR:-0}" -lt 6 ]; }; then
+  echo "forge-team: requires Node >= 22.6 (got $NODE_VER)" >&2
+  echo "  Install via 'brew install node' or 'nvm install 22'" >&2
+  exit 1
+fi
+
+# Suppress the MODULE_TYPELESS_PACKAGE_JSON warning — we don't want to flip
+# package.json to ESM (would break Electron's CommonJS bundle) just to silence
+# this. NO_WARNINGS keeps stderr clean for piped JSON consumers.
+exec env NODE_NO_WARNINGS=1 node --experimental-strip-types --no-warnings "$ENTRY" "$@"
