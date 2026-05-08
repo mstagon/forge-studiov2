@@ -17,6 +17,7 @@ import { Icon } from './icons'
 // main session's foundation pass. Falls back to LibraryData agents if needed.
 import { AGENT_POOL, AGENT_BY_ID } from './data'
 import type { Agent } from './types'
+import { t } from '@/i18n'
 
 export type WorktreeStrategy = 'isolated' | 'shared'
 export type MergeStrategy = 'squash' | 'sequential'
@@ -128,9 +129,9 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
             <Icon.Users size={14} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>새 팀 만들기</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{t('wizard.title')}</div>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-              여러 agent가 격리된 워크트리에서 병렬로 일합니다
+              {t('wizard.subtitle')}
             </div>
           </div>
           <button
@@ -161,7 +162,12 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
             gap: 6,
           }}
         >
-          {['이름 + 목표', '멤버', '전략', '확인'].map((label, i) => {
+          {[
+            t('wizard.step1'),
+            t('wizard.step2'),
+            t('wizard.step3'),
+            t('wizard.step4'),
+          ].map((label, i) => {
             const n = i + 1
             const done = step > n
             const current = step === n
@@ -263,7 +269,7 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
               icon={<Icon.Chevron size={12} style={{ transform: 'rotate(180deg)' }} />}
               onClick={() => setStep(step - 1)}
             >
-              Back
+              {t('common.back')}
             </Btn>
           )}
           <div style={{ flex: 1 }} />
@@ -277,7 +283,7 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
               style={{ opacity: canNext ? 1 : 0.4, pointerEvents: canNext ? 'auto' : 'none' }}
               kbd="↵"
             >
-              Next
+              {t('common.next')}
             </Btn>
           ) : (
             <Btn
@@ -286,7 +292,7 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
               onClick={submit}
               kbd="⌘↵"
             >
-              Start team
+              {t('wizard.startTeam')}
             </Btn>
           )}
         </div>

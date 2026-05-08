@@ -1,0 +1,49 @@
+# Dependabot configuration.
+# Reference: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# - npm: weekly batch on Monday 09:00 KST so dev branch CI absorbs hits before
+#   the rest of the week. Major version bumps need manual review (see ignore).
+# - github-actions: weekly cadence keeps the workflow runners current with
+#   security patches without flooding PRs.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
+    labels:
+      - "type: chore"
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    # Major upgrades on these typically require coordinated changes (preload
+    # rebuild, native module ABI). Surface them via a manual PR instead.
+    ignore:
+      - dependency-name: "electron"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node-pty"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 5
+    labels:
+      - "type: chore"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

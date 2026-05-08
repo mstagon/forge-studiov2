@@ -1,0 +1,10 @@
+# Sponsorship configuration.
+# Fill in the channels you want surfaced on the repo "Sponsor" button.
+# Leave entries commented until they're set up — empty values render an
+# unhelpful broken link.
+#
+# github: [<org-or-user>]    # GitHub Sponsors
+# patreon: <username>
+# open_collective: <slug>
+# ko_fi: <slug>
+# custom: ["https://example.com/donate"]

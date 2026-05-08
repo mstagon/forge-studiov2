@@ -26,6 +26,13 @@
     "finish": "완료",
     "retry": "재시도"
   },
+  "sidebar": {
+    "workspace": "Workspace",
+    "git": "Git",
+    "dashboard": "Dashboard",
+    "library": "Library",
+    "settings": "Settings"
+  },
   "topbar": {
     "searchPlaceholder": "파일·커맨드·에이전트 검색…",
     "notifications": "알림",
@@ -122,9 +129,21 @@
     "none": "없음"
   },
   "wizard": {
-    "cancel": "취소"
+    "cancel": "취소",
+    "title": "새 팀 만들기",
+    "subtitle": "여러 agent가 격리된 워크트리에서 병렬로 일합니다",
+    "step1": "이름 + 목표",
+    "step2": "멤버",
+    "step3": "전략",
+    "step4": "확인",
+    "startTeam": "Start team"
   },
   "commandPalette": {
-    "noResults": "결과 없음"
+    "noResults": "결과 없음",
+    "groupRecent": "최근",
+    "groupWorkspace": "워크스페이스",
+    "groupLibrary": "라이브러리",
+    "groupRunActions": "Run 액션",
+    "groupSettings": "설정"
   }
 }
