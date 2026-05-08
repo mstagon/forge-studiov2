@@ -286,26 +286,113 @@ function RunBackBar({ team, onClose }: RunBackBarProps) {
 
 export interface ResourceBarProps {
   runs: Team[]
+  /**
+   * Optional override of the live snapshot. When supplied, the bar skips IPC
+   * polling and renders these values directly — used by storybook / preview
+   * surfaces and by callers that already cache the snapshot upstream.
+   */
+  usage?: Partial<{
+    cpu: number
+    memUsed: number
+    memTotal: number
+    diskDeltaGb: number
+    ptyCount: number
+  }>
 }
 
-export function ResourceBar({ runs }: ResourceBarProps) {
-  const [tick, setTick] = useState(0)
+interface ResourceSnapshot {
+  cpu: number
+  memUsed: number
+  memTotal: number
+  diskDeltaGb: number
+  ptyCount: number
+  ts: number
+}
+
+export function ResourceBar({ runs, usage }: ResourceBarProps) {
+  // Live snapshot pulled from main every 5s. Initial state mirrors the
+  // "nothing measured yet" case so the bar renders immediately at zero
+  // instead of flashing fake values.
+  const [snap, setSnap] = useState<ResourceSnapshot | null>(null)
+
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1500)
-    return () => clearInterval(id)
-  }, [])
-  // Fake-fluctuating values seeded by tick
-  const cpu = 28 + Math.round(Math.sin(tick / 3) * 6 + runs.length * 4)
-  const mem = 6.4 + Math.sin(tick / 5) * 0.3
-  const memMax = 32
-  const disk = 142
-  const ptys = 14 + runs.length * 2
+    if (usage) return // override path — skip polling entirely
+    let cancelled = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sysApi = (window as any)?.api?.system as
+      | { resourceSnapshot?: () => Promise<ResourceSnapshot> }
+      | undefined
+    if (typeof sysApi?.resourceSnapshot !== 'function') {
+      // IPC not wired (older preload) — leave the bar in its zero state so
+      // it's visibly inert rather than lying with synthetic values.
+      return
+    }
+    const tick = async () => {
+      try {
+        const next = await sysApi.resourceSnapshot!()
+        if (!cancelled) setSnap(next)
+      } catch (err) {
+        // swallow — the next interval will retry
+        console.warn('[ResourceBar] snapshot failed:', err)
+      }
+    }
+    tick()
+    const id = setInterval(tick, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [usage])
+
+  // Pick fields with usage > snap > defaults precedence so test/preview
+  // overrides win without forcing the caller to supply every value.
+  const cpu = usage?.cpu ?? snap?.cpu ?? 0
+  const memUsed = usage?.memUsed ?? snap?.memUsed ?? 0
+  const memTotalRaw = usage?.memTotal ?? snap?.memTotal ?? 0
+  const memTotal = memTotalRaw > 0 ? memTotalRaw : 1 // avoid /0 in pct
+  const diskDeltaGb = usage?.diskDeltaGb ?? snap?.diskDeltaGb ?? 0
+  // ptyCount defaults to runs.length × 2 only if no real PTY count is known
+  // — it's better to show "0 sessions" than a synthetic number, but we do
+  // surface a hint so the bar isn't blank during the very first poll.
+  const ptyCount = usage?.ptyCount ?? snap?.ptyCount ?? 0
+
+  // Disk: show MB when small, GB when bigger.
+  const diskLabel =
+    diskDeltaGb >= 1
+      ? `${diskDeltaGb.toFixed(1)} GB worktree growth`
+      : `${Math.max(0, Math.round(diskDeltaGb * 1024))} MB worktree growth`
+
   const items = [
-    { label: 'CPU', value: `${cpu}%`, pct: cpu / 100 },
-    { label: 'MEM', value: `${mem.toFixed(1)} / ${memMax} GB`, pct: mem / memMax },
-    { label: 'DISK', value: `${disk} MB worktrees`, pct: 0.18 },
-    { label: 'PTY', value: `${ptys} sessions`, pct: ptys / 64 },
+    { label: 'CPU', value: `${Math.round(cpu)}%`, pct: cpu / 100 },
+    {
+      label: 'MEM',
+      value: `${memUsed.toFixed(1)} / ${memTotalRaw > 0 ? memTotalRaw.toFixed(0) : '—'} GB`,
+      pct: memUsed / memTotal,
+    },
+    { label: 'DISK', value: diskLabel, pct: Math.min(0.5, diskDeltaGb / 50) },
+    { label: 'PTY', value: `${ptyCount} sessions`, pct: ptyCount / 64 },
   ]
+
+  // Promote bar colour to warning/danger thresholds:
+  //   CPU > 80% → warning, CPU > 90% → danger
+  //   MEM > 85% → warning, MEM > 95% → danger
+  // Other meters use the linear gradient logic from the original design.
+  function colourFor(label: string, pct: number): string {
+    if (label === 'CPU') {
+      if (pct > 0.9) return 'var(--danger)'
+      if (pct > 0.8) return 'var(--warning)'
+      return 'var(--success)'
+    }
+    if (label === 'MEM') {
+      if (pct > 0.95) return 'var(--danger)'
+      if (pct > 0.85) return 'var(--warning)'
+      return 'var(--success)'
+    }
+    if (pct > 0.85) return 'var(--danger)'
+    if (pct > 0.65) return 'var(--warning)'
+    return 'var(--success)'
+  }
+
   return (
     <div
       className="ns mono"
@@ -344,13 +431,8 @@ export function ResourceBar({ runs }: ResourceBarProps) {
               style={{
                 display: 'block',
                 height: '100%',
-                width: `${Math.min(100, it.pct * 100)}%`,
-                background:
-                  it.pct > 0.85
-                    ? 'var(--danger)'
-                    : it.pct > 0.65
-                      ? 'var(--warning)'
-                      : 'var(--success)',
+                width: `${Math.min(100, Math.max(0, it.pct * 100))}%`,
+                background: colourFor(it.label, it.pct),
               }}
             />
           </span>
@@ -362,6 +444,7 @@ export function ResourceBar({ runs }: ResourceBarProps) {
       <div style={{ flex: 1 }} />
       <span style={{ color: 'var(--text-4)' }}>
         무제한 정책 · 자원 표시는 정직성 위주
+        {runs.length > 0 ? ` · ${runs.length} runs` : ''}
       </span>
     </div>
   )

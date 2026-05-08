@@ -5,6 +5,7 @@ const ALLOWED_CHANNELS = new Set([
   'action',
   'workspace-opened',
   'error-log:push',
+  'team-activity:event',
 ])
 
 const api = {
@@ -405,6 +406,73 @@ const api = {
     }> => ipcRenderer.invoke('teams:merge', teamId, opts),
   },
 
+  // ─── Team Activity ───────────────────────────────────────────────
+  //
+  // RunLiveView's right-rail activity feed reads the JSONL tail via list()
+  // and subscribes to live pushes via onEvent(). The single-channel layout
+  // (one event stream for all teams) was chosen over per-team channels so
+  // the preload allowlist stays small.
+  teamActivity: {
+    list: (
+      teamId: string,
+      limit?: number,
+    ): Promise<
+      Array<{
+        ts: number
+        teamId: string
+        agent: string
+        kind: 'edit' | 'commit' | 'state-change'
+        file?: string
+        added?: number
+        removed?: number
+        message?: string
+        files?: string[]
+        sha?: string
+        from?: string
+        to?: string
+        text?: string
+      }>
+    > => ipcRenderer.invoke('team-activity:list', teamId, limit),
+    onEvent: (
+      callback: (event: {
+        ts: number
+        teamId: string
+        agent: string
+        kind: 'edit' | 'commit' | 'state-change'
+        file?: string
+        added?: number
+        removed?: number
+        message?: string
+        files?: string[]
+        sha?: string
+        from?: string
+        to?: string
+        text?: string
+      }) => void,
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: {
+          ts: number
+          teamId: string
+          agent: string
+          kind: 'edit' | 'commit' | 'state-change'
+          file?: string
+          added?: number
+          removed?: number
+          message?: string
+          files?: string[]
+          sha?: string
+          from?: string
+          to?: string
+          text?: string
+        },
+      ) => callback(payload)
+      ipcRenderer.on('team-activity:event', handler)
+      return () => ipcRenderer.removeListener('team-activity:event', handler)
+    },
+  },
+
   // ─── code-review-graph ───────────────────────────────────────────
   crGraph: {
     isInstalled: (): Promise<{
@@ -549,6 +617,20 @@ const api = {
      */
     bundledToolsRoot: () =>
       ipcRenderer.invoke('system:bundledToolsRoot') as Promise<string | null>,
+    /**
+     * One-shot snapshot of CPU / memory / disk-delta / pty-count for the
+     * WorkspaceV2 ResourceBar. The main process caches for ~5s so this is
+     * cheap to call on a 5s polling interval. Always resolves — failure
+     * cases return zeros rather than rejecting.
+     */
+    resourceSnapshot: (): Promise<{
+      cpu: number
+      memUsed: number
+      memTotal: number
+      diskDeltaGb: number
+      ptyCount: number
+      ts: number
+    }> => ipcRenderer.invoke('resource:snapshot'),
   },
 
   // ─── Events ──────────────────────────────────────────────────────

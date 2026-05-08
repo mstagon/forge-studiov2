@@ -162,4 +162,13 @@ export class PtyManager {
       this.dispose(id)
     }
   }
+
+  /**
+   * Number of currently-live PTY instances. Surfaced to the renderer via
+   * `system:resourceSnapshot` so the ResourceBar can show a real PTY count
+   * instead of a synthetic value.
+   */
+  activeCount(): number {
+    return this.instances.size
+  }
 }
