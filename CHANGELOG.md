@@ -4,6 +4,61 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] — 2026-05-08
+
+### Fixed — claude 프로세스가 화면 이동 시 죽던 진짜 원인
+
+사용자 보고: "다른 화면 갔다오면 클로드가 꺼져있고 그냥 터미널만 보임".
+v0.6.0~0.6.2 의 portal lift / host home reparent 까지 했는데도 여전.
+
+#### 진짜 원인
+
+XTerminal 의 두 코드 path 가 PTY dispose 를 호출:
+1. **useEffect cleanup** — React 의 어떤 lifecycle (StrictMode double-mount,
+   concurrent rendering, transient detach/reattach) 에서든 fire 가능.
+2. **init 안의 disposed race** — pty.create 가 await 인 동안 cleanup 이
+   먼저 실행되면 disposed=true 로 들어감. 그 후 ptyId 가 도착해서 `if
+   (disposed) { pty.dispose(ptyId) }` 분기 진입.
+
+두 path 어느 쪽이든 fire 되면 main process 가 PTY master 를 close →
+slave (tmux pane) 에 SIGHUP → pane 안의 claude 프로세스가 종료.
+
+UI 상으로는 터미널 컨테이너 (xterm 인스턴스) 는 살아있고 (lift 작동) 새 attach 가
+일어나지만, 안의 claude 는 이미 죽음 → 사용자 눈엔 "터미널만 있고 클로드는
+꺼진" 상태로 보임.
+
+#### 수정 — PTY ownership 을 lifecycle 에서 host pruning 으로 이동
+
+PTY 라이프사이클을 React 컴포넌트의 mount/unmount 에 묶지 않고
+LiveTerminalsRoot 의 host pruning 에 위임:
+
+- `XTerminal` cleanup 에서 `pty.dispose()` 호출 제거 — 컴포넌트 unmount
+  와 PTY 종료를 분리.
+- init 의 `if (disposed)` race 분기에서도 `pty.dispose()` 호출 제거. 대신
+  `onPtyCreated` 콜백으로 ptyId 를 부모에게 전달 (race 이후라도) — 부모가
+  추적 후 host prune 시 정리.
+- `LiveTerminalsRegistry`:
+  - `setHostPtyId(key, ptyId)` API 추가 — XTerminal 의 onPtyCreated 가
+    여기로 보고.
+  - `pruneHosts(activeKeys)` 가 활성 키에서 빠진 host 를 제거할 때 해당
+    `ptyId` 만 명시적으로 `pty.dispose()` 호출.
+  - `disposeAllPtys()` API — 윈도우 close 시 일괄 정리 (main process 의
+    ptyManager.disposeAll 과 별개의 안전망).
+
+이제 PTY 는:
+- 멤버가 active team 에서 사라질 때 (팀 swap, 멤버 제거) → host 와 함께 dispose
+- 워크스페이스 swap → store.clear() → 모든 host prune → 모든 PTY dispose
+- .app 종료 → main 의 ptyManager.disposeAll
+
+화면 이동 / React 사이클 / StrictMode 어느 것도 PTY 못 건드림.
+
+#### Verified
+
+dev 서버 + chromium MCP 로 PTY dispose 호출 카운트:
+- setActiveTeam('A') → 0번 호출 (이전엔 1번) ✅
+- setActiveTeam('A') 재호출 → 0번 ✅
+- setActiveTeam('B') (팀 swap) → 1번 (host A 만 정리) ✅
+
 ## [0.6.2] — 2026-05-08
 
 ### Fixed — 화면 이동 시 터미널 진짜로 유지

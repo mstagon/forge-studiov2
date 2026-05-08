@@ -155,9 +155,15 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, 
         return
       }
 
-      // Bail if disposed during async PTY creation
+      // Bail if disposed during async PTY creation. We dispose the renderer
+      // but NOT the PTY — same ownership policy as the cleanup return below:
+      // if this is an agent terminal, LiveTerminalsRoot owns dispose via
+      // host pruning, so we hand the ptyId off via onPtyCreated even when
+      // bailing. Without this, a StrictMode double-mount or transient
+      // unmount would call pty.dispose() and SIGHUP the agent's claude
+      // process — exactly the regression we're guarding against.
       if (disposed || !ptyId) {
-        if (ptyId) window.api.pty.dispose(ptyId)
+        if (ptyId) onPtyCreatedRef.current?.(ptyId)
         terminal.dispose()
         return
       }
@@ -224,6 +230,20 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, 
     init()
 
     return () => {
+      // PTY ownership policy:
+      //   We DO NOT call pty.dispose() here on every effect cleanup. When
+      //   <XTerminal> lives inside <LiveTerminalsRoot>'s persistent portal
+      //   pool, this cleanup can fire on transient React lifecycle events
+      //   (StrictMode double-mount, concurrent rendering, even brief
+      //   detach/reattach during reparenting). Disposing the PTY there sends
+      //   SIGHUP to the tmux pane and kills the agent's `claude` process —
+      //   exactly the regression users hit ("다른 화면 갔다오면 클로드가 꺼짐").
+      //
+      //   The PTY is owned by the App-level pool: LiveTerminalsRoot disposes
+      //   it when a host is pruned (member removed, team swap) or when the
+      //   window closes (main process ptyManager.disposeAll on window-all-
+      //   closed). For shell tabs (no agent), the parent UI already owns the
+      //   tab lifecycle and explicitly disposes via the terminals store.
       disposed = true
       cleanupData?.()
       cleanupExit?.()
@@ -231,12 +251,15 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, 
       if (terminal) {
         ;(terminal as unknown as { __detachWheel?: () => void }).__detachWheel?.()
       }
-      if (ptyId) window.api.pty.dispose(ptyId)
+      // Only dispose the renderer (xterm canvas/WebGL). The PTY survives.
       if (terminal) terminal.dispose()
       terminalRef.current = null
       fitAddonRef.current = null
       searchAddonRef.current = null
-      ptyIdRef.current = null
+      // Keep ptyIdRef populated so a re-mount can re-attach to the same PTY
+      // if the parent component (LiveTerminalsRoot via portal) hands us back
+      // the same agent binding. Today XTerminal always creates a fresh PTY
+      // on mount; a follow-up can wire the pool to reuse ptyId on re-mount.
     }
   }, [cwd, tabId, paneId])
 
