@@ -43,6 +43,11 @@ export interface LiveTerminalsRegistry {
   setSlot(key: string, el: HTMLDivElement | null): void
   /** Get (or lazily create) the persistent host element for an agent key. */
   getOrCreateHost(key: string): HTMLDivElement
+  /** Record the PTY id that the XTerminal at `key` is currently attached to.
+   *  Owned by the registry so that pruneHosts() can dispose it cleanly when
+   *  the corresponding member is no longer active. XTerminal must NOT call
+   *  pty.dispose() in its own effect cleanup (see comment there). */
+  setHostPtyId(key: string, ptyId: string | null): void
   /** Subscribe to slot/host changes — used to force a re-render so portals reattach. */
   subscribe(listener: () => void): () => void
 }
@@ -51,10 +56,16 @@ interface InternalRegistry extends LiveTerminalsRegistry {
   pruneHosts(activeKeys: ReadonlySet<string>): void
   reattachAll(): void
   setHomeElement(el: HTMLDivElement | null): void
+  disposeAllPtys(): void
 }
 
 function createRegistry(): InternalRegistry {
   const slots: ElMap = new Map()
+  // host key → most recently reported PTY id, captured via XTerminal's
+  // onPtyCreated callback. We dispose this when the host is pruned — it's
+  // the ONLY place a PTY should be torn down for an agent terminal. See
+  // XTerminal cleanup comment for why component unmount can NOT own dispose.
+  const hostPtyIds: Map<string, string> = new Map()
   const hosts: ElMap = new Map()
   const listeners = new Set<() => void>()
   const notify = () => listeners.forEach((l) => l())
@@ -115,9 +126,31 @@ function createRegistry(): InternalRegistry {
     pruneHosts(activeKeys) {
       for (const k of Array.from(hosts.keys())) {
         if (!activeKeys.has(k)) {
+          // Dispose the PTY first — once we drop the host, no one will
+          // reattach to it, so the underlying tmux session must be torn down
+          // here rather than leaked. This is also the ONLY place we dispose
+          // an agent PTY (XTerminal cleanup intentionally skips dispose).
+          const ptyId = hostPtyIds.get(k)
+          if (ptyId) {
+            window.api?.pty?.dispose?.(ptyId)
+            hostPtyIds.delete(k)
+          }
           hosts.get(k)?.remove()
           hosts.delete(k)
         }
+      }
+    },
+    disposeAllPtys() {
+      for (const [k, ptyId] of hostPtyIds) {
+        window.api?.pty?.dispose?.(ptyId)
+        hostPtyIds.delete(k)
+      }
+    },
+    setHostPtyId(key, ptyId) {
+      if (ptyId == null) {
+        hostPtyIds.delete(key)
+      } else {
+        hostPtyIds.set(key, ptyId)
       }
     },
     reattachAll() {
@@ -245,6 +278,7 @@ export function LiveTerminalsRoot({ children }: LiveTerminalsRootProps) {
               cwd=""
               isActive
               agent={{ teamId, agentName: key }}
+              onPtyCreated={(ptyId) => registry.setHostPtyId(key, ptyId)}
             />,
             host,
             key,
