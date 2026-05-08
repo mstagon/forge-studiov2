@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
-const ALLOWED_CHANNELS = new Set(['navigate', 'action', 'workspace-opened'])
+const ALLOWED_CHANNELS = new Set([
+  'navigate',
+  'action',
+  'workspace-opened',
+  'error-log:push',
+])
 
 const api = {
   // ─── PTY ─────────────────────────────────────────────────────────
@@ -79,6 +84,161 @@ const api = {
       ipcRenderer.invoke('harness:listHooks', workspacePath),
     listCompositions: () =>
       ipcRenderer.invoke('harness:listCompositions'),
+
+    // ─── Authoring (CRUD) ──────────────────────────────────────────
+    createAgent: (
+      workspacePath: string,
+      opts: { name: string; description?: string; tools?: string; model?: string; body?: string }
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:createAgent', workspacePath, opts),
+    updateAgent: (
+      workspacePath: string,
+      name: string,
+      body: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:updateAgent', workspacePath, name, body),
+    deleteAgent: (workspacePath: string, name: string): Promise<{ trash: string }> =>
+      ipcRenderer.invoke('harness:deleteAgent', workspacePath, name),
+    renameAgent: (
+      workspacePath: string,
+      oldName: string,
+      newName: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:renameAgent', workspacePath, oldName, newName),
+
+    createSkill: (
+      workspacePath: string,
+      opts: { name: string; description?: string; globs?: string; body?: string }
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:createSkill', workspacePath, opts),
+    updateSkill: (
+      workspacePath: string,
+      name: string,
+      body: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:updateSkill', workspacePath, name, body),
+    deleteSkill: (workspacePath: string, name: string): Promise<{ trash: string }> =>
+      ipcRenderer.invoke('harness:deleteSkill', workspacePath, name),
+    renameSkill: (
+      workspacePath: string,
+      oldName: string,
+      newName: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:renameSkill', workspacePath, oldName, newName),
+
+    createCommand: (
+      workspacePath: string,
+      opts: { name: string; description?: string; argHint?: string; body?: string }
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:createCommand', workspacePath, opts),
+    updateCommand: (
+      workspacePath: string,
+      name: string,
+      body: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:updateCommand', workspacePath, name, body),
+    deleteCommand: (workspacePath: string, name: string): Promise<{ trash: string }> =>
+      ipcRenderer.invoke('harness:deleteCommand', workspacePath, name),
+    renameCommand: (
+      workspacePath: string,
+      oldName: string,
+      newName: string
+    ): Promise<{ file: string }> =>
+      ipcRenderer.invoke('harness:renameCommand', workspacePath, oldName, newName),
+
+    addHook: (
+      workspacePath: string,
+      event: string,
+      hook: {
+        matcher?: string
+        command: string
+        type?: string
+        timeout?: number
+        disabled?: boolean
+      }
+    ): Promise<{ index: number }> =>
+      ipcRenderer.invoke('harness:addHook', workspacePath, event, hook),
+    removeHook: (workspacePath: string, event: string, index: number): Promise<void> =>
+      ipcRenderer.invoke('harness:removeHook', workspacePath, event, index),
+    updateHook: (
+      workspacePath: string,
+      event: string,
+      index: number,
+      hook: {
+        matcher?: string
+        command: string
+        type?: string
+        timeout?: number
+        disabled?: boolean
+      }
+    ): Promise<void> =>
+      ipcRenderer.invoke('harness:updateHook', workspacePath, event, index, hook),
+
+    listMcpServers: (
+      workspacePath: string
+    ): Promise<
+      Array<{
+        name: string
+        spec: {
+          command?: string
+          args?: string[]
+          env?: Record<string, string>
+          type?: 'stdio' | 'http' | 'sse'
+          url?: string
+          disabled?: boolean
+        }
+      }>
+    > => ipcRenderer.invoke('harness:listMcpServers', workspacePath),
+    addMcpServer: (
+      workspacePath: string,
+      name: string,
+      spec: {
+        command?: string
+        args?: string[]
+        env?: Record<string, string>
+        type?: 'stdio' | 'http' | 'sse'
+        url?: string
+        disabled?: boolean
+      }
+    ): Promise<void> =>
+      ipcRenderer.invoke('harness:addMcpServer', workspacePath, name, spec),
+    updateMcpServer: (
+      workspacePath: string,
+      name: string,
+      spec: {
+        command?: string
+        args?: string[]
+        env?: Record<string, string>
+        type?: 'stdio' | 'http' | 'sse'
+        url?: string
+        disabled?: boolean
+      }
+    ): Promise<void> =>
+      ipcRenderer.invoke('harness:updateMcpServer', workspacePath, name, spec),
+    removeMcpServer: (workspacePath: string, name: string): Promise<void> =>
+      ipcRenderer.invoke('harness:removeMcpServer', workspacePath, name),
+    testMcpConnection: (
+      workspacePath: string,
+      name: string
+    ): Promise<{ ok: boolean; message: string }> =>
+      ipcRenderer.invoke('harness:testMcpConnection', workspacePath, name),
+
+    getPermissions: (
+      workspacePath: string
+    ): Promise<{ allow: string[]; deny: string[] }> =>
+      ipcRenderer.invoke('harness:getPermissions', workspacePath),
+    setPermissions: (
+      workspacePath: string,
+      next: { allow: string[]; deny: string[] }
+    ): Promise<void> =>
+      ipcRenderer.invoke('harness:setPermissions', workspacePath, next),
+
+    syncRouting: (
+      workspacePath: string,
+      kind: 'agent' | 'skill',
+      entry: { name: string; description?: string; pattern?: string }
+    ): Promise<{ updated: boolean; file: string }> =>
+      ipcRenderer.invoke('harness:syncRouting', workspacePath, kind, entry),
   },
 
   // ─── Filesystem ──────────────────────────────────────────────────
@@ -210,6 +370,86 @@ const api = {
       checkedAt: string
       error: string | null
     }> => ipcRenderer.invoke('updates:check'),
+  },
+
+  // ─── Hook Profiler ───────────────────────────────────────────────
+  hookProfiler: {
+    recent: (
+      limit?: number
+    ): Promise<
+      Array<{
+        ts: string
+        event: string
+        script: string
+        durationMs: number
+        exitCode: number
+        output?: string
+      }>
+    > => ipcRenderer.invoke('hook-profiler:recent', limit),
+    stats: (
+      window?: number
+    ): Promise<
+      Array<{
+        script: string
+        event: string
+        calls: number
+        successCount: number
+        failureCount: number
+        avgMs: number
+        p95Ms: number
+        successRate: number
+        lastRunTs: string | null
+        lastFailure: {
+          ts: string
+          event: string
+          script: string
+          durationMs: number
+          exitCode: number
+          output?: string
+        } | null
+      }>
+    > => ipcRenderer.invoke('hook-profiler:stats', window),
+    record: (payload: {
+      event: string
+      script: string
+      durationMs: number
+      exitCode: number
+      output?: string
+    }): Promise<void> => ipcRenderer.invoke('hook-profiler:record', payload),
+  },
+
+  // ─── Error Log (one-way push from main → renderer) ──────────────
+  errorLog: {
+    /** Subscribe to errors pushed from the main process. */
+    onPush: (
+      callback: (payload: {
+        ts: string
+        code: string
+        category: string
+        message: string
+        context?: Record<string, unknown>
+      }) => void,
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: {
+          ts: string
+          code: string
+          category: string
+          message: string
+          context?: Record<string, unknown>
+        },
+      ) => callback(payload)
+      ipcRenderer.on('error-log:push', handler)
+      return () => ipcRenderer.removeListener('error-log:push', handler)
+    },
+    /** Renderer-side errors that should also surface to other windows. */
+    report: (payload: {
+      code: string
+      category: string
+      message: string
+      context?: Record<string, unknown>
+    }) => ipcRenderer.send('error-log:report', payload),
   },
 
   // ─── System ──────────────────────────────────────────────────────

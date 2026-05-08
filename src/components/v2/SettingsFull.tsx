@@ -16,6 +16,7 @@ import { Btn, Pill, Dot, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import type { WorkspaceSummary } from './types'
 import { CodeGraphViz } from './CodeGraphViz'
+import { useOnboardingStore } from '@/stores/onboarding'
 
 export interface SettingsFullProps {
   workspaces: WorkspaceSummary[]
@@ -366,10 +367,39 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
           label="Confirm destructive commands"
           sub="rm -rf, migrate reset 등 사용자 확인"
           right={<Toggle value={confirmDestructive} onChange={setConfirmDestructive} />}
-          last
         />
+        <OnboardingResetRow />
       </SettingsCard>
     </>
+  )
+}
+
+function OnboardingResetRow() {
+  const show = useOnboardingStore((s) => s.show)
+  const reset = useOnboardingStore((s) => s.reset)
+  const hasOnboarded = useOnboardingStore((s) => s.hasOnboarded)
+  return (
+    <Row
+      label="Show onboarding again"
+      sub={
+        hasOnboarded
+          ? '5단계 첫 실행 가이드를 다시 띄웁니다.'
+          : '첫 실행 가이드가 아직 표시되지 않았습니다.'
+      }
+      right={
+        <span style={{ display: 'inline-flex', gap: 6 }}>
+          <Btn variant="ghost" onClick={() => show()}>
+            지금 열기
+          </Btn>
+          {hasOnboarded && (
+            <Btn variant="default" icon={<Icon.Refresh size={11} />} onClick={() => reset()}>
+              초기화
+            </Btn>
+          )}
+        </span>
+      }
+      last
+    />
   )
 }
 

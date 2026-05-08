@@ -33,9 +33,15 @@ export interface WizardProps {
   open: boolean
   onClose: () => void
   onCreate: (result: WizardResult) => void
+  /**
+   * Prefill the member list when the wizard opens. Callers can use this to
+   * seed onboarding-style "Sample Run" flows (3 members already selected) so
+   * the user only has to confirm name + goal.
+   */
+  prefillMembers?: string[]
 }
 
-export function Wizard({ open, onClose, onCreate }: WizardProps) {
+export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps) {
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [goal, setGoal] = useState('')
@@ -48,11 +54,11 @@ export function Wizard({ open, onClose, onCreate }: WizardProps) {
       setStep(1)
       setName('')
       setGoal('')
-      setSelected([])
+      setSelected(prefillMembers ?? [])
       setWorktree('isolated')
       setMerge('squash')
     }
-  }, [open])
+  }, [open, prefillMembers])
 
   if (!open) return null
 

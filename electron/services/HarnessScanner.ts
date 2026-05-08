@@ -1,7 +1,8 @@
 import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
-import { execFileSync } from 'child_process'
+import { execFileSync, spawn } from 'child_process'
+import type { HookProfiler } from './HookProfiler'
 
 /**
  * Electron apps launched from Finder / Dock on macOS inherit a minimal PATH
@@ -155,7 +156,200 @@ function firstNonEmptyLine(body: string): string {
   return ''
 }
 
+// ─── Path-traversal defence ───────────────────────────────────────────
+//
+// All write operations route through `assertWithinClaude` to make sure the
+// resolved target stays inside `<workspacePath>/.claude`. We rely on `path.resolve`
+// + a prefix check; fs.realpath isn't usable for not-yet-existent files.
+
+function isPathInside(child: string, parent: string): boolean {
+  const c = path.resolve(child)
+  const p = path.resolve(parent)
+  if (c === p) return true
+  return c.startsWith(p + path.sep)
+}
+
+function assertSafeName(name: string): void {
+  if (!name || typeof name !== 'string') {
+    throw new Error('Name is required')
+  }
+  if (name.length > 80) throw new Error('Name too long')
+  // Conservative slug: letters, digits, dash, underscore, dot. No path separators.
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+    throw new Error(`Invalid name "${name}" — only [A-Za-z0-9._-] allowed`)
+  }
+  if (name === '.' || name === '..' || name.startsWith('.')) {
+    // Allow normal dots in middle but disallow leading dot (no hidden files)
+    if (name.startsWith('.')) {
+      throw new Error('Name cannot start with "."')
+    }
+  }
+}
+
+function assertClaudeChild(workspacePath: string, target: string): string {
+  const claudeDir = path.resolve(workspacePath, '.claude')
+  const resolved = path.resolve(target)
+  if (!isPathInside(resolved, claudeDir)) {
+    throw new Error('Access denied: target is outside the workspace .claude directory')
+  }
+  return resolved
+}
+
+// ─── Frontmatter writer ────────────────────────────────────────────────
+//
+// Mirrors the tiny parser above. We escape only the values that contain a
+// colon, hash, or quote — everything else is written raw to keep diffs small
+// and human-readable.
+
+function writeFrontmatter(data: Record<string, string | undefined>, body: string): string {
+  const lines: string[] = ['---']
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || value === null) continue
+    const v = String(value)
+    if (!v) continue
+    const needsQuote = /[:#"']/.test(v) || v.startsWith(' ') || v.endsWith(' ')
+    lines.push(`${key}: ${needsQuote ? JSON.stringify(v) : v}`)
+  }
+  lines.push('---')
+  lines.push('')
+  return lines.join('\n') + (body.startsWith('\n') ? body : '\n' + body)
+}
+
+// ─── Trash policy ──────────────────────────────────────────────────────
+//
+// Soft-delete moves files under `.claude/.trash/<kind>/<name>.<ts>.<ext>`.
+// The user can restore manually. We do NOT auto-purge — that's an explicit
+// user action.
+
+async function moveToTrash(
+  workspacePath: string,
+  kind: 'agents' | 'skills' | 'commands',
+  source: string,
+  displayName: string
+): Promise<string> {
+  const trashDir = assertClaudeChild(
+    workspacePath,
+    path.join(workspacePath, '.claude', '.trash', kind)
+  )
+  await fs.ensureDir(trashDir)
+  const ts = new Date().toISOString().replace(/[:.]/g, '-')
+  const ext = path.extname(source) || ''
+  const target = path.join(trashDir, `${displayName}.${ts}${ext}`)
+  await fs.move(source, target, { overwrite: false })
+  return target
+}
+
+// ─── settings.json / mcp.json read-modify-write helpers ────────────────
+
+async function readJsonSafe<T>(file: string, fallback: T): Promise<T> {
+  if (!(await fs.pathExists(file))) return fallback
+  try {
+    const raw = await fs.readFile(file, 'utf-8')
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
+  await fs.ensureDir(path.dirname(file))
+  const tmp = file + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf-8')
+  await fs.move(tmp, file, { overwrite: true })
+}
+
+// ─── Authoring shapes (input/output for IPC) ──────────────────────────
+
+export interface AgentCreateOpts {
+  name: string
+  description?: string
+  tools?: string
+  model?: string
+  body?: string
+}
+
+export interface SkillCreateOpts {
+  name: string
+  description?: string
+  globs?: string
+  body?: string
+}
+
+export interface CommandCreateOpts {
+  name: string
+  description?: string
+  argHint?: string
+  body?: string
+}
+
+export interface HookSpec {
+  matcher?: string
+  command: string
+  type?: string
+  timeout?: number
+  disabled?: boolean
+}
+
+export interface McpServerSpec {
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  type?: 'stdio' | 'http' | 'sse'
+  url?: string
+  disabled?: boolean
+}
+
+/**
+ * Drop empty / undefined fields from a server spec so the on-disk JSON stays
+ * tidy. We never write an empty object — the IPC layer rejects malformed
+ * input upstream.
+ */
+function sanitizeMcp(spec: McpServerSpec): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (spec.type) out.type = spec.type
+  if (spec.command) out.command = spec.command
+  if (Array.isArray(spec.args) && spec.args.length > 0) out.args = spec.args.slice()
+  if (spec.env && Object.keys(spec.env).length > 0) {
+    out.env = { ...spec.env }
+  }
+  if (spec.url) out.url = spec.url
+  if (spec.disabled) out.disabled = true
+  return out
+}
+
+/** A single concatenated chunk of the preview session context. */
+export interface SessionPreviewSection {
+  kind: 'claude-md' | 'rule' | 'hook'
+  /** Human-readable label rendered in the UI accordion header. */
+  label: string
+  /** Absolute file path the section was sourced from. */
+  file: string
+  /** Verbatim text — the renderer is in charge of any code-block styling. */
+  content: string
+  /** True when the section is a placeholder for a missing file. */
+  missing?: boolean
+}
+
+export interface SessionPreview {
+  sections: SessionPreviewSection[]
+  /** Sum of `content.length` across all sections — quick cost proxy. */
+  totalChars: number
+  /** Rough token estimate (chars / 4) — Anthropic's documented heuristic. */
+  tokenEstimate: number
+}
+
 export class HarnessScanner {
+  /**
+   * Optional profiler — when present, MCP `which` probes are timed and
+   * recorded so the Hook profiling dashboard can show per-server liveness
+   * latency. Wired from electron/main via `setProfiler()`.
+   */
+  private profiler: HookProfiler | null = null
+
+  setProfiler(profiler: HookProfiler | null): void {
+    this.profiler = profiler
+  }
+
   async scan(workspacePath: string): Promise<HarnessInfo> {
     const claudeDir = path.join(workspacePath, '.claude')
     const info: HarnessInfo = {
@@ -444,6 +638,639 @@ export class HarnessScanner {
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  // ─── Authoring: Agents (file = .claude/agents/<name>.md) ───────────
+
+  async createAgent(workspacePath: string, opts: AgentCreateOpts): Promise<{ file: string }> {
+    assertSafeName(opts.name)
+    const dir = assertClaudeChild(workspacePath, path.join(workspacePath, '.claude', 'agents'))
+    await fs.ensureDir(dir)
+    const file = path.join(dir, `${opts.name}.md`)
+    if (await fs.pathExists(file)) {
+      throw new Error(`Agent "${opts.name}" already exists`)
+    }
+    const body = opts.body ?? `# ${opts.name}\n\n${opts.description ?? ''}\n`
+    const content = writeFrontmatter(
+      {
+        name: opts.name,
+        description: opts.description,
+        tools: opts.tools,
+        model: opts.model,
+      },
+      body
+    )
+    await fs.writeFile(file, content, 'utf-8')
+    return { file }
+  }
+
+  async updateAgent(workspacePath: string, name: string, body: string): Promise<{ file: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'agents', `${name}.md`)
+    )
+    if (!(await fs.pathExists(file))) {
+      throw new Error(`Agent "${name}" not found`)
+    }
+    await fs.writeFile(file, body, 'utf-8')
+    return { file }
+  }
+
+  async deleteAgent(workspacePath: string, name: string): Promise<{ trash: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'agents', `${name}.md`)
+    )
+    if (!(await fs.pathExists(file))) throw new Error(`Agent "${name}" not found`)
+    const trash = await moveToTrash(workspacePath, 'agents', file, name)
+    return { trash }
+  }
+
+  async renameAgent(
+    workspacePath: string,
+    oldName: string,
+    newName: string
+  ): Promise<{ file: string }> {
+    assertSafeName(oldName)
+    assertSafeName(newName)
+    if (oldName === newName) {
+      return {
+        file: assertClaudeChild(
+          workspacePath,
+          path.join(workspacePath, '.claude', 'agents', `${oldName}.md`)
+        ),
+      }
+    }
+    const src = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'agents', `${oldName}.md`)
+    )
+    const dst = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'agents', `${newName}.md`)
+    )
+    if (!(await fs.pathExists(src))) throw new Error(`Agent "${oldName}" not found`)
+    if (await fs.pathExists(dst)) throw new Error(`Agent "${newName}" already exists`)
+    await fs.move(src, dst)
+    return { file: dst }
+  }
+
+  // ─── Authoring: Skills (dir = .claude/skills/<name>/SKILL.md) ──────
+
+  async createSkill(workspacePath: string, opts: SkillCreateOpts): Promise<{ file: string }> {
+    assertSafeName(opts.name)
+    const dir = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'skills', opts.name)
+    )
+    if (await fs.pathExists(dir)) {
+      throw new Error(`Skill "${opts.name}" already exists`)
+    }
+    await fs.ensureDir(dir)
+    const file = path.join(dir, 'SKILL.md')
+    const body = opts.body ?? `# ${opts.name}\n\n${opts.description ?? ''}\n`
+    const content = writeFrontmatter(
+      {
+        name: opts.name,
+        description: opts.description,
+        globs: opts.globs,
+      },
+      body
+    )
+    await fs.writeFile(file, content, 'utf-8')
+    return { file }
+  }
+
+  async updateSkill(workspacePath: string, name: string, body: string): Promise<{ file: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'skills', name, 'SKILL.md')
+    )
+    if (!(await fs.pathExists(file))) throw new Error(`Skill "${name}" not found`)
+    await fs.writeFile(file, body, 'utf-8')
+    return { file }
+  }
+
+  async deleteSkill(workspacePath: string, name: string): Promise<{ trash: string }> {
+    assertSafeName(name)
+    const dir = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'skills', name)
+    )
+    if (!(await fs.pathExists(dir))) throw new Error(`Skill "${name}" not found`)
+    const trashDir = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', '.trash', 'skills')
+    )
+    await fs.ensureDir(trashDir)
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    const target = path.join(trashDir, `${name}.${ts}`)
+    await fs.move(dir, target, { overwrite: false })
+    return { trash: target }
+  }
+
+  async renameSkill(
+    workspacePath: string,
+    oldName: string,
+    newName: string
+  ): Promise<{ file: string }> {
+    assertSafeName(oldName)
+    assertSafeName(newName)
+    if (oldName === newName) {
+      return {
+        file: assertClaudeChild(
+          workspacePath,
+          path.join(workspacePath, '.claude', 'skills', oldName, 'SKILL.md')
+        ),
+      }
+    }
+    const src = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'skills', oldName)
+    )
+    const dst = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'skills', newName)
+    )
+    if (!(await fs.pathExists(src))) throw new Error(`Skill "${oldName}" not found`)
+    if (await fs.pathExists(dst)) throw new Error(`Skill "${newName}" already exists`)
+    await fs.move(src, dst)
+    return { file: path.join(dst, 'SKILL.md') }
+  }
+
+  // ─── Authoring: Commands (file = .claude/commands/<name>.md) ───────
+
+  async createCommand(
+    workspacePath: string,
+    opts: CommandCreateOpts
+  ): Promise<{ file: string }> {
+    assertSafeName(opts.name)
+    const dir = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'commands')
+    )
+    await fs.ensureDir(dir)
+    const file = path.join(dir, `${opts.name}.md`)
+    if (await fs.pathExists(file)) {
+      throw new Error(`Command "${opts.name}" already exists`)
+    }
+    const body = opts.body ?? `${opts.description ?? ''}\n`
+    const content = writeFrontmatter(
+      {
+        name: opts.name,
+        description: opts.description,
+        'argument-hint': opts.argHint,
+      },
+      body
+    )
+    await fs.writeFile(file, content, 'utf-8')
+    return { file }
+  }
+
+  async updateCommand(
+    workspacePath: string,
+    name: string,
+    body: string
+  ): Promise<{ file: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'commands', `${name}.md`)
+    )
+    if (!(await fs.pathExists(file))) throw new Error(`Command "${name}" not found`)
+    await fs.writeFile(file, body, 'utf-8')
+    return { file }
+  }
+
+  async deleteCommand(workspacePath: string, name: string): Promise<{ trash: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'commands', `${name}.md`)
+    )
+    if (!(await fs.pathExists(file))) throw new Error(`Command "${name}" not found`)
+    const trash = await moveToTrash(workspacePath, 'commands', file, name)
+    return { trash }
+  }
+
+  async renameCommand(
+    workspacePath: string,
+    oldName: string,
+    newName: string
+  ): Promise<{ file: string }> {
+    assertSafeName(oldName)
+    assertSafeName(newName)
+    if (oldName === newName) {
+      return {
+        file: assertClaudeChild(
+          workspacePath,
+          path.join(workspacePath, '.claude', 'commands', `${oldName}.md`)
+        ),
+      }
+    }
+    const src = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'commands', `${oldName}.md`)
+    )
+    const dst = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'commands', `${newName}.md`)
+    )
+    if (!(await fs.pathExists(src))) throw new Error(`Command "${oldName}" not found`)
+    if (await fs.pathExists(dst)) throw new Error(`Command "${newName}" already exists`)
+    await fs.move(src, dst)
+    return { file: dst }
+  }
+
+  // ─── Authoring: Hooks (settings.json hooks[event] array) ───────────
+
+  async addHook(
+    workspacePath: string,
+    event: string,
+    hook: HookSpec
+  ): Promise<{ index: number }> {
+    if (!event) throw new Error('Hook event is required')
+    if (!hook?.command) throw new Error('Hook command is required')
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'settings.json')
+    )
+    const settings = await readJsonSafe<Record<string, unknown>>(file, {})
+    const hooks = (settings.hooks as Record<string, unknown[]>) ?? {}
+    const arr = Array.isArray(hooks[event]) ? (hooks[event] as Record<string, unknown>[]) : []
+    arr.push({
+      matcher: hook.matcher ?? '',
+      hooks: [
+        {
+          type: hook.type ?? 'command',
+          command: hook.command,
+          ...(typeof hook.timeout === 'number' ? { timeout: hook.timeout } : {}),
+          ...(hook.disabled ? { disabled: true } : {}),
+        },
+      ],
+    })
+    hooks[event] = arr
+    settings.hooks = hooks
+    await writeJsonAtomic(file, settings)
+    return { index: arr.length - 1 }
+  }
+
+  async removeHook(workspacePath: string, event: string, index: number): Promise<void> {
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'settings.json')
+    )
+    const settings = await readJsonSafe<Record<string, unknown>>(file, {})
+    const hooks = (settings.hooks as Record<string, unknown[]>) ?? {}
+    const arr = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : []
+    if (index < 0 || index >= arr.length) throw new Error('Hook index out of range')
+    arr.splice(index, 1)
+    if (arr.length === 0) delete hooks[event]
+    else hooks[event] = arr
+    settings.hooks = hooks
+    await writeJsonAtomic(file, settings)
+  }
+
+  async updateHook(
+    workspacePath: string,
+    event: string,
+    index: number,
+    hook: HookSpec
+  ): Promise<void> {
+    if (!hook?.command) throw new Error('Hook command is required')
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'settings.json')
+    )
+    const settings = await readJsonSafe<Record<string, unknown>>(file, {})
+    const hooks = (settings.hooks as Record<string, unknown[]>) ?? {}
+    const arr = Array.isArray(hooks[event])
+      ? (hooks[event] as Record<string, unknown>[])
+      : []
+    if (index < 0 || index >= arr.length) throw new Error('Hook index out of range')
+    arr[index] = {
+      matcher: hook.matcher ?? '',
+      hooks: [
+        {
+          type: hook.type ?? 'command',
+          command: hook.command,
+          ...(typeof hook.timeout === 'number' ? { timeout: hook.timeout } : {}),
+          ...(hook.disabled ? { disabled: true } : {}),
+        },
+      ],
+    }
+    hooks[event] = arr
+    settings.hooks = hooks
+    await writeJsonAtomic(file, settings)
+  }
+
+  // ─── Authoring: MCP servers (mcp.json mcpServers map) ──────────────
+
+  async addMcpServer(
+    workspacePath: string,
+    name: string,
+    spec: McpServerSpec
+  ): Promise<void> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'mcp.json')
+    )
+    const cfg = await readJsonSafe<{ mcpServers?: Record<string, unknown> }>(file, {})
+    const servers = cfg.mcpServers ?? {}
+    if (servers[name]) throw new Error(`MCP server "${name}" already exists`)
+    servers[name] = sanitizeMcp(spec)
+    cfg.mcpServers = servers
+    await writeJsonAtomic(file, cfg)
+  }
+
+  async updateMcpServer(
+    workspacePath: string,
+    name: string,
+    spec: McpServerSpec
+  ): Promise<void> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'mcp.json')
+    )
+    const cfg = await readJsonSafe<{ mcpServers?: Record<string, unknown> }>(file, {})
+    const servers = cfg.mcpServers ?? {}
+    if (!servers[name]) throw new Error(`MCP server "${name}" not found`)
+    servers[name] = sanitizeMcp(spec)
+    cfg.mcpServers = servers
+    await writeJsonAtomic(file, cfg)
+  }
+
+  async removeMcpServer(workspacePath: string, name: string): Promise<void> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'mcp.json')
+    )
+    const cfg = await readJsonSafe<{ mcpServers?: Record<string, unknown> }>(file, {})
+    const servers = cfg.mcpServers ?? {}
+    if (!servers[name]) throw new Error(`MCP server "${name}" not found`)
+    delete servers[name]
+    cfg.mcpServers = servers
+    await writeJsonAtomic(file, cfg)
+  }
+
+  /**
+   * Best-effort connectivity probe. For stdio servers we spawn the command
+   * with `--help` (or just `args`) and check it doesn't immediately exit with
+   * an error. For http servers we issue a GET (Electron has fetch on the main
+   * process). Returns a short status string.
+   */
+  async testMcpConnection(
+    workspacePath: string,
+    name: string
+  ): Promise<{ ok: boolean; message: string }> {
+    assertSafeName(name)
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'mcp.json')
+    )
+    const cfg = await readJsonSafe<{ mcpServers?: Record<string, McpServerSpec> }>(file, {})
+    const spec = cfg.mcpServers?.[name]
+    if (!spec) return { ok: false, message: `Server "${name}" not configured` }
+
+    if ((spec.type === 'http' || spec.type === 'sse') && spec.url) {
+      try {
+        const res = await fetch(spec.url, { method: 'HEAD' }).catch(() =>
+          fetch(spec.url as string, { method: 'GET' })
+        )
+        return { ok: res.ok, message: `HTTP ${res.status}` }
+      } catch (err) {
+        return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      }
+    }
+
+    if (!spec.command) return { ok: false, message: 'No command configured' }
+
+    return new Promise((resolve) => {
+      const env = augmentedPathEnv()
+      let resolved = false
+      const child = spawn(spec.command as string, spec.args ?? [], {
+        env: { ...env, ...(spec.env ?? {}) },
+        stdio: 'ignore',
+      })
+      const timer = setTimeout(() => {
+        if (resolved) return
+        resolved = true
+        try {
+          child.kill('SIGTERM')
+        } catch {
+          // ignore
+        }
+        // Surviving the timeout = process started successfully (MCP servers
+        // run forever).
+        resolve({ ok: true, message: 'Process spawned (timeout reached, no early exit)' })
+      }, 1500)
+      child.on('error', (err) => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timer)
+        resolve({ ok: false, message: err.message })
+      })
+      child.on('exit', (code) => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timer)
+        // Non-zero exit before timeout = command failed
+        resolve({
+          ok: code === 0,
+          message: code === 0 ? 'Exited cleanly' : `Exited with code ${code}`,
+        })
+      })
+    })
+  }
+
+  // ─── Authoring: Permissions (settings.json permissions.allow/deny) ──
+
+  async getPermissions(
+    workspacePath: string
+  ): Promise<{ allow: string[]; deny: string[] }> {
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'settings.json')
+    )
+    const settings = await readJsonSafe<Record<string, unknown>>(file, {})
+    const perms = (settings.permissions as Record<string, unknown>) ?? {}
+    const allow = Array.isArray(perms.allow)
+      ? (perms.allow as string[]).filter((s) => typeof s === 'string')
+      : []
+    const deny = Array.isArray(perms.deny)
+      ? (perms.deny as string[]).filter((s) => typeof s === 'string')
+      : []
+    return { allow, deny }
+  }
+
+  async setPermissions(
+    workspacePath: string,
+    next: { allow: string[]; deny: string[] }
+  ): Promise<void> {
+    const file = assertClaudeChild(
+      workspacePath,
+      path.join(workspacePath, '.claude', 'settings.json')
+    )
+    const settings = await readJsonSafe<Record<string, unknown>>(file, {})
+    const perms = (settings.permissions as Record<string, unknown>) ?? {}
+    perms.allow = (next.allow ?? []).map((s) => String(s)).filter(Boolean)
+    perms.deny = (next.deny ?? []).map((s) => String(s)).filter(Boolean)
+    settings.permissions = perms
+    await writeJsonAtomic(file, settings)
+  }
+
+  // ─── CLAUDE.md Routing tables (optional sync) ───────────────────────
+  //
+  // The project's CLAUDE.md keeps Markdown tables for "Agent Routing" and
+  // "Skill Routing". When the user opts in via the editor checkbox, we add a
+  // row to the relevant table so the routing index stays in sync with the
+  // newly-authored agent/skill.
+
+  async syncRoutingTable(
+    workspacePath: string,
+    kind: 'agent' | 'skill',
+    entry: { name: string; description?: string; pattern?: string }
+  ): Promise<{ updated: boolean; file: string }> {
+    const file = path.resolve(workspacePath, 'CLAUDE.md')
+    if (!(await fs.pathExists(file))) {
+      return { updated: false, file }
+    }
+    const raw = await fs.readFile(file, 'utf-8')
+    const heading = kind === 'agent' ? '# Agent Routing' : '# Skill Routing'
+    // Find heading line, then the next two lines are header + separator, then rows.
+    const lines = raw.split(/\r?\n/)
+    const idx = lines.findIndex((l) => l.trim().startsWith(heading))
+    if (idx < 0) return { updated: false, file }
+    // Find first table row (line starting with "|") after heading.
+    let tableStart = -1
+    for (let i = idx; i < lines.length; i++) {
+      if (lines[i].trimStart().startsWith('|')) {
+        tableStart = i
+        break
+      }
+    }
+    if (tableStart < 0) return { updated: false, file }
+    // Find end of table (first non-pipe / blank line).
+    let tableEnd = tableStart
+    while (tableEnd < lines.length && lines[tableEnd].trimStart().startsWith('|')) {
+      tableEnd++
+    }
+    // Skip past header + separator (first 2 rows) when checking duplicates.
+    const dataStart = tableStart + 2
+    for (let i = dataStart; i < tableEnd; i++) {
+      if (lines[i].includes(`\`${entry.name}\``)) {
+        return { updated: false, file } // already present
+      }
+    }
+    const newRow =
+      kind === 'agent'
+        ? `| ${entry.description ?? entry.name} | \`${entry.name}\` | Cross |`
+        : `| \`${entry.pattern ?? '**'}\` | \`${entry.name}\` |`
+    lines.splice(tableEnd, 0, newRow)
+    await fs.writeFile(file, lines.join('\n'), 'utf-8')
+    return { updated: true, file }
+  }
+
+  /**
+   * List MCP servers with their full configs so the editor can populate forms
+   * without re-parsing JSON in the renderer.
+   */
+  async listMcpServers(
+    workspacePath: string
+  ): Promise<Array<{ name: string; spec: McpServerSpec }>> {
+    const file = path.join(workspacePath, '.claude', 'mcp.json')
+    if (!(await fs.pathExists(file))) return []
+    const cfg = await readJsonSafe<{ mcpServers?: Record<string, McpServerSpec> }>(file, {})
+    const servers = cfg.mcpServers ?? {}
+    return Object.entries(servers).map(([name, spec]) => ({ name, spec }))
+  }
+
+  /**
+   * Compose a preview of the context Claude sees on session start.
+   *
+   * We approximate Claude Code's harness loader: project CLAUDE.md verbatim,
+   * every `@<.claude/...>.md` reference inlined, then SessionStart hook
+   * commands rendered as their settings.json `command` text. We deliberately
+   * do not execute hook scripts — preview must stay cheap and side-effect
+   * free; their stdout is rendered live in actual sessions only.
+   */
+  async previewSessionContext(workspacePath: string): Promise<SessionPreview> {
+    const claudeMd = path.join(workspacePath, 'CLAUDE.md')
+    const sections: SessionPreviewSection[] = []
+    let totalChars = 0
+    if (await fs.pathExists(claudeMd)) {
+      try {
+        const raw = await fs.readFile(claudeMd, 'utf-8')
+        sections.push({ kind: 'claude-md', label: 'CLAUDE.md', file: claudeMd, content: raw })
+        totalChars += raw.length
+        const refs = new Set<string>()
+        for (const line of raw.split(/\r?\n/)) {
+          const m = line.match(/^\s*@(\.claude\/[A-Za-z0-9_./-]+\.md)\s*$/)
+          if (m) refs.add(m[1])
+        }
+        for (const rel of refs) {
+          const abs = path.join(workspacePath, rel)
+          if (await fs.pathExists(abs)) {
+            try {
+              const body = await fs.readFile(abs, 'utf-8')
+              sections.push({ kind: 'rule', label: rel, file: abs, content: body })
+              totalChars += body.length
+            } catch {
+              // skip
+            }
+          } else {
+            sections.push({
+              kind: 'rule',
+              label: rel,
+              file: abs,
+              content: `[missing — referenced from CLAUDE.md but not found on disk]`,
+              missing: true,
+            })
+          }
+        }
+      } catch {
+        // skip — surfaced via lint, not preview
+      }
+    }
+    const settingsFile = path.join(workspacePath, '.claude', 'settings.json')
+    if (await fs.pathExists(settingsFile)) {
+      try {
+        const settings = JSON.parse(await fs.readFile(settingsFile, 'utf-8')) as {
+          hooks?: { SessionStart?: Array<{ hooks?: Array<{ command?: string }> }> }
+        }
+        const sessionStart = settings.hooks?.SessionStart ?? []
+        const cmdLines: string[] = []
+        for (const rule of sessionStart) {
+          for (const h of rule.hooks ?? []) {
+            if (typeof h.command === 'string' && h.command.trim()) {
+              cmdLines.push('$ ' + h.command)
+              cmdLines.push('# (output streamed at real session start)')
+              cmdLines.push('')
+            }
+          }
+        }
+        if (cmdLines.length > 0) {
+          const content = cmdLines.join('\n')
+          sections.push({
+            kind: 'hook',
+            label: 'SessionStart hooks',
+            file: settingsFile,
+            content,
+          })
+          totalChars += content.length
+        }
+      } catch {
+        // skip
+      }
+    }
+    const tokenEstimate = Math.round(totalChars / 4)
+    return { sections, totalChars, tokenEstimate }
+  }
+
   async getMcpStatus(workspacePath: string): Promise<{ name: string; status: string; command?: string }[]> {
     const mcpFile = path.join(workspacePath, '.claude', 'mcp.json')
     if (!await fs.pathExists(mcpFile)) return []
@@ -459,17 +1286,32 @@ export class HarnessScanner {
         if (config.type === 'http') {
           results.push({ name, status: 'http', command: config.url })
         } else if (command) {
-          // Check if command exists on PATH (augmented for GUI launches)
+          // Check if command exists on PATH (augmented for GUI launches).
+          // Wrapped in profiler so the Hook dashboard can show per-server
+          // probe latency / failure rate.
+          const started = Date.now()
+          let exitCode = 0
+          let probeOutput: string | undefined
           try {
-            execFileSync('/usr/bin/which', [command], {
+            const stdout = execFileSync('/usr/bin/which', [command], {
               encoding: 'utf-8',
               timeout: 2000,
               env,
             })
+            probeOutput = stdout
             results.push({ name, status: 'available', command })
-          } catch {
+          } catch (err) {
+            exitCode = 1
+            probeOutput = err instanceof Error ? err.message : String(err)
             results.push({ name, status: 'unavailable', command })
           }
+          this.profiler?.recordExecution({
+            event: 'mcp-probe',
+            script: `mcp:${name}`,
+            durationMs: Date.now() - started,
+            exitCode,
+            output: probeOutput,
+          })
         }
       }
 

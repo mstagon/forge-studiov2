@@ -11,6 +11,7 @@ import { UpdateChecker } from './services/UpdateChecker'
 import { AgentTeamWatcher } from './services/AgentTeamWatcher'
 import { FsManager, type FsListOpts } from './services/FsManager'
 import { CodeReviewGraphManager, type InstallMethod } from './services/CodeReviewGraphManager'
+import { HookProfiler } from './services/HookProfiler'
 
 const execFileAsync = promisify(execFile)
 
@@ -29,6 +30,28 @@ const gitManager = new GitManager()
 const updateChecker = new UpdateChecker()
 const agentTeamWatcher = new AgentTeamWatcher()
 const fsManager = new FsManager()
+const hookProfiler = new HookProfiler()
+harnessScanner.setProfiler(hookProfiler)
+
+/**
+ * Forward an in-app error to the renderer so the Settings → Error Log view
+ * can display it. Best-effort: silently no-ops when the window is gone.
+ */
+function pushErrorToRenderer(payload: {
+  code: string
+  category: string
+  message: string
+  context?: Record<string, unknown>
+}): void {
+  try {
+    mainWindow?.webContents.send('error-log:push', {
+      ...payload,
+      ts: new Date().toISOString(),
+    })
+  } catch {
+    // ignore — happens during shutdown
+  }
+}
 
 /**
  * Allowed path prefixes for `fs:listDir` / `fs:readFile`. We always include
@@ -58,7 +81,19 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      // sandbox:false — node-pty가 Node API를 직접 호출해야 하므로 필요 (contextIsolation:true로 보안 유지)
+      /*
+       * sandbox:false — node-pty의 네이티브 바인딩이 preload 시점에 Node API
+       * (process, child_process, native module loader)를 호출해야 동작하므로
+       * 끄고 있다. 이로 인해 renderer 프로세스는 OS sandbox layer 보호가 빠지지만
+       * 다음 두 안전장치로 보안을 유지한다:
+       *   1) contextIsolation:true — preload의 Node 권한이 renderer JS에 직접
+       *      누설되지 않도록 격리. window.api는 contextBridge 화이트리스트만.
+       *   2) nodeIntegration:false — renderer 번들에서 require/process/Buffer
+       *      등을 사용할 수 없게 하여 임의의 Node 코드 로딩을 막는다.
+       * 추가로 IPC 채널은 preload.ts의 ALLOWED_CHANNELS / 정형 invoke 핸들러로
+       * 화이트리스트되며, 모든 fs:/harness: 접근은 workspaceManager의 trusted
+       * 경로 prefix 검증을 통과해야 한다.
+       */
       sandbox: false,
     },
   })
@@ -367,6 +402,272 @@ ipcMain.handle('harness:update', async (_event, workspacePath: string) => {
   return workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
 })
 
+// ─── IPC Handlers: Harness Authoring (CRUD) ─────────────────────────
+//
+// All authoring writes are gated by `assertTrackedWorkspace` — the renderer
+// can only mutate `.claude/...` inside a workspace we already track. The
+// scanner's per-method `assertClaudeChild` enforces traversal containment.
+
+function assertTrackedWorkspace(wsPath: string): void {
+  if (!wsPath || typeof wsPath !== 'string') {
+    throw new Error('workspacePath is required')
+  }
+  const tracked = workspaceManager.list().some((w) => w.path === wsPath)
+  if (!tracked) {
+    throw new Error('Workspace is not tracked by Forge Studio')
+  }
+}
+
+// Agents
+
+ipcMain.handle(
+  'harness:createAgent',
+  async (
+    _event,
+    workspacePath: string,
+    opts: { name: string; description?: string; tools?: string; model?: string; body?: string }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.createAgent(workspacePath, opts)
+  }
+)
+
+ipcMain.handle(
+  'harness:updateAgent',
+  async (_event, workspacePath: string, name: string, body: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.updateAgent(workspacePath, name, body)
+  }
+)
+
+ipcMain.handle(
+  'harness:deleteAgent',
+  async (_event, workspacePath: string, name: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.deleteAgent(workspacePath, name)
+  }
+)
+
+ipcMain.handle(
+  'harness:renameAgent',
+  async (_event, workspacePath: string, oldName: string, newName: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.renameAgent(workspacePath, oldName, newName)
+  }
+)
+
+// Skills
+
+ipcMain.handle(
+  'harness:createSkill',
+  async (
+    _event,
+    workspacePath: string,
+    opts: { name: string; description?: string; globs?: string; body?: string }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.createSkill(workspacePath, opts)
+  }
+)
+
+ipcMain.handle(
+  'harness:updateSkill',
+  async (_event, workspacePath: string, name: string, body: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.updateSkill(workspacePath, name, body)
+  }
+)
+
+ipcMain.handle(
+  'harness:deleteSkill',
+  async (_event, workspacePath: string, name: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.deleteSkill(workspacePath, name)
+  }
+)
+
+ipcMain.handle(
+  'harness:renameSkill',
+  async (_event, workspacePath: string, oldName: string, newName: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.renameSkill(workspacePath, oldName, newName)
+  }
+)
+
+// Commands
+
+ipcMain.handle(
+  'harness:createCommand',
+  async (
+    _event,
+    workspacePath: string,
+    opts: { name: string; description?: string; argHint?: string; body?: string }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.createCommand(workspacePath, opts)
+  }
+)
+
+ipcMain.handle(
+  'harness:updateCommand',
+  async (_event, workspacePath: string, name: string, body: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.updateCommand(workspacePath, name, body)
+  }
+)
+
+ipcMain.handle(
+  'harness:deleteCommand',
+  async (_event, workspacePath: string, name: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.deleteCommand(workspacePath, name)
+  }
+)
+
+ipcMain.handle(
+  'harness:renameCommand',
+  async (_event, workspacePath: string, oldName: string, newName: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.renameCommand(workspacePath, oldName, newName)
+  }
+)
+
+// Hooks
+
+ipcMain.handle(
+  'harness:addHook',
+  async (
+    _event,
+    workspacePath: string,
+    event: string,
+    hook: { matcher?: string; command: string; type?: string; timeout?: number; disabled?: boolean }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.addHook(workspacePath, event, hook)
+  }
+)
+
+ipcMain.handle(
+  'harness:removeHook',
+  async (_event, workspacePath: string, event: string, index: number) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.removeHook(workspacePath, event, index)
+  }
+)
+
+ipcMain.handle(
+  'harness:updateHook',
+  async (
+    _event,
+    workspacePath: string,
+    event: string,
+    index: number,
+    hook: { matcher?: string; command: string; type?: string; timeout?: number; disabled?: boolean }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.updateHook(workspacePath, event, index, hook)
+  }
+)
+
+// MCP Servers
+
+ipcMain.handle('harness:listMcpServers', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  return harnessScanner.listMcpServers(workspacePath)
+})
+
+ipcMain.handle(
+  'harness:addMcpServer',
+  async (
+    _event,
+    workspacePath: string,
+    name: string,
+    spec: {
+      command?: string
+      args?: string[]
+      env?: Record<string, string>
+      type?: 'stdio' | 'http' | 'sse'
+      url?: string
+      disabled?: boolean
+    }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.addMcpServer(workspacePath, name, spec)
+  }
+)
+
+ipcMain.handle(
+  'harness:updateMcpServer',
+  async (
+    _event,
+    workspacePath: string,
+    name: string,
+    spec: {
+      command?: string
+      args?: string[]
+      env?: Record<string, string>
+      type?: 'stdio' | 'http' | 'sse'
+      url?: string
+      disabled?: boolean
+    }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.updateMcpServer(workspacePath, name, spec)
+  }
+)
+
+ipcMain.handle(
+  'harness:removeMcpServer',
+  async (_event, workspacePath: string, name: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.removeMcpServer(workspacePath, name)
+  }
+)
+
+ipcMain.handle(
+  'harness:testMcpConnection',
+  async (_event, workspacePath: string, name: string) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.testMcpConnection(workspacePath, name)
+  }
+)
+
+// Permissions
+
+ipcMain.handle('harness:getPermissions', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    return { allow: [], deny: [] }
+  }
+  return harnessScanner.getPermissions(workspacePath)
+})
+
+ipcMain.handle(
+  'harness:setPermissions',
+  async (
+    _event,
+    workspacePath: string,
+    next: { allow: string[]; deny: string[] }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.setPermissions(workspacePath, next)
+  }
+)
+
+// CLAUDE.md routing sync
+
+ipcMain.handle(
+  'harness:syncRouting',
+  async (
+    _event,
+    workspacePath: string,
+    kind: 'agent' | 'skill',
+    entry: { name: string; description?: string; pattern?: string }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    return harnessScanner.syncRoutingTable(workspacePath, kind, entry)
+  }
+)
+
 // ─── IPC Handlers: code-review-graph ───────────────────────────────
 
 ipcMain.handle('cr-graph:isInstalled', () => crGraphManager.isInstalled())
@@ -519,6 +820,47 @@ ipcMain.handle('system:which', async (_event, cmd: string) => {
 
 ipcMain.handle('updates:check', () => updateChecker.check())
 
+// ─── IPC Handlers: Hook Profiler ────────────────────────────────────
+
+ipcMain.handle('hook-profiler:recent', (_event, limit?: number) =>
+  hookProfiler.getRecent(typeof limit === 'number' ? limit : 100)
+)
+
+ipcMain.handle('hook-profiler:stats', (_event, window?: number) =>
+  hookProfiler.getStats(typeof window === 'number' ? window : undefined)
+)
+
+ipcMain.handle(
+  'hook-profiler:record',
+  (
+    _event,
+    payload: {
+      event: string
+      script: string
+      durationMs: number
+      exitCode: number
+      output?: string
+    }
+  ) => {
+    return hookProfiler.recordExecution(payload)
+  }
+)
+
+// ─── IPC Handlers: Error Log (renderer-pushed) ─────────────────────
+//
+// The renderer also surfaces errors that originate in main (timeouts,
+// FS denials, etc.). For renderer-side errors we don't need a handler —
+// they're recorded directly in the zustand store. But IPC failures from
+// here propagate to renderers via webContents.send('error-log:push'),
+// which is a one-way channel routed through preload.
+
+ipcMain.on(
+  'error-log:report',
+  (_event, payload: { code: string; category: string; message: string; context?: Record<string, unknown> }) => {
+    pushErrorToRenderer(payload)
+  }
+)
+
 // ─── IPC Handlers: Agent Teams ──────────────────────────────────────
 
 ipcMain.handle('teams:list', () => agentTeamWatcher.list())
@@ -623,6 +965,24 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     buildMenu()
     createWindow()
+
+    // Forward non-zero hook exits to the in-app error log so users notice
+    // recurring hook failures without diving into the JSONL file.
+    hookProfiler.on('record', (record) => {
+      if (record.exitCode !== 0) {
+        pushErrorToRenderer({
+          code: 'HOOK_NON_ZERO_EXIT',
+          category: 'HOOK',
+          message: `${record.script} exited ${record.exitCode} (${record.durationMs}ms)`,
+          context: {
+            event: record.event,
+            script: record.script,
+            exitCode: record.exitCode,
+            durationMs: record.durationMs,
+          },
+        })
+      }
+    })
 
     agentTeamWatcher.start().catch((err) => {
       console.error('[AgentTeamWatcher] start failed:', err)
