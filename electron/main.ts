@@ -6,6 +6,8 @@ import { promisify } from 'util'
 import { PtyManager } from './services/PtyManager'
 import { WorkspaceManager } from './services/WorkspaceManager'
 import { HarnessScanner } from './services/HarnessScanner'
+import { HarnessLinter } from './services/HarnessLinter'
+import { PresetManager } from './services/PresetManager'
 import { GitManager } from './services/GitManager'
 import { UpdateChecker } from './services/UpdateChecker'
 import { AgentTeamWatcher } from './services/AgentTeamWatcher'
@@ -27,6 +29,8 @@ const ptyManager = new PtyManager()
 const crGraphManager = new CodeReviewGraphManager()
 const workspaceManager = new WorkspaceManager(crGraphManager)
 const harnessScanner = new HarnessScanner()
+const harnessLinter = new HarnessLinter()
+const presetManager = new PresetManager()
 const gitManager = new GitManager()
 const updateChecker = new UpdateChecker()
 const agentTeamWatcher = new AgentTeamWatcher()
@@ -276,6 +280,13 @@ ipcMain.handle(
       path: string
       templatePath?: string
       claudeMdPath?: string
+      /**
+       * Optional preset id (bundled or user). When supplied, overrides the
+       * default `templatePath` / `claudeMdPath` with paths resolved by
+       * PresetManager. Empty / unknown ids fall back to the supplied template
+       * paths so the renderer can stay loose.
+       */
+      preset?: string
       splitRepos?: {
         enabled: boolean
         baseName: string
@@ -286,7 +297,30 @@ ipcMain.handle(
       crGraph?: { autoBuild?: boolean }
     }
   ) => {
-    return workspaceManager.create(options)
+    try {
+      let templatePath = options.templatePath
+      let claudeMdPath = options.claudeMdPath
+      if (options.preset) {
+        const preset = await presetManager.findPreset(options.preset)
+        if (preset) {
+          templatePath = preset.templatePath
+          claudeMdPath = preset.claudeMdPath ?? claudeMdPath
+        }
+      }
+      return await workspaceManager.create({
+        ...options,
+        templatePath,
+        claudeMdPath,
+      })
+    } catch (err) {
+      pushErrorToRenderer({
+        code: 'IPC_INVALID_PAYLOAD',
+        category: 'IPC',
+        message: err instanceof Error ? err.message : String(err),
+        context: { handler: 'workspace:create', name: options?.name, path: options?.path },
+      })
+      throw err
+    }
   }
 )
 
@@ -386,21 +420,101 @@ ipcMain.handle('harness:getInstalledVersion', async (_event, workspacePath: stri
 })
 
 ipcMain.handle('harness:update', async (_event, workspacePath: string) => {
+  try {
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      throw new Error('workspacePath is required')
+    }
+    // Verify the workspace is one we track to avoid arbitrary FS writes
+    const tracked = workspaceManager.list().some((w) => w.path === workspacePath)
+    if (!tracked) {
+      throw new Error('Workspace is not tracked by Forge Studio')
+    }
+    const templatePath = app.isPackaged
+      ? path.join(process.resourcesPath, 'harness-template', '.claude')
+      : path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude')
+    const claudeMdPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
+      : path.resolve(__dirname, '..', 'resources', 'harness-template', 'CLAUDE.md')
+    return await workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
+  } catch (err) {
+    pushErrorToRenderer({
+      code: 'FS_WRITE_FAILED',
+      category: 'FS',
+      message: err instanceof Error ? err.message : String(err),
+      context: { handler: 'harness:update', workspacePath },
+    })
+    throw err
+  }
+})
+
+/** Resolve the active bundled `.claude/` template path for the running build. */
+function getBundledTemplatePath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'harness-template', '.claude')
+    : path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude')
+}
+
+ipcMain.handle('harness:lint', async (_event, workspacePath: string) => {
   if (!workspacePath || typeof workspacePath !== 'string') {
     throw new Error('workspacePath is required')
   }
-  // Verify the workspace is one we track to avoid arbitrary FS writes
-  const tracked = workspaceManager.list().some((w) => w.path === workspacePath)
-  if (!tracked) {
-    throw new Error('Workspace is not tracked by Forge Studio')
+  return harnessLinter.lint(workspacePath)
+})
+
+ipcMain.handle('harness:previewUpdate', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    throw new Error('workspacePath is required')
   }
-  const templatePath = app.isPackaged
-    ? path.join(process.resourcesPath, 'harness-template', '.claude')
-    : path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude')
-  const claudeMdPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'harness-template', 'CLAUDE.md')
-    : path.resolve(__dirname, '..', 'resources', 'harness-template', 'CLAUDE.md')
-  return workspaceManager.updateHarness({ workspacePath, templatePath, claudeMdPath })
+  // Anyone wiring this from the renderer should already be in a tracked
+  // workspace; treat the call as read-only and skip the strict tracked check.
+  const templatePath = getBundledTemplatePath()
+  return workspaceManager.previewHarnessUpdate({ workspacePath, templatePath })
+})
+
+ipcMain.handle('harness:previewSessionContext', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    throw new Error('workspacePath is required')
+  }
+  return harnessScanner.previewSessionContext(workspacePath)
+})
+
+// ─── IPC Handlers: Presets ──────────────────────────────────────────
+
+ipcMain.handle('preset:list', async () => {
+  return presetManager.listPresets()
+})
+
+ipcMain.handle('preset:apply', async (_event, workspacePath: string, presetId: string) => {
+  assertTrackedWorkspace(workspacePath)
+  if (!presetId || typeof presetId !== 'string') {
+    throw new Error('presetId is required')
+  }
+  return presetManager.applyPreset(workspacePath, presetId)
+})
+
+ipcMain.handle(
+  'preset:save',
+  async (
+    _event,
+    workspacePath: string,
+    options: { id: string; name?: string; description?: string }
+  ) => {
+    assertTrackedWorkspace(workspacePath)
+    if (!options?.id) throw new Error('preset id is required')
+    return presetManager.saveAsPreset({
+      workspacePath,
+      id: options.id,
+      name: options.name,
+      description: options.description,
+    })
+  }
+)
+
+ipcMain.handle('preset:delete', async (_event, presetId: string) => {
+  if (!presetId || typeof presetId !== 'string') {
+    throw new Error('presetId is required')
+  }
+  return presetManager.deletePreset(presetId)
 })
 
 // ─── IPC Handlers: Harness Authoring (CRUD) ─────────────────────────
@@ -725,7 +839,17 @@ ipcMain.handle('git:unstageAll', async (_event, cwd: string) => {
 })
 
 ipcMain.handle('git:commit', async (_event, cwd: string, message: string) => {
-  return gitManager.commit(cwd, message)
+  try {
+    return await gitManager.commit(cwd, message)
+  } catch (err) {
+    pushErrorToRenderer({
+      code: 'GIT_COMMAND_FAILED',
+      category: 'GIT',
+      message: err instanceof Error ? err.message : String(err),
+      context: { handler: 'git:commit', cwd },
+    })
+    throw err
+  }
 })
 
 ipcMain.handle('git:push', async (_event, cwd: string) => {
@@ -993,6 +1117,21 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(() => {
+    // Proactively repair the bundled cr-graph venv before any UI surface
+    // tries to spawn `code-review-graph`. Older Forge builds shipped a venv
+    // whose `bin/python` symlink and console-script polyglot exec line were
+    // baked with absolute build-host paths — both die inside the DMG. The
+    // repair is idempotent and gated by a per-version flag file so it
+    // costs effectively nothing after the first launch.
+    try {
+      const repaired = pathManager.ensureVenvUsable()
+      if (repaired) {
+        console.log('[main] cr-graph venv repaired (absolute paths -> relative)')
+      }
+    } catch (err) {
+      console.warn('[main] ensureVenvUsable failed (non-fatal):', err)
+    }
+
     buildMenu()
     createWindow()
 
