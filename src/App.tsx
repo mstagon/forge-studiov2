@@ -229,8 +229,16 @@ export default function App() {
   // DashboardPanel emits CustomEvent('forge:*') to request app-level actions
   // since the panel itself doesn't own the wizard / sidebar / dialog state.
   useEffect(() => {
-    const handleNewRun = () => {
-      setWizardPrefill(undefined)
+    const handleNewRun = (e: Event) => {
+      const detail = (e as CustomEvent<{ prefillMembers?: string[] }>).detail
+      // Library "Add to run" passes a single-member prefill — preserve it so
+      // the wizard opens with that agent already selected. Dashboard's plain
+      // "새 팀 만들기" still emits with no detail, so we fall back to undefined.
+      setWizardPrefill(
+        detail?.prefillMembers && detail.prefillMembers.length > 0
+          ? detail.prefillMembers
+          : undefined,
+      )
       setWizardOpen(true)
     }
     const handleOpenFolder = (e: Event) => {
@@ -584,14 +592,130 @@ export default function App() {
         items={DEFAULT_PALETTE_ITEMS}
         onAction={(action) => {
           setPaletteOpen(false)
-          // Map common palette actions to existing handlers.
-          if (action === 'new-run') onNewRun()
-          else if (action === 'new-workspace') setNewWorkspaceDialog(true)
-          else if (action === 'open-settings') setView('settings')
-          else if (action === 'view-workspace') setView('workspace')
-          else if (action === 'view-git') setView('git')
-          else if (action === 'view-dashboard') setView('dashboard')
-          else if (action === 'view-library') setView('library')
+          // ── Navigation
+          if (action === 'go-workspace' || action === 'view-workspace') {
+            setView('workspace')
+          } else if (action === 'go-git' || action === 'view-git') {
+            setView('git')
+          } else if (action === 'go-dashboard' || action === 'view-dashboard') {
+            setView('dashboard')
+          } else if (action === 'go-teams') {
+            setView('workspace')
+          } else if (action === 'go-library' || action === 'view-library') {
+            setView('library')
+          } else if (action === 'go-settings' || action === 'open-settings') {
+            setView('settings')
+          }
+          // ── Library deep-links
+          else if (action === 'lib-compositions') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'compositions' } }),
+              )
+            }, 50)
+          } else if (action === 'lib-agents' || action === 'add-agent') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'agents' } }),
+              )
+              if (action === 'add-agent') {
+                setTimeout(() => {
+                  window.dispatchEvent(
+                    new CustomEvent('forge:library-new', { detail: { tab: 'agents' } }),
+                  )
+                }, 50)
+              }
+            }, 50)
+          } else if (action === 'lib-skills' || action === 'add-skill') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'skills' } }),
+              )
+              if (action === 'add-skill') {
+                setTimeout(() => {
+                  window.dispatchEvent(
+                    new CustomEvent('forge:library-new', { detail: { tab: 'skills' } }),
+                  )
+                }, 50)
+              }
+            }, 50)
+          } else if (action === 'lib-commands') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'commands' } }),
+              )
+            }, 50)
+          } else if (action === 'lib-hooks') {
+            setView('library')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:library-tab', { detail: { tab: 'hooks' } }),
+              )
+            }, 50)
+          }
+          // ── Run actions
+          else if (action === 'create-team' || action === 'new-run') {
+            onNewRun()
+          } else if (action === 'new-workspace') {
+            setNewWorkspaceDialog(true)
+          } else if (action === 'push') {
+            // Open Git view; user reviews changes before pushing.
+            setView('git')
+          } else if (action === 'diff') {
+            setView('git')
+          } else if (action === 'harness-update') {
+            if (harnessUpdateAvailable) {
+              setUpdatePreviewOpen(true)
+            } else {
+              setToast({ name: '하네스가 이미 최신 버전입니다', count: 0 })
+              setTimeout(() => setToast(null), 3000)
+            }
+          } else if (
+            action === 'slash-clear' ||
+            action === 'slash-compact' ||
+            action === 'slash-cost'
+          ) {
+            // Slash commands are executed inside an active terminal — surface a
+            // breadcrumb toast so the user knows to type it themselves once
+            // we don't yet auto-route to a terminal.
+            setToast({
+              name: `${action.replace('slash-', '/')} — 활성 터미널에 직접 입력하세요`,
+              count: 0,
+            })
+            setTimeout(() => setToast(null), 4000)
+          }
+          // ── Settings deep-links
+          else if (action === 'model') {
+            setView('settings')
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:settings-target', {
+                  detail: { section: 'agents' },
+                }),
+              )
+            }, 50)
+          } else if (action === 'theme-toggle') {
+            setToast({
+              name: '테마 토글은 v0.6.0 — 현재 dark only',
+              count: 0,
+            })
+            setTimeout(() => setToast(null), 3000)
+          } else if (action === 'keys') {
+            // Re-open onboarding step 4 (shortcut tour).
+            void window.api?.system?.openExternal(
+              'https://github.com/anthropics/forge-studio#shortcuts',
+            )
+          }
+          // ── Recent (best-effort no-op for now — surfaces existing nav)
+          else if (action === 'open-active') {
+            setView('workspace')
+          } else if (action === 'recent-last-run') {
+            setView('workspace')
+          }
         }}
       />
 

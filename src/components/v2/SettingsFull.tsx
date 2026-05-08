@@ -15,6 +15,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Btn, Pill, Dot, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import type { WorkspaceSummary } from './types'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { CodeGraphViz } from './CodeGraphViz'
 import { HarnessLintPanel } from './HarnessLintPanel'
 import { SessionPreview } from './SessionPreview'
@@ -60,6 +61,39 @@ export function SettingsFull({ workspaces, workspace }: SettingsFullProps) {
     { id: 'account',      label: t('settings.account'),      icon: Icon.Lock },
     { id: 'error-log',    label: t('settings.errorLog'),     icon: Icon.Activity },
   ]
+
+  // ── Listen for forge:settings-target events (from Dashboard quick actions
+  // and TopBar bell) → switch the section so deep-link nav lands on the right
+  // card. The optional `card` payload is rebroadcast so child components can
+  // scroll into view.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ section?: string; card?: string }>).detail
+      if (!detail?.section) return
+      const valid: SectionId[] = ['general', 'harness', 'agents', 'integrations', 'account', 'error-log']
+      if ((valid as string[]).includes(detail.section)) {
+        setSection(detail.section as SectionId)
+        if (detail.card) {
+          // Defer so the child cards have mounted under the new section.
+          setTimeout(() => {
+            const el = document.querySelector(
+              `[data-settings-card="${detail.card}"]`,
+            ) as HTMLElement | null
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              el.style.transition = 'box-shadow 240ms'
+              el.style.boxShadow = '0 0 0 2px var(--accent)'
+              window.setTimeout(() => {
+                el.style.boxShadow = ''
+              }, 1400)
+            }
+          }, 60)
+        }
+      }
+    }
+    window.addEventListener('forge:settings-target', handler)
+    return () => window.removeEventListener('forge:settings-target', handler)
+  }, [])
 
   return (
     <div
@@ -163,8 +197,16 @@ interface SettingsCardProps {
 }
 
 function SettingsCard({ title, right, children }: SettingsCardProps) {
+  // Slugify the title so deep-link targeting (forge:settings-target with
+  // `card`) can scroll the matching SettingsCard into view. Lowercase, ASCII,
+  // hyphenated — keeps the data-attribute predictable.
+  const cardKey = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
   return (
     <div
+      data-settings-card={cardKey}
       style={{
         background: 'var(--bg-2)',
         border: '1px solid var(--line-1)',
@@ -297,13 +339,20 @@ interface SettingsGeneralProps {
 export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
   const [autoFocus, setAutoFocus] = useState(true)
   const [confirmDestructive, setConfirmDestructive] = useState(true)
+  const setNewWorkspaceDialog = useWorkspaceStore((s) => s.setNewWorkspaceDialog)
+  const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
+  const allWorkspaces = useWorkspaceStore((s) => s.workspaces)
   return (
     <>
       <SectionHeader title={t('settings.general')} sub={t('settings.generalSub')} />
       <SettingsCard
         title={t('settings.workspaces')}
         right={
-          <Btn variant="ghost" icon={<Icon.Plus size={11} />}>
+          <Btn
+            variant="ghost"
+            icon={<Icon.Plus size={11} />}
+            onClick={() => setNewWorkspaceDialog(true)}
+          >
             {t('settings.addWorkspace')}
           </Btn>
         }
@@ -333,7 +382,20 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
               </div>
             </div>
             {w.current && <Pill color="var(--accent)">{t('settings.current')}</Pill>}
-            <Btn variant="ghost" icon={<Icon.Cog size={11} />}>
+            <Btn
+              variant="ghost"
+              icon={<Icon.Cog size={11} />}
+              onClick={() => {
+                // "Configure" on the workspaces row → set this workspace as
+                // active so the rest of Settings (Harness / Agents / etc.)
+                // operates against it. The path stored in the summary is the
+                // canonical lookup key.
+                const ws = allWorkspaces.find((x) => x.id === w.id)
+                if (ws) void setActiveWorkspace(ws)
+              }}
+              title={w.current ? '이미 활성 워크스페이스입니다' : '이 워크스페이스로 전환'}
+              disabled={!!w.current}
+            >
               {t('common.configure')}
             </Btn>
           </div>
@@ -478,6 +540,10 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
   const [autoUpdate, setAutoUpdate] = useState(true)
   const [telemetry, setTelemetry] = useState(false)
   const [betaChannel, setBetaChannel] = useState(false)
+  // Repo policy toggles — kept in renderer state until a backend policy
+  // surface exists (today they're documented intent, not enforced rules).
+  const [blockForcePush, setBlockForcePush] = useState(true)
+  const [requireReviewer, setRequireReviewer] = useState(true)
   return (
     <>
       <SectionHeader title={t('settings.harness')} sub={t('settings.harnessSub')} />
@@ -536,13 +602,13 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
       <SettingsCard title="Repository policies">
         <Row
           label="Block force pushes"
-          sub="모든 agent가 --force 푸시 차단"
-          right={<Toggle value={true} onChange={() => {}} />}
+          sub="모든 agent가 --force 푸시 차단 (실제 강제는 v0.6.0 — 현재는 의도 기록)"
+          right={<Toggle value={blockForcePush} onChange={setBlockForcePush} />}
         />
         <Row
           label="Require reviewer"
-          sub="머지 게이트에 reviewer agent 의무 통과"
-          right={<Toggle value={true} onChange={() => {}} />}
+          sub="머지 게이트에 reviewer agent 의무 통과 (실제 강제는 v0.6.0 — 현재는 의도 기록)"
+          right={<Toggle value={requireReviewer} onChange={setRequireReviewer} />}
         />
         <Row
           label="Branch prefix"
@@ -578,7 +644,14 @@ export function SettingsAgents() {
       <SettingsCard
         title="Pool defaults"
         right={
-          <Btn variant="ghost" onClick={() => {}}>
+          <Btn
+            variant="ghost"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent('forge:nav-library', { detail: { tab: 'agents' } }),
+              )
+            }}
+          >
             Library에서 편집
           </Btn>
         }
@@ -707,7 +780,19 @@ export function SettingsIntegrations() {
       <SettingsCard
         title="Connections"
         right={
-          <Btn variant="ghost" icon={<Icon.Plus size={11} />}>
+          <Btn
+            variant="ghost"
+            icon={<Icon.Plus size={11} />}
+            onClick={() => {
+              // No backend integration registry yet — point users at the
+              // GitHub README so they can request the integration they need
+              // and stay aware that the list is curated, not configurable.
+              void window.api?.system?.openExternal(
+                'https://github.com/anthropics/forge-studio#integrations',
+              )
+            }}
+            title="새 통합 요청 — GitHub 이슈로 이동 (자체 추가는 v0.7.0)"
+          >
             Add
           </Btn>
         }
@@ -782,9 +867,39 @@ export function SettingsIntegrations() {
               )}
             </div>
             {it.connected ? (
-              <Btn variant="ghost">Configure</Btn>
+              <Btn
+                variant="ghost"
+                onClick={() => {
+                  // Per-integration config UI is v0.6.0+. Until then point at
+                  // the integration's own settings page where the user manages
+                  // tokens / org connections.
+                  const urls: Record<string, string> = {
+                    github: 'https://github.com/settings/tokens',
+                    linear: 'https://linear.app/settings/api',
+                    sentry: 'https://sentry.io/settings/account/api/auth-tokens/',
+                  }
+                  const url = urls[it.id] ?? `https://${it.id}.com`
+                  void window.api?.system?.openExternal(url)
+                }}
+                title={`${it.name} 외부 설정 페이지 열기 (in-app 설정은 v0.6.0)`}
+              >
+                Configure
+              </Btn>
             ) : (
-              <Btn variant="primary" icon={<Icon.Plus size={11} />}>
+              <Btn
+                variant="primary"
+                icon={<Icon.Plus size={11} />}
+                onClick={() => {
+                  const urls: Record<string, string> = {
+                    slack: 'https://api.slack.com/apps',
+                    figma: 'https://www.figma.com/developers/api',
+                    vercel: 'https://vercel.com/account/tokens',
+                  }
+                  const url = urls[it.id] ?? `https://${it.id}.com`
+                  void window.api?.system?.openExternal(url)
+                }}
+                title={`${it.name} 토큰 발급 페이지 — 발급 후 .env에 추가하세요 (in-app 연결은 v0.6.0)`}
+              >
                 Connect
               </Btn>
             )}
@@ -795,7 +910,21 @@ export function SettingsIntegrations() {
       <SettingsCard
         title="MCP servers"
         right={
-          <Btn variant="ghost" icon={<Icon.Plus size={11} />}>
+          <Btn
+            variant="ghost"
+            icon={<Icon.Plus size={11} />}
+            onClick={() => {
+              // The real authoring UI lives under Settings → Harness → MCP
+              // servers (full McpServerEditor). Re-route there instead of
+              // shipping a duplicate dialog from this read-only summary.
+              window.dispatchEvent(
+                new CustomEvent('forge:settings-target', {
+                  detail: { section: 'harness', card: 'mcp-servers' },
+                }),
+              )
+            }}
+            title="Harness 섹션의 전체 MCP 편집기로 이동"
+          >
             Add server
           </Btn>
         }
@@ -837,7 +966,18 @@ export function SettingsIntegrations() {
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
               {s.tools} tools
             </span>
-            <Btn variant="ghost" icon={<Icon.More size={11} />}>
+            <Btn
+              variant="ghost"
+              icon={<Icon.More size={11} />}
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('forge:settings-target', {
+                    detail: { section: 'harness', card: 'mcp-servers' },
+                  }),
+                )
+              }}
+              title="Harness 섹션의 MCP 편집기로 이동 (편집·삭제)"
+            >
               {' '}
             </Btn>
           </div>
@@ -916,7 +1056,20 @@ export function SettingsAccount() {
       <SettingsCard
         title="API keys"
         right={
-          <Btn variant="ghost" icon={<Icon.Plus size={11} />}>
+          <Btn
+            variant="ghost"
+            icon={<Icon.Plus size={11} />}
+            onClick={() => {
+              // Forge doesn't yet host its own API key issuance — direct the
+              // user to the Anthropic console where the upstream key is
+              // created. Local CI keys will be issued in v0.6.0 once the
+              // backend service is online.
+              void window.api?.system?.openExternal(
+                'https://console.anthropic.com/settings/keys',
+              )
+            }}
+            title="Anthropic 콘솔에서 API 키 발급 (Forge CI 키는 v0.6.0)"
+          >
             Generate
           </Btn>
         }

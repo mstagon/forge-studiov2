@@ -247,7 +247,7 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
       t: 'MCP 추가',
       k: '',
       action: () => {
-        window.dispatchEvent(new CustomEvent('forge:nav-settings', { detail: { section: 'harness', card: 'mcp' } }))
+        window.dispatchEvent(new CustomEvent('forge:nav-settings', { detail: { section: 'harness', card: 'mcp-servers' } }))
       },
     },
     {

@@ -87,6 +87,16 @@ export function HooksTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath])
 
+  // Library-level "New" button → forge:library-new with tab='hooks'.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab === 'hooks' && workspacePath) setEditing({})
+    }
+    window.addEventListener('forge:library-new', handler)
+    return () => window.removeEventListener('forge:library-new', handler)
+  }, [workspacePath])
+
   const open = useMemo(() => hooks.find((h) => h.id === openId) ?? null, [hooks, openId])
 
   async function handleSaved() {

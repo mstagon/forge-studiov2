@@ -190,6 +190,17 @@ function WorkspaceHeaderV2({ workspace, harnessUpdate }: WorkspaceHeaderV2Props)
       <div style={{ flex: 1 }} />
       {harnessUpdate ? (
         <button
+          onClick={() => {
+            // Forward to Settings → Harness so the user sees the lint card +
+            // diff preview (and the existing Apply flow). Mirrors the
+            // dashboard quick-action wiring.
+            window.dispatchEvent(
+              new CustomEvent('forge:nav-settings', {
+                detail: { section: 'harness' },
+              }),
+            )
+          }}
+          title="Settings → Harness 에서 업데이트 다이프 / 적용"
           style={{
             height: 22,
             padding: '0 8px',
