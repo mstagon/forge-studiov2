@@ -4,6 +4,40 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-05-08
+
+### Added — 필수 도구 사전 번들 (DMG +~90MB)
+- **tmux** — Agent Team isolated worktree 다중 세션용
+- **uv** — Astral Rust binary, Python 패키지 매니저
+- **Python 3.12 (standalone)** — python-build-standalone relocatable
+- **code-review-graph** — 번들 Python 으로 venv 사전 빌드, shebang portable
+- 사용자 설치 불필요 — 첫 실행부터 tmux/code-review-graph 즉시 동작.
+  미번들: Claude Code CLI (라이선스), git (Xcode CLT)
+
+### Added — 인프라
+- `electron/services/PathManager.ts` 신규 — 번들 도구 PATH 자동 prepend
+  (bundled > cr-graph-venv > python > 기존). 번들 미존재 시 graceful
+- `PtyManager.buildEnv()` 가 `pathManager.augmentEnv` 호출 — 사용자
+  spawn 셸도 번들 도구 보임
+- `CodeReviewGraphManager` — bundled 우선 감지, install() 은 번들 가용
+  시 no-op
+- `scripts/download-bundled-tools.sh` (idempotent fetcher) +
+  `scripts/build-cr-graph-venv.sh` (shebang portable rewrite)
+- electron-builder extraResources + after-pack chmod +x sweep 확장
+
+### Added — 워크스페이스 UX
+- **부팅 시 자동 활성화** — 등록된 ws 중 가장 최근 (lastOpened DESC)
+  자동 setActiveWorkspace. 매번 선택 불필요
+- **\"기존 폴더 열기\" 버튼** — empty state 에 신규. 시스템 폴더 picker
+  → openWorkspace 호출 → `.claude/` 자동 감지 + 등록
+- **\"Recent workspaces\" 카드** — empty state 최대 6개, 클릭 시 즉시 active
+
+### Changed — Onboarding
+- Step 2 의존성 체크 — 번들 도구는 \"번들됨\" Pill 표시, Install 버튼 X
+
+### Migration
+DMG ~134MB → ~220MB. 첫 실행 시 번들 도구 자동 PATH 추가, 별도 설정 불필요.
+
 ## [0.5.0] — 2026-05-08
 
 팀 시스템 풀 자동화 + 하네스 저작 GUI 첫 단계 + 다중 프리셋 + 첫 실행
