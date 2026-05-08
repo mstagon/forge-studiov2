@@ -12,6 +12,7 @@ import { AgentTeamWatcher } from './services/AgentTeamWatcher'
 import { FsManager, type FsListOpts } from './services/FsManager'
 import { CodeReviewGraphManager, type InstallMethod } from './services/CodeReviewGraphManager'
 import { HookProfiler } from './services/HookProfiler'
+import { pathManager } from './services/PathManager'
 
 const execFileAsync = promisify(execFile)
 
@@ -808,13 +809,42 @@ ipcMain.handle('system:which', async (_event, cmd: string) => {
   if (!cmd || typeof cmd !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(cmd)) {
     return null
   }
+  // Bundled tools take priority over PATH lookup so the onboarding "where is
+  // tmux?" probe always points at the DMG-shipped binary on a default install.
+  // Otherwise a user with their own homebrew tmux would resolve there even
+  // though every internal spawn uses the bundled path.
+  if (cmd === 'tmux') {
+    const bundled = pathManager.getTmux()
+    if (bundled) return bundled
+  } else if (cmd === 'uv') {
+    const bundled = pathManager.getUv()
+    if (bundled) return bundled
+  } else if (cmd === 'code-review-graph') {
+    const bundled = pathManager.getCrGraphCli()
+    if (bundled) return bundled
+  } else if (cmd === 'python3' || cmd === 'python3.12') {
+    const bundled = pathManager.getPython()
+    if (bundled) return bundled
+  }
   try {
-    const { stdout } = await execFileAsync('which', [cmd], { encoding: 'utf-8', timeout: 3000 })
+    const { stdout } = await execFileAsync('which', [cmd], {
+      encoding: 'utf-8',
+      timeout: 3000,
+      env: pathManager.augmentEnv({ ...process.env }),
+    })
     return stdout.trim()
   } catch {
     return null
   }
 })
+
+/**
+ * Surface the absolute path of the bundled-tools root so the renderer can
+ * detect whether a resolved binary was shipped inside the DMG. Returns null
+ * when no bundle is present (dev tree without `npm run bundle:tools` or a
+ * non-arm64 build).
+ */
+ipcMain.handle('system:bundledToolsRoot', () => pathManager.getBundledToolsRoot())
 
 // ─── IPC Handlers: Updates ──────────────────────────────────────────
 

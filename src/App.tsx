@@ -116,9 +116,20 @@ export default function App() {
   const [toast, setToast] = useState<{ name: string; count: number } | null>(null)
   const [model] = useState({ id: 'sonnet-4.5', label: 'sonnet-4.5' })
 
-  // ── Boot ────────────────────────────────────────────────────────
+  // ── Boot — load workspaces + auto-activate most recently opened ──
   useEffect(() => {
-    loadWorkspaces()
+    void (async () => {
+      await loadWorkspaces()
+      const state = useWorkspaceStore.getState()
+      if (!state.activeWorkspace && state.workspaces.length > 0) {
+        const recent = [...state.workspaces].sort((a, b) => {
+          const aT = +new Date(a.lastOpened ?? a.createdAt ?? 0)
+          const bT = +new Date(b.lastOpened ?? b.createdAt ?? 0)
+          return bT - aT
+        })[0]
+        if (recent) state.setActiveWorkspace(recent)
+      }
+    })()
     // Subscribe to team updates once. setActiveWorkspace handles repointing
     // the watcher; the subscribe callback updates the store as the chokidar
     // watcher emits new configs.
@@ -274,6 +285,11 @@ export default function App() {
 
   // ── Render ──────────────────────────────────────────────────────
   if (!activeSummary) {
+    const recentList = [...workspaces].sort((a, b) => {
+      const aT = +new Date(a.lastOpened ?? a.createdAt ?? 0)
+      const bT = +new Date(b.lastOpened ?? b.createdAt ?? 0)
+      return bT - aT
+    })
     return (
       <div
         style={{
@@ -286,26 +302,134 @@ export default function App() {
           fontFamily: 'var(--font-ui)',
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 12, color: 'var(--text-1)', fontSize: 16, fontWeight: 600 }}>
-            Forge Studio
-          </div>
-          <button
-            onClick={() => setNewWorkspaceDialog(true)}
+        <div style={{ width: 480, maxWidth: '90%' }}>
+          <div
             style={{
-              background: 'var(--accent)',
-              color: '#0b0e13',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
+              textAlign: 'center',
+              marginBottom: 28,
+              color: 'var(--text-1)',
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.3px',
             }}
           >
-            새 워크스페이스 만들기
-          </button>
+            Forge Studio
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: recentList.length > 0 ? 28 : 0 }}>
+            <button
+              onClick={() => setNewWorkspaceDialog(true)}
+              style={{
+                flex: 1,
+                background: 'var(--accent)',
+                color: '#0b0e13',
+                border: 'none',
+                padding: '10px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              + 새 워크스페이스
+            </button>
+            <button
+              onClick={async () => {
+                const result = await window.api.system.showOpenDialog({
+                  properties: ['openDirectory', 'createDirectory'],
+                  title: '기존 폴더 열기',
+                })
+                if (result && !result.canceled && result.filePaths[0]) {
+                  await openWorkspace(result.filePaths[0])
+                }
+              }}
+              style={{
+                flex: 1,
+                background: 'var(--bg-3)',
+                color: 'var(--text-1)',
+                border: '1px solid var(--line-2)',
+                padding: '10px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              📁 기존 폴더 열기
+            </button>
+          </div>
+
+          {/* Recent workspaces */}
+          {recentList.length > 0 && (
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  fontFamily: 'var(--font-mono)',
+                  marginBottom: 8,
+                }}
+              >
+                Recent workspaces
+              </div>
+              <div
+                style={{
+                  background: 'var(--bg-2)',
+                  border: '1px solid var(--line-1)',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                }}
+              >
+                {recentList.slice(0, 6).map((ws) => (
+                  <button
+                    key={ws.id}
+                    onClick={() => useWorkspaceStore.getState().setActiveWorkspace(ws)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: 2,
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid var(--line-1)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      color: 'var(--text-1)',
+                    }}
+                    onMouseEnter={(e) => {
+                      ;(e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      ;(e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{ws.name}</div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-3)',
+                        fontFamily: 'var(--font-mono)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '100%',
+                      }}
+                    >
+                      {ws.path}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <NewWorkspaceDialog />
         {/* Onboarding overlays the empty state on first run so brand-new users

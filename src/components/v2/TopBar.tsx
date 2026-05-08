@@ -15,28 +15,14 @@ import { Icon } from './icons'
 import { Pill, Kbd } from './primitives'
 import type { WorkspaceSummary } from './types'
 
-// ─── Traffic lights (visual placeholder; real ones come from frameless OS chrome) ─
-function TrafficLights() {
-  return (
-    <div
-      className="ns"
-      style={{
-        display: 'flex', gap: 8, paddingLeft: 14, paddingRight: 12,
-        alignItems: 'center',
-      }}
-    >
-      {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
-        <span
-          key={c}
-          style={{
-            width: 12, height: 12, borderRadius: 999,
-            background: c,
-            boxShadow: 'inset 0 0 0 0.5px rgba(0,0,0,0.18)',
-          }}
-        />
-      ))}
-    </div>
-  )
+// ─── Traffic-light spacer ────────────────────────────────────────────────
+// macOS draws real traffic lights at (16, 16) when the BrowserWindow is
+// configured with `titleBarStyle: 'hiddenInset'` (see electron/main.ts).
+// We render an empty spacer here so other TopBar content doesn't slide
+// underneath those native buttons. Width = 70px = enough for the three
+// dots + their inset padding without colliding with WorkspaceSwitcher.
+function TrafficLightSpacer() {
+  return <div className="ns" style={{ width: 70, flexShrink: 0 }} />
 }
 
 // ─── Workspace dropdown switcher ────────────────────────────────────────────
@@ -288,7 +274,7 @@ export function TopBar({
 
   return (
     <div
-      className="ns"
+      className="ns app-drag"
       style={{
         height: 38, display: 'flex', alignItems: 'center',
         borderBottom: '1px solid var(--line-1)',
@@ -296,20 +282,23 @@ export function TopBar({
         flexShrink: 0,
       }}
     >
-      <TrafficLights />
+      <TrafficLightSpacer />
 
-      <WorkspaceSwitcher
-        workspace={workspace}
-        workspaces={workspaces}
-        onSwitch={onSwitchWorkspace}
-        onAddWorkspace={onAddWorkspace}
-        onOpenExisting={onOpenExisting}
-        onManageWorkspaces={onOpenSettings}
-      />
+      <div className="app-no-drag">
+        <WorkspaceSwitcher
+          workspace={workspace}
+          workspaces={workspaces}
+          onSwitch={onSwitchWorkspace}
+          onAddWorkspace={onAddWorkspace}
+          onOpenExisting={onOpenExisting}
+          onManageWorkspaces={onOpenSettings}
+        />
+      </div>
 
       {/* Center: command palette trigger */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
         <button
+          className="app-no-drag"
           onClick={onCmdK}
           style={{
             width: 360, height: 24, borderRadius: 5,
@@ -327,7 +316,7 @@ export function TopBar({
       </div>
 
       {/* Right: harness, model, settings */}
-      <div style={{
+      <div className="app-no-drag" style={{
         display: 'flex', alignItems: 'center', gap: 8, paddingRight: 10,
       }}>
         <button style={{

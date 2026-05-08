@@ -171,9 +171,30 @@ npm run electron:build       # → release/Forge Studio-<version>-arm64.dmg
 ```
 
 ### Requirements
-- macOS 12+ (Apple Silicon or Intel)
-- Node 20+
-- Xcode Command Line Tools (for the native node-pty rebuild)
+- macOS 12+ (Apple Silicon — arm64 only for the bundled tools build)
+- Node 20+ (for source builds)
+- Xcode Command Line Tools (provides `git` and the native node-pty rebuild)
+- [Claude Code CLI](https://docs.claude.com/claude-code) — install separately,
+  Anthropic ships frequent updates and the license forbids redistribution.
+
+Everything else is bundled inside the DMG (see "Bundled tools" below).
+
+### Bundled tools
+
+Starting v0.5.1 the DMG ships a self-contained binary toolchain so a clean
+macOS install can run Agent Teams and code-review-graph without any extra
+setup. The bundle adds ~85 MB compressed (DMG goes from ~134 MB → ~220 MB).
+
+| Tool | Purpose | Source |
+|---|---|---|
+| `tmux` | Multi-pane backend for Agent Team isolated worktrees | Homebrew bottle (~1 MB) |
+| `uv` | Python package manager (used by code-review-graph internals) | astral-sh/uv release (~10 MB) |
+| `python` 3.12 | Standalone interpreter for the cr-graph venv | indygreg/python-build-standalone (~80 MB unpacked) |
+| `code-review-graph` | Repo dependency + call-graph visualizer | Pre-built venv on top of the bundled python (~50 MB) |
+
+The bundled binaries live at `Contents/Resources/bundled-tools/` and Forge
+prepends them to `PATH` for every spawned shell, so user terminals also see
+`tmux` / `uv` / `code-review-graph` without any `brew install` step.
 
 ---
 

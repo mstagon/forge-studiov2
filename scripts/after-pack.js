@@ -26,6 +26,50 @@ exports.default = async ({ appOutDir, packager, electronPlatformName }) => {
     }
   }
 
+  // 1b. Re-stamp the bundled toolchain (tmux / uv / python / cr-graph venv)
+  //     with executable bits. extraResources ships the contents into
+  //     Contents/Resources/bundled-tools/ but the tar+copy pipeline can drop
+  //     the +x bit on individual binaries — explicitly setting 0o755 on every
+  //     known entrypoint avoids spawn failures at runtime.
+  const bundledRoot = path.join(appPath, 'Contents/Resources/bundled-tools')
+  if (fs.existsSync(bundledRoot)) {
+    // Specific top-level binaries we know about. The recursive sweep below
+    // picks up everything else inside python/bin and cr-graph-venv/bin.
+    const explicit = [
+      path.join(bundledRoot, 'bin/tmux'),
+      path.join(bundledRoot, 'bin/uv'),
+    ]
+    for (const bin of explicit) {
+      if (fs.existsSync(bin)) {
+        fs.chmodSync(bin, 0o755)
+        console.log(`[after-pack] chmod +x ${bin}`)
+      }
+    }
+    // Walk every */bin directory and chmod regular files. python-build-
+    // standalone ships several entry points (python3, python3.12, pip, etc.)
+    // and the cr-graph venv adds code-review-graph + activate scripts.
+    const binDirs = [
+      path.join(bundledRoot, 'python/bin'),
+      path.join(bundledRoot, 'cr-graph-venv/bin'),
+    ]
+    for (const dir of binDirs) {
+      if (!fs.existsSync(dir)) continue
+      for (const name of fs.readdirSync(dir)) {
+        const p = path.join(dir, name)
+        try {
+          const stat = fs.lstatSync(p)
+          // Only chmod regular files — skip symlinks (they inherit) and dirs.
+          if (stat.isFile()) {
+            fs.chmodSync(p, 0o755)
+          }
+        } catch (err) {
+          console.warn(`[after-pack] chmod failed for ${p}: ${err.message}`)
+        }
+      }
+      console.log(`[after-pack] chmod +x ${dir}/*`)
+    }
+  }
+
   // 2. Ad-hoc codesign the bundle when no Developer ID is in play.
   //    Apple Silicon dyld refuses to load entirely-unsigned native modules,
   //    and macOS Sequoia surfaces the failure as the dreaded

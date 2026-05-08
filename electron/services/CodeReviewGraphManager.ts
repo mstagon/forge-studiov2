@@ -4,6 +4,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import net from 'net'
+import { pathManager } from './PathManager'
 
 const execFileAsync = promisify(execFile)
 
@@ -21,7 +22,7 @@ const execFileAsync = promisify(execFile)
  * throw across the IPC boundary unless the input is invalid.
  */
 
-export type InstallMethod = 'pipx' | 'pip' | 'uv'
+export type InstallMethod = 'pipx' | 'pip' | 'uv' | 'bundled'
 
 export interface InstallStatus {
   installed: boolean
@@ -58,7 +59,9 @@ export interface VizHandle {
  * misses Homebrew, pyenv, pipx, uv, etc. Mirror the augmentation
  * HarnessScanner uses so `which code-review-graph` actually finds binaries
  * installed via `pipx install` (`~/.local/bin`) or `uv tool install`
- * (`~/.local/bin` as well).
+ * (`~/.local/bin` as well). On top of that, pathManager.augmentEnv prepends
+ * the *bundled* tools directories so the DMG-shipped cr-graph venv always
+ * wins over an out-of-date user install.
  */
 function augmentedPathEnv(): NodeJS.ProcessEnv {
   const basePath = process.env.PATH || ''
@@ -71,11 +74,21 @@ function augmentedPathEnv(): NodeJS.ProcessEnv {
     extras.push(`${home}/.local/bin`, `${home}/.cargo/bin`)
   }
   const augmented = [...extras, basePath].filter(Boolean).join(path.delimiter)
-  return { ...process.env, PATH: augmented }
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: augmented }
+  return pathManager.augmentEnv(env)
 }
 
-const CLI = 'code-review-graph'
+const CLI_NAME = 'code-review-graph'
 const WHICH = os.platform() === 'win32' ? 'where' : 'which'
+
+/**
+ * Resolve the code-review-graph CLI to spawn. Returns the bundled venv's
+ * absolute path when present (no PATH gymnastics needed), else falls back to
+ * the bare command name and lets the augmented PATH find it.
+ */
+function resolveCli(): string {
+  return pathManager.getCrGraphCli() ?? CLI_NAME
+}
 
 /** Pick a free port in [3000, 9000) to avoid stomping on common dev servers. */
 async function pickFreePort(): Promise<number> {
@@ -104,16 +117,42 @@ export class CodeReviewGraphManager {
   private vizProcs = new Map<number, ChildProcess>()
 
   /**
-   * Probe `code-review-graph --version`. If the CLI is missing, return
-   * `installed: false`. The `method` field is best-effort: we look at the
-   * resolved binary path to guess pipx (`/pipx/`) or uv (`/uv/`) — otherwise
-   * fall back to `pip`.
+   * Probe `code-review-graph --version`. Resolution priority:
+   *   1. Bundled venv (DMG ships a pre-built cr-graph) → method: 'bundled'.
+   *   2. PATH lookup via `which`. The `method` field is best-effort: pipx
+   *      (`/pipx/`) or uv (`/uv/`) — otherwise fall back to `pip`.
+   *
+   * Falls through to `installed: false` only when neither (1) nor (2) yields
+   * an executable.
    */
   async isInstalled(): Promise<InstallStatus> {
     const env = augmentedPathEnv()
+
+    // 1. Bundled CLI takes precedence — no PATH lookup, no possibility of a
+    // user pipx install drifting out of sync with the version we tested.
+    const bundled = pathManager.getCrGraphCli()
+    if (bundled) {
+      let version: string | undefined
+      try {
+        const { stdout } = await execFileAsync(bundled, ['--version'], {
+          encoding: 'utf-8',
+          timeout: 5000,
+          env,
+        })
+        version = stdout.trim() || undefined
+      } catch {
+        // The venv exists but invoking it failed (corrupted shebang, missing
+        // shared lib, etc.). Still report installed:true — a rebuild is the
+        // right user action, and re-installing on top of a broken bundle is
+        // a worse experience.
+      }
+      return { installed: true, version, method: 'bundled' }
+    }
+
+    // 2. PATH-based discovery (legacy / non-bundled hosts).
     let resolvedPath: string | null = null
     try {
-      const { stdout } = await execFileAsync(WHICH, [CLI], {
+      const { stdout } = await execFileAsync(WHICH, [CLI_NAME], {
         encoding: 'utf-8',
         timeout: 3000,
         env,
@@ -125,7 +164,7 @@ export class CodeReviewGraphManager {
 
     let version: string | undefined
     try {
-      const { stdout } = await execFileAsync(CLI, ['--version'], {
+      const { stdout } = await execFileAsync(CLI_NAME, ['--version'], {
         encoding: 'utf-8',
         timeout: 5000,
         env,
@@ -150,14 +189,41 @@ export class CodeReviewGraphManager {
    * Install the CLI. When `method` is omitted, auto-pick the best installer
    * present on PATH (pipx > uv > pip). All variants stream stdout+stderr
    * back so the UI can show the install log.
+   *
+   * Bundled fast-path: if the DMG already shipped a working cr-graph venv
+   * we no-op with a friendly message instead of running an installer the
+   * user doesn't have. This means a user on a bare macOS install (no pipx,
+   * no uv, no pip) can still hit the "Install" button and get a green
+   * checkmark because the bundle is already in place.
    */
   async install(method?: InstallMethod): Promise<InstallResult> {
     const env = augmentedPathEnv()
+
+    if (!method && pathManager.getCrGraphCli()) {
+      return {
+        ok: true,
+        output: 'code-review-graph is bundled with Forge Studio — no install needed.',
+      }
+    }
+
     const chosen = method ?? (await this.pickInstallMethod(env))
     if (!chosen) {
       return {
         ok: false,
         output: 'No installer found. Install pipx, uv, or pip first (https://pipx.pypa.io).',
+      }
+    }
+
+    if (chosen === 'bundled') {
+      // Caller explicitly asked for the bundled method. Honour it iff the
+      // bundle is actually present; otherwise fail loudly so the UI can fall
+      // back to a real installer.
+      if (pathManager.getCrGraphCli()) {
+        return { ok: true, output: 'Using bundled code-review-graph.' }
+      }
+      return {
+        ok: false,
+        output: 'Bundled code-review-graph is not available in this build.',
       }
     }
 
@@ -194,11 +260,12 @@ export class CodeReviewGraphManager {
     }
 
     const env = augmentedPathEnv()
+    const cli = resolveCli()
     const start = Date.now()
     return new Promise<BuildResult>((resolve) => {
       let proc: ChildProcess
       try {
-        proc = spawn(CLI, ['build'], { cwd: workspacePath, env })
+        proc = spawn(cli, ['build'], { cwd: workspacePath, env })
       } catch (err) {
         resolve({ ok: false, durationMs: 0, output: (err as Error).message })
         return
@@ -244,8 +311,9 @@ export class CodeReviewGraphManager {
     if (!(await fs.pathExists(workspacePath))) return null
 
     const env = augmentedPathEnv()
+    const cli = resolveCli()
     try {
-      const { stdout } = await execFileAsync(CLI, ['stats', '--json'], {
+      const { stdout } = await execFileAsync(cli, ['stats', '--json'], {
         cwd: workspacePath,
         encoding: 'utf-8',
         timeout: 30 * 1000,
@@ -289,9 +357,10 @@ export class CodeReviewGraphManager {
     }
 
     const env = augmentedPathEnv()
+    const cli = resolveCli()
     const startPort = port && port > 0 ? port : await pickFreePort()
 
-    const proc = spawn(CLI, ['viz', '--port', String(startPort), '--no-open'], {
+    const proc = spawn(cli, ['viz', '--port', String(startPort), '--no-open'], {
       cwd: workspacePath,
       env,
       detached: false,
@@ -377,6 +446,11 @@ export class CodeReviewGraphManager {
       case 'pip':
         // Prefer `pip3 install --user` to avoid touching the system Python.
         return ['pip3', ['install', '--user', 'code-review-graph']]
+      case 'bundled':
+        // The bundled fast-path is handled inline in `install()` before we
+        // reach this method — this branch only exists to satisfy the
+        // exhaustiveness check and surface a programming error if hit.
+        throw new Error('installCommand: "bundled" must be handled by install() directly')
     }
   }
 

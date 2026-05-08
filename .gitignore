@@ -39,3 +39,13 @@ framework-agnostic-harness/
 build/*.iconset/
 
 .omc/
+
+# Bundled toolchain (tmux/uv/python/cr-graph-venv) — fetched at build time by
+# scripts/download-bundled-tools.sh + scripts/build-cr-graph-venv.sh. Each
+# binary tree is 30-100 MB so they do not belong in git; CI pulls them per
+# release. The directory itself is kept via .gitkeep so extraResources doesn't
+# fail on a clean checkout that hasn't run the download script yet.
+resources/bundled-tools/darwin-arm64/bin/
+resources/bundled-tools/darwin-arm64/python/
+resources/bundled-tools/darwin-arm64/cr-graph-venv/
+resources/bundled-tools/darwin-arm64/.download-stamp.json
