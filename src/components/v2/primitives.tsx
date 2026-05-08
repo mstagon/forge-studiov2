@@ -149,7 +149,7 @@ export function Dot({ color, pulse, size = 6, style }: DotProps) {
 }
 
 // ─── StateDot ────────────────────────────────────────────────────────
-export type AgentState = 'active' | 'done' | 'blocked' | 'queued' | 'idle'
+export type AgentState = 'active' | 'done' | 'blocked' | 'queued' | 'idle' | 'paused'
 
 export const STATE_COLOR: Record<AgentState, string> = {
   active:  'var(--success)',
@@ -157,6 +157,7 @@ export const STATE_COLOR: Record<AgentState, string> = {
   blocked: 'var(--danger)',
   queued:  'var(--text-3)',
   idle:    'var(--text-3)',
+  paused:  'var(--warn)',
 }
 export const STATE_LABEL: Record<AgentState, string> = {
   active:  'ACTIVE',
@@ -164,6 +165,7 @@ export const STATE_LABEL: Record<AgentState, string> = {
   blocked: 'BLOCKED',
   queued:  'QUEUED',
   idle:    'IDLE',
+  paused:  'PAUSED',
 }
 
 export interface StateDotProps {

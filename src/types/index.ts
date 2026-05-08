@@ -179,6 +179,13 @@ export interface TeamMember {
   /** Per-member worktree path (when isolated worktrees are provisioned). */
   worktreePath?: string
   branch?: string
+  /**
+   * Member-level lifecycle state, set by pauseMember/resumeMember on the
+   * backend. `'idle'` here means "explicitly paused" (semantically distinct
+   * from the inbox-derived idle status). The renderer surfaces this as a
+   * 'paused' member state so Pause/Resume controls stay correct.
+   */
+  state?: 'active' | 'idle'
 }
 
 export interface Team {
