@@ -4,6 +4,63 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.5] — 2026-05-08
+
+### Fixed — Codex adversarial review 라운드2 결함 4개
+
+#### H1. workspaceDirty 가 자기 자신 때문에 항상 true (merge 영구 실패)
+`AgentTeamWatcher.create()` 가 `<workspace>/.claude/teams/<teamId>/`,
+worktree 디렉터리를 만든다. 그런데 `merge()` 의 dirty-tree gate 는
+`git status --porcelain` 비어있어야 통과 — `.claude` 가 추적 대상인
+워크스페이스에선 팀 생성 즉시 dirty. Merge 버튼은 자기 자신이 만든
+파일 때문에 영구히 `workspace has uncommitted changes` 로 실패.
+
+수정: `workspaceDirty()` 가 porcelain 출력을 라인 단위로 파싱 후
+Forge 소유 경로 (`.claude/teams/**`, `.claude/worktrees/**`) 만
+필터링. 사용자 WIP 는 그대로 감지. `isForgeOwnedPath()` 헬퍼 추가.
+
+#### H2. Activity tracker 가 부팅·워크스페이스 전환 후 inert
+`teamActivityTracker.start()` 는 `teams:create` 핸들러에서만 호출.
+앱 재시작 시 `agentTeamWatcher.start()` 가 기존 팀 목록을 cache 에
+복원 + `teams:update` 발신하지만 activity tracker 는 안 켜짐 →
+RunLiveView 가 JSONL tail 만 보여주고 라이브 edit/commit/state-change
+이벤트는 영영 도착 안 함. \"실시간 피드\" 라벨이 거짓말.
+
+수정: `agentTeamWatcher.on('teams', ...)` 안에서
+`reconcileActivityTrackers()` 호출. live id Set 과 active tracker Set
+diff 해서 빠진 팀 start, 사라진 팀 stop. `agentTeamWatcher.configPathFor()`
+public 메서드 추가 — tracker 가 tail 할 config.json 경로 조회용.
+재시작/워크스페이스 swap 후에도 라이브 피드 유지.
+
+#### M1. Pause/Resume 백엔드 상태가 v2 어댑터에서 무시됨
+`pause()` 는 `team.status='paused'` 작성, `pauseMember()` 는
+`member.state='idle'` 작성. 그런데 `toV2Team()` 어댑터는 inbox 파생
+`m.status` (AgentStatus) 만 `statusToMemberState()` 통과시킴 → paused
+멤버가 inbox 활동 흔적 없으면 그대로 'active' 렌더링. RunLiveView 의
+Resume 조건은 그 v2 status 에 의존 → 사용자가 Pause 반복 클릭하지만
+실제 프로세스 상태는 이미 변경된 상태 (불일치).
+
+수정:
+- `MemberState` 에 `'paused'` 추가 (`primitives.tsx`, `types.ts`)
+- `STATE_COLOR/STATE_LABEL` paused 컬러 추가 (`var(--warn)` + `PAUSED`)
+- `src/types/index.ts` TeamMember 에 `state?: 'active' | 'idle'` 노출
+- `toV2Team()` precedence 명시: team.status='paused' → 모든 멤버 paused;
+  member.state='idle' (lifecycle pause) → paused; 그 외 inbox-derived
+- 팀 status 집계: paused (team) > blocked > active > paused (members) > idle > done
+- `RunLiveView` 의 `state === 'idle' || 'queued'` hack → `state === 'paused'`
+
+#### M2. Agent 터미널 버튼이 PTY 만들고 버림 (누수)
+`AgentCard` 의 터미널 아이콘이 `window.api.teams.openAgentTerminal()`
+호출 후 `flash('success', 'attached')` 만 띄움. 반환된 PTY id 는 즉시
+discard — `pty.onData` 구독 없음, 터미널 store 등록 없음, dispose 없음.
+사용자는 'attached' 만 보고 실제 터미널은 안 열림. tmux attach PTY 는
+앱 종료까지 alive (dangling).
+
+수정: `LiveTerminalGrid` 가 이미 모든 멤버에 라이브 attach 중 →
+중복 PTY 만들 필요 없음. 버튼이 `forge:agent-fullscreen` CustomEvent
+dispatch → grid 가 fullscreen mode toggle. `LiveTerminalGrid` 에 이벤트
+listener 추가 (member 존재 검증 + agentName/agentId 매칭). 누수 0.
+
 ## [0.5.4] — 2026-05-08
 
 ### Fixed — Codex adversarial review 결함 4개 (0.5.3 hotfix)
