@@ -64,20 +64,22 @@ if [[ -d "${VENV_DIR}" ]]; then
 fi
 
 # ─── Create venv ─────────────────────────────────────────────────────────
-# `--copies` makes the venv self-contained (no symlinks back into the bundled
-# python tree). After the DMG is assembled, the cr-graph-venv folder ends up
-# under Contents/Resources/bundled-tools/cr-graph-venv next to ../python/, so
-# even with copies the relative shebang still works because we explicitly
-# rewrite the shebangs below.
-echo "[cr-graph-venv] creating venv with ${PYTHON_BIN}..."
-"${PYTHON_BIN}" -m venv --copies "${VENV_DIR}"
-
-# Upgrade pip first so resolve is fast + uses modern wheel cache layout.
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip wheel >/dev/null
-
-# ─── Install code-review-graph ───────────────────────────────────────────
-echo "[cr-graph-venv] installing code-review-graph..."
-"${VENV_DIR}/bin/python" -m pip install --no-cache-dir code-review-graph
+# python-build-standalone 의 ensurepip 가 macOS arm64 에서 종종 SIGABRT
+# 로 죽는 알려진 이슈가 있어 (codesigning + Frameworks 경로) bundled uv
+# 로 venv 생성한다. uv 는 자체적으로 pip 를 부트스트랩하므로 ensurepip
+# 미사용. uv 가 없으면 (다운로드 실패) python venv fallback.
+UV_BIN="${TOOLS_DIR}/bin/uv"
+if [[ -x "${UV_BIN}" ]]; then
+  echo "[cr-graph-venv] creating venv with ${UV_BIN} (python: ${PYTHON_BIN})..."
+  "${UV_BIN}" venv --python "${PYTHON_BIN}" "${VENV_DIR}"
+  echo "[cr-graph-venv] installing code-review-graph via uv pip..."
+  "${UV_BIN}" pip install --python "${VENV_DIR}/bin/python" code-review-graph
+else
+  echo "[cr-graph-venv] uv 없음 — python venv fallback (ensurepip 사용)..."
+  "${PYTHON_BIN}" -m venv --copies "${VENV_DIR}"
+  "${VENV_DIR}/bin/python" -m pip install --upgrade pip wheel >/dev/null
+  "${VENV_DIR}/bin/python" -m pip install --no-cache-dir code-review-graph
+fi
 
 # ─── Verify ──────────────────────────────────────────────────────────────
 if ! "${VENV_DIR}/bin/code-review-graph" --version >/dev/null 2>&1; then
