@@ -4,6 +4,48 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-05-08
+
+### Fixed — Playwright 동적 검수에서 발견된 React 결함 3개
+
+#### React "Rendered more hooks than during the previous render" (App.tsx)
+boot 흐름:
+1. activeWorkspace 가 null 인 첫 렌더 → `if (!activeSummary) return ...` 가
+   line 389 에서 early return → useAgentTeamStore (line 552) 까지 도달 안 함
+   → 26 hooks
+2. workspace 가 채워진 다음 렌더 → return 안 됨 → 27 hooks
+3. React 가 hook order 불일치 감지 → ErrorBoundary 잡힘
+
+0.5.x 에선 부팅 시 workspace 항상 있어서 발현 안 됐을 뿐. dev API stub 으로
+처음 발견. fix: realTeams/runs hook 을 early return 위로 hoist —
+hook order 안정화.
+
+#### DashboardPanelWired `undefined.length`
+`harnessInfo?.agents.length` 패턴이 `harnessInfo` 는 객체이지만 `agents`
+필드가 undefined 일 때 throw. 백엔드가 부분 응답을 보내거나 dev stub 이
+필드를 빠뜨리면 발생. fix: `harnessInfo?.agents?.length` 등 defensive
+optional chaining 으로 바꿈 (5 fields).
+
+#### GitPanelWired 진입 시 `undefined.filter`
+status 가 객체이지만 staged/unstaged/untracked 필드가 undefined 일 때
+filter 호출에서 throw. dev stub 이 status shape 을 누락한 게 원인 — 실제
+backend 는 항상 채움. fix: dev stub 의 git.status 가 staged/unstaged/
+untracked/ahead/behind 모두 빈 값으로 반환하도록 보강.
+
+### Added — dev API stub 인프라
+
+`src/devApiStub.ts` (NEW) — Vite dev / Playwright / chromium MCP 환경에서
+앱이 부팅하도록 `window.api.*` 을 채우는 stub. Electron production 에선
+preload 가 먼저 채우므로 무동작.
+
+main.tsx 가 `import.meta.env.DEV` 일 때만 conditional import. Promise
+returning 메서드는 빈 데이터로 resolve, subscribe 류는 noop unsubscribe.
+누락된 메서드는 logging proxy 가 첫 호출 시 한번만 warn 출력.
+
+이 인프라 덕에 다음 라운드부터:
+- `npm run dev` + chromium MCP 로 모든 화면 routing/onClick 검증 가능
+- React invariant 위반 (#310, "more hooks", 등) 부팅 흐름에서 발견 가능
+
 ## [0.6.0] — 2026-05-08
 
 ### Architecture — Forge Team only (서브에이전트 폐지)

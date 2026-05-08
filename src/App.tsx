@@ -385,6 +385,25 @@ export default function App() {
     }
   }
 
+  // Real teams from the watcher, scoped to the active workspace.
+  // No seed fallback — empty workspace gets an empty Teams section, not fake
+  // "회원가입 피처팀" cards. Lying to the user is worse than an empty list.
+  // NOTE: hoisted ABOVE the early-return below so React's hook order stays
+  // stable whether or not a workspace is active. Otherwise the workspace-
+  // empty boot path returns 26 hooks and the post-boot path returns 27,
+  // tripping "Rendered more hooks than during the previous render".
+  const realTeams = useAgentTeamStore((s) => s.teams)
+  const runs = useMemo<V2Team[]>(() => {
+    return realTeams
+      .filter((t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id)
+      .map(toV2Team)
+  }, [realTeams, activeWorkspace])
+
+  const harnessUpdateAvailable =
+    installedHarnessVersion &&
+    bundledHarnessVersion &&
+    installedHarnessVersion !== bundledHarnessVersion
+
   // ── Render ──────────────────────────────────────────────────────
   if (!activeSummary) {
     const recentList = [...workspaces].sort((a, b) => {
@@ -540,21 +559,6 @@ export default function App() {
       </div>
     )
   }
-
-  const harnessUpdateAvailable =
-    installedHarnessVersion &&
-    bundledHarnessVersion &&
-    installedHarnessVersion !== bundledHarnessVersion
-
-  // Real teams from the watcher, scoped to the active workspace.
-  // No seed fallback — empty workspace gets an empty Teams section, not fake
-  // \"회원가입 피처팀\" cards. Lying to the user is worse than an empty list.
-  const realTeams = useAgentTeamStore((s) => s.teams)
-  const runs = useMemo<V2Team[]>(() => {
-    return realTeams
-      .filter((t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id)
-      .map(toV2Team)
-  }, [realTeams, activeWorkspace])
 
   // Map current view → main content
   let main: React.ReactNode

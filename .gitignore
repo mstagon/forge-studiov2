@@ -48,4 +48,4 @@ build/*.iconset/
 resources/bundled-tools/darwin-arm64/bin/
 resources/bundled-tools/darwin-arm64/python/
 resources/bundled-tools/darwin-arm64/cr-graph-venv/
-resources/bundled-tools/darwin-arm64/.download-stamp.json
+resources/bundled-tools/darwin-arm64/.download-stamp.json.playwright-mcp/
