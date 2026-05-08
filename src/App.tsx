@@ -225,6 +225,50 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // ── Dashboard quick action bus ──────────────────────────────────
+  // DashboardPanel emits CustomEvent('forge:*') to request app-level actions
+  // since the panel itself doesn't own the wizard / sidebar / dialog state.
+  useEffect(() => {
+    const handleNewRun = () => {
+      setWizardPrefill(undefined)
+      setWizardOpen(true)
+    }
+    const handleOpenFolder = (e: Event) => {
+      const detail = (e as CustomEvent<{ path: string }>).detail
+      if (detail?.path) void openWorkspace(detail.path)
+    }
+    const handleNavLibrary = (e: Event) => {
+      setView('library')
+      const detail = (e as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab) {
+        // Library tab is owned by Library component — broadcast a follow-up
+        // event it can pick up after mount.
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('forge:library-tab', { detail: { tab: detail.tab } }))
+        }, 50)
+      }
+    }
+    const handleNavSettings = (e: Event) => {
+      setView('settings')
+      const detail = (e as CustomEvent<{ section?: string; card?: string }>).detail
+      if (detail) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('forge:settings-target', { detail }))
+        }, 50)
+      }
+    }
+    window.addEventListener('forge:new-run', handleNewRun)
+    window.addEventListener('forge:open-folder', handleOpenFolder)
+    window.addEventListener('forge:nav-library', handleNavLibrary)
+    window.addEventListener('forge:nav-settings', handleNavSettings)
+    return () => {
+      window.removeEventListener('forge:new-run', handleNewRun)
+      window.removeEventListener('forge:open-folder', handleOpenFolder)
+      window.removeEventListener('forge:nav-library', handleNavLibrary)
+      window.removeEventListener('forge:nav-settings', handleNavSettings)
+    }
+  }, [openWorkspace])
+
   // ── Run + palette wiring ────────────────────────────────────────
   const onSwitchWorkspace = (id: string) => {
     const ws = workspaces.find((w) => w.id === id)
@@ -454,15 +498,14 @@ export default function App() {
     bundledHarnessVersion &&
     installedHarnessVersion !== bundledHarnessVersion
 
-  // Real teams from the watcher, scoped to the active workspace. When empty,
-  // we keep the seed list so the design demo still has something to render.
+  // Real teams from the watcher, scoped to the active workspace.
+  // No seed fallback — empty workspace gets an empty Teams section, not fake
+  // \"회원가입 피처팀\" cards. Lying to the user is worse than an empty list.
   const realTeams = useAgentTeamStore((s) => s.teams)
   const runs = useMemo<V2Team[]>(() => {
-    const wsTeams = realTeams.filter(
-      (t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id,
-    )
-    if (wsTeams.length === 0) return SEED_TEAMS
-    return wsTeams.map(toV2Team)
+    return realTeams
+      .filter((t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id)
+      .map(toV2Team)
   }, [realTeams, activeWorkspace])
 
   // Map current view → main content
