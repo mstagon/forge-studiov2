@@ -14,6 +14,7 @@ import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPa
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
 import { DashboardPanelWired } from './components/v2/wired/DashboardPanelWired'
 import { NewWorkspaceDialog } from './components/workspace/NewWorkspaceDialog'
+import { Onboarding } from './components/v2/Onboarding'
 
 import { TEAMS as SEED_TEAMS } from './components/v2/data'
 import type { ViewKey, WorkspaceSummary, Team as V2Team, MemberState } from './components/v2/types'
@@ -110,6 +111,7 @@ export default function App() {
   const [view, setView] = useState<ViewKey>('workspace')
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardPrefill, setWizardPrefill] = useState<string[] | undefined>(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState<{ name: string; count: number } | null>(null)
   const [model] = useState({ id: 'sonnet-4.5', label: 'sonnet-4.5' })
@@ -209,6 +211,16 @@ export default function App() {
   }
 
   const onNewRun = () => {
+    setWizardPrefill(undefined)
+    setWizardOpen(true)
+  }
+
+  const onOnboardingSampleRun = () => {
+    // 3 members chosen to mirror the "default agent set" surfaced in
+    // Settings → Agents (front-end + backend + reviewer is the most common
+    // shape for first-run flows). The wizard still shows step 1 first so
+    // the user can refine the goal before launching.
+    setWizardPrefill(['flutter-ui', 'nestjs-auth', 'reviewer'])
     setWizardOpen(true)
   }
 
@@ -296,6 +308,9 @@ export default function App() {
           </button>
         </div>
         <NewWorkspaceDialog />
+        {/* Onboarding overlays the empty state on first run so brand-new users
+            don't see only a single button — they get the full 5-step tour. */}
+        <Onboarding onSampleRun={onOnboardingSampleRun} />
       </div>
     )
   }
@@ -380,7 +395,10 @@ export default function App() {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onCreate={onWizardCreate}
+        prefillMembers={wizardPrefill}
       />
+
+      <Onboarding onSampleRun={onOnboardingSampleRun} />
 
       <CommandPalette
         open={paletteOpen}
