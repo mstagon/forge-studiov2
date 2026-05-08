@@ -1,95 +1,26 @@
-// LiveTerminalGrid — real PTY-backed grid for RunLiveView.
+// LiveTerminalGrid — pure layout host for the App-level XTerminal pool.
 //
-// Each grid cell mounts (via portal) an `<XTerminal agent={...}>` instance bound
-// to the member's tmux pane. The xterm instance lives in a stable host element
-// keyed by `agentName`, so it survives layout transitions:
-//   normal grid (Nx M)  ↔  focus mode (1 expanded + thumbnails)  ↔  fullscreen
-// Without this portal pattern each layout reshape would tear down + respawn the
-// PTY (reattaching to tmux every time, losing scrollback, etc.).
+// The registry (and the actual <XTerminal> mounts) live in <LiveTerminalsRoot>
+// at the App level. This grid only:
+//   1. Provides the pane layout (grid / focus / fullscreen)
+//   2. Registers a slot DOM element per visible agent key
+//   3. Lets the registry adopt the persistent host into that slot
 //
-// Fallback path: members without `tmuxPaneId` (shared worktree, tmux missing)
-// or in `queued` state render the design's "fake terminal lines" cycling — same
-// look the live view shipped with before real PTY landed.
+// Why: previously the grid owned its own registry, so navigating away from
+// RunLiveView tore down every PTY. Now the host elements outlive grid mounts.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Icon } from './icons'
 import { AgentBadge, Dot, STATE_COLOR, STATE_LABEL } from './primitives'
 import { AGENT_BY_ID } from './data'
-import { XTerminal } from './XTerminal'
+import { useTerminalsRegistry, type LiveTerminalsRegistry } from './LiveTerminalsRoot'
 import type { TeamMember, TerminalLine } from './types'
 
-// ─── Slot registry (stable host per agentName) ─────────────────────
-
-type ElMap = Map<string, HTMLDivElement>
-
-interface SlotRegistry {
-  setSlot(key: string, el: HTMLDivElement | null): void
-  getOrCreateHost(key: string): HTMLDivElement
-  pruneHosts(activeKeys: ReadonlySet<string>): void
-  reattachAll(): void
-  subscribe(listener: () => void): () => void
-}
-
-function createSlotRegistry(): SlotRegistry {
-  const slots: ElMap = new Map()
-  const hosts: ElMap = new Map()
-  const listeners = new Set<() => void>()
-  const notify = () => listeners.forEach((l) => l())
-
-  const reattach = (key: string) => {
-    const slot = slots.get(key)
-    const host = hosts.get(key)
-    if (!slot || !host) return
-    if (host.parentElement !== slot) slot.appendChild(host)
-  }
-
-  return {
-    setSlot(key, el) {
-      if (el) {
-        slots.set(key, el)
-        reattach(key)
-        notify()
-      } else if (slots.has(key)) {
-        slots.delete(key)
-        notify()
-      }
-    },
-    getOrCreateHost(key) {
-      let host = hosts.get(key)
-      if (!host) {
-        host = document.createElement('div')
-        host.style.height = '100%'
-        host.style.width = '100%'
-        hosts.set(key, host)
-      }
-      return host
-    },
-    pruneHosts(activeKeys) {
-      for (const k of Array.from(hosts.keys())) {
-        if (!activeKeys.has(k)) {
-          hosts.get(k)?.remove()
-          hosts.delete(k)
-        }
-      }
-    },
-    reattachAll() {
-      for (const k of slots.keys()) reattach(k)
-    },
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-// ─── Cell slot (adopts the persistent host element) ────────────────
+// ─── Cell slot (adopts the persistent host element from the App registry) ─
 
 interface CellSlotProps {
   agentKey: string
-  registry: SlotRegistry
+  registry: LiveTerminalsRegistry
 }
 
 function CellSlot({ agentKey, registry }: CellSlotProps) {
@@ -374,18 +305,16 @@ export interface LiveTerminalGridProps {
 
 export function LiveTerminalGrid({
   members,
-  teamId,
+  teamId: _teamId,
   tick,
   selectedAgentId,
   onSelect,
   terminalLines,
 }: LiveTerminalGridProps) {
-  // Stable registry across re-renders.
-  const registryRef = useRef<SlotRegistry | null>(null)
-  if (!registryRef.current) registryRef.current = createSlotRegistry()
-  const registry = registryRef.current
+  // Registry lives at App level — see LiveTerminalsRoot. We just register slots.
+  const registry = useTerminalsRegistry()
 
-  // Force re-render when slots change so portals reattach.
+  // Force re-render when slots change so the layout re-runs slot ref attachment.
   const [, force] = useState(0)
   useEffect(() => registry.subscribe(() => force((n) => n + 1)), [registry])
 
@@ -423,27 +352,6 @@ export function LiveTerminalGrid({
     window.addEventListener('forge:agent-fullscreen', onAgentFullscreen)
     return () => window.removeEventListener('forge:agent-fullscreen', onAgentFullscreen)
   }, [members])
-
-  // Members eligible for real PTY (have tmuxPaneId AND not in queued state).
-  const liveAgentKeys = useMemo(() => {
-    const keys = new Set<string>()
-    for (const m of members) {
-      if (m.tmuxPaneId && m.state !== 'queued') {
-        keys.add(m.name ?? m.agentId)
-      }
-    }
-    return keys
-  }, [members])
-
-  // Prune hosts for agents that vanish (member removed) or lose tmuxPaneId.
-  // Deps narrow to the actual triggers — without these, the effect runs every
-  // render and reattachAll() can fire during reconciliation, which together
-  // with the registry's force-render subscribe creates a render loop that
-  // surfaces as React error #310.
-  useEffect(() => {
-    registry.pruneHosts(liveAgentKeys)
-    registry.reattachAll()
-  }, [liveAgentKeys, registry])
 
   const layout = useMemo(() => {
     const n = members.length
@@ -575,28 +483,9 @@ export function LiveTerminalGrid({
     )
   }
 
-  // ── Persistent xterm portals (one per live agent) ────────────────
-  // Rendered alongside the layout so each XTerminal component retains its
-  // mount across grid → focus → fullscreen transitions. The host is the
-  // adoption target; its current parent is whichever CellSlot last claimed it.
-  const portals = members
-    .filter((m) => m.tmuxPaneId && m.state !== 'queued')
-    .map((m) => {
-      const agentKey = m.name ?? m.agentId
-      const host = registry.getOrCreateHost(agentKey)
-      return createPortal(
-        <XTerminal
-          tabId={`team-${teamId}`}
-          paneId={`agent-${agentKey}`}
-          cwd=""
-          isActive
-          agent={{ teamId, agentName: agentKey }}
-        />,
-        host,
-        agentKey,
-      )
-    })
-
+  // <XTerminal> mounts now live in <LiveTerminalsRoot> at the App level —
+  // they survive this grid's mount/unmount cycle, which is how navigating
+  // away from RunLiveView and back keeps the same PTY + scrollback.
   return (
     <div
       style={{
@@ -607,7 +496,6 @@ export function LiveTerminalGrid({
       }}
     >
       {layoutNode}
-      {portals}
     </div>
   )
 }

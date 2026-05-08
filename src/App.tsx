@@ -7,6 +7,8 @@ import { useLibraryStore } from './stores/library'
 import { subscribeToMainErrors } from './stores/errorLog'
 
 import { Shell } from './components/v2/Shell'
+import { LiveTerminalsRoot } from './components/v2/LiveTerminalsRoot'
+import { useLiveTerminalsStore } from './stores/liveTerminals'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
 import { Library } from './components/v2/Library'
 import { SettingsFull } from './components/v2/SettingsFull'
@@ -313,7 +315,12 @@ export default function App() {
   // ── Run + palette wiring ────────────────────────────────────────
   const onSwitchWorkspace = (id: string) => {
     const ws = workspaces.find((w) => w.id === id)
-    if (ws) setActiveWorkspace(ws)
+    if (ws) {
+      // Tear down live terminals from the previous workspace so we don't
+      // keep dangling PTYs attached to teams the user can't see anymore.
+      useLiveTerminalsStore.getState().clear()
+      setActiveWorkspace(ws)
+    }
   }
 
   const onNewRun = () => {
@@ -579,7 +586,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <LiveTerminalsRoot>
       <Shell
         workspace={activeSummary}
         workspaces={workspaceSummaries}
@@ -767,6 +774,6 @@ export default function App() {
           }}
         />
       )}
-    </>
+    </LiveTerminalsRoot>
   )
 }
