@@ -1,0 +1,67 @@
+# Repository labels.
+# Sync with: `gh label create -F .github/labels.yml` (one entry at a time)
+# or `gh label sync` via a community action like
+# `andymckay/labeler@v3` / `EndBug/label-sync@v2`.
+#
+# Convention: `category: value` with a trailing space-separated value. Colors
+# are picked so type/priority/status palettes don't collide. Update CHANGELOG
+# when you add or remove a label so contributors notice.
+
+# ─── Type ───
+- name: "type: feature"
+  description: "신규 기능"
+  color: "1f883d"
+- name: "type: bug"
+  description: "버그 수정"
+  color: "d73a4a"
+- name: "type: refactor"
+  description: "구조 개선 (외부 동작 변화 없음)"
+  color: "5319e7"
+- name: "type: chore"
+  description: "빌드/툴/메타 변경"
+  color: "8a8a8a"
+- name: "type: hotfix"
+  description: "프로덕션 긴급 수정"
+  color: "b60205"
+- name: "type: docs"
+  description: "문서 변경만"
+  color: "0e8a16"
+
+# ─── Priority ───
+- name: "priority: urgent"
+  description: "지금 즉시 처리 필요"
+  color: "b60205"
+- name: "priority: high"
+  description: "이번 스프린트 안에 처리"
+  color: "d93f0b"
+- name: "priority: medium"
+  description: "백로그 다음 차순"
+  color: "fbca04"
+- name: "priority: low"
+  description: "대기 (nice-to-have)"
+  color: "0e8a16"
+
+# ─── Status ───
+- name: "status: in progress"
+  description: "작업 중"
+  color: "0075ca"
+- name: "status: review"
+  description: "리뷰 대기"
+  color: "5319e7"
+- name: "status: blocked"
+  description: "외부/내부 의존으로 막힘"
+  color: "e99695"
+
+# ─── Cross-cutting ───
+- name: "dependencies"
+  description: "Dependabot / 의존성 업데이트"
+  color: "0366d6"
+- name: "ci"
+  description: "CI / 워크플로우 변경"
+  color: "1d76db"
+- name: "good first issue"
+  description: "신규 컨트리뷰터 추천"
+  color: "7057ff"
+- name: "help wanted"
+  description: "외부 도움 환영"
+  color: "008672"

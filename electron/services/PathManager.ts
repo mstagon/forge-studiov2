@@ -27,6 +27,13 @@ export class PathManager {
   private rootCache: string | null | undefined = undefined
 
   /**
+   * Tracks whether ensureVenvUsable has run successfully in this process so
+   * the (cheap but non-trivial) repair check fires at most once per launch
+   * regardless of how many callers ask for getCrGraphCli.
+   */
+  private venvFixupChecked = false
+
+  /**
    * Absolute path to `resources/bundled-tools/darwin-arm64/` in dev or
    * `Contents/Resources/bundled-tools/` in a packaged build.
    *
@@ -85,8 +92,23 @@ export class PathManager {
    * venv, or null if the venv is missing. Use this as the *first* resolver
    * in CodeReviewGraphManager.isInstalled — falling back to PATH only when
    * the bundle is absent.
+   *
+   * As a side-effect on the *first* call per process, runs ensureVenvUsable
+   * to repair stale absolute paths shipped by older builds. Subsequent calls
+   * are O(1) thanks to the memoised flag.
    */
   getCrGraphCli(): string | null {
+    if (!this.venvFixupChecked) {
+      this.venvFixupChecked = true
+      try {
+        this.ensureVenvUsable()
+      } catch (err) {
+        // Repair is best-effort — never block CLI lookup. The fallback path
+        // (manager probes --version and surfaces a friendly error) still
+        // works even if we couldn't fix anything.
+        console.warn('[PathManager] ensureVenvUsable failed:', err)
+      }
+    }
     return this.binIfExecutable('cr-graph-venv/bin/code-review-graph')
   }
 
@@ -136,7 +158,228 @@ export class PathManager {
     }
   }
 
+  /**
+   * First-run / per-version repair of the bundled cr-graph venv.
+   *
+   * Why we need this:
+   *   The DMG ships a venv whose console scripts (`code-review-graph`, etc.)
+   *   may have been built with absolute paths baked in by older builds of
+   *   `scripts/build-cr-graph-venv.sh`. Specifically:
+   *     1. `bin/python` may be an absolute symlink pointing at the build-host
+   *        path (e.g. `/Users/<ci-runner>/.../python/bin/python3.12`).
+   *     2. The polyglot bash exec line in console scripts may reference the
+   *        same dead absolute path.
+   *   Both cause every `code-review-graph` invocation to die with
+   *   "no such file or directory" once the user installs Forge Studio.
+   *
+   * What we do:
+   *   - Detect (a) absolute python symlinks, (b) absolute polyglot exec
+   *     paths in console scripts.
+   *   - Rewrite them to the *runtime* layout: relative symlink
+   *     `../../python/bin/python3.12` and a bash wrapper that derives
+   *     `bin/python` from `$(dirname "$0")`.
+   *   - Persist a flag file in Application Support so we don't redo the work
+   *     on every launch.
+   *
+   * Idempotent: safe to call repeatedly; a no-op when the venv is already
+   * portable. Returns true when at least one file was repaired.
+   */
+  ensureVenvUsable(workspacePath?: string): boolean {
+    void workspacePath
+    const root = this.getBundledToolsRoot()
+    if (!root) return false
+
+    const venvDir = path.join(root, 'cr-graph-venv')
+    const binDir = path.join(venvDir, 'bin')
+    if (!fs.existsSync(binDir)) return false
+
+    // Cache key: bundled-tools mtime + Forge version. If either changes
+    // (e.g. user installs a new Forge build) we re-run the repair.
+    const flagPath = this.repairFlagPath()
+    const cacheKey = this.venvCacheKey(venvDir)
+    if (flagPath && cacheKey) {
+      try {
+        const prev = fs.readFileSync(flagPath, 'utf-8').trim()
+        if (prev === cacheKey) return false
+      } catch {
+        // Missing/corrupt flag — fall through and re-run repair.
+      }
+    }
+
+    let repaired = false
+
+    // ─── (a) Repair python / python3 / python3.12 symlinks ──────────────
+    // We unconditionally point the python symlink at the sibling
+    // `python/bin/python3.12`. If the link target is already a relative
+    // path of that form we skip the rewrite to avoid touching the inode.
+    const pythonReal = '../../python/bin/python3.12'
+    for (const name of ['python3.12', 'python3', 'python']) {
+      const linkPath = path.join(binDir, name)
+      let needsRewrite = true
+      try {
+        const st = fs.lstatSync(linkPath)
+        if (st.isSymbolicLink()) {
+          const tgt = fs.readlinkSync(linkPath)
+          // Anything starting with `/` is an absolute path → broken in DMG.
+          // The relative `../../python/bin/python3.12` (or its aliases) is
+          // what we want.
+          if (!path.isAbsolute(tgt) && tgt.length > 0) {
+            needsRewrite = false
+          }
+        }
+      } catch {
+        // Missing link — we'll create one fresh.
+      }
+      if (!needsRewrite) continue
+      try {
+        // The actual interpreter lives at python3.12; aliases are local.
+        const target = name === 'python3.12' ? pythonReal : 'python3.12'
+        try {
+          fs.unlinkSync(linkPath)
+        } catch {
+          // ignore — link may not exist yet
+        }
+        fs.symlinkSync(target, linkPath)
+        repaired = true
+      } catch (err) {
+        console.warn(`[PathManager] failed to relink ${linkPath}:`, err)
+      }
+    }
+
+    // ─── (b) Repair console-script polyglot exec lines ──────────────────
+    // Scan every executable file in bin/ that begins with `#!`. If line 2
+    // is the uv-style polyglot `'''exec' '<abs path>' "$0" "$@"`, rewrite
+    // it to derive `bin/python` from $(dirname "$0"). We *must not* touch
+    // scripts that already have the portable form — repeated rewrites
+    // would inflate the file with stacked headers.
+    let entries: string[] = []
+    try {
+      entries = fs.readdirSync(binDir)
+    } catch {
+      entries = []
+    }
+    const portableHeader =
+      '#!/usr/bin/env bash\n' +
+      '\'\'\'exec\' "$(cd "$(dirname "$0")" && pwd)/python" "$0" "$@"\n' +
+      '\' \'\'\'\n'
+
+    for (const name of entries) {
+      const p = path.join(binDir, name)
+      let st: fs.Stats
+      try {
+        st = fs.lstatSync(p)
+      } catch {
+        continue
+      }
+      if (st.isSymbolicLink() || !st.isFile()) continue
+
+      let data: Buffer
+      try {
+        data = fs.readFileSync(p)
+      } catch {
+        continue
+      }
+      if (!data.length || data[0] !== 0x23 /* '#' */ || data[1] !== 0x21 /* '!' */) continue
+
+      // Decode the head conservatively (latin-1 keeps byte fidelity).
+      const head = data.toString('latin1').split('\n', 4)
+      if (head.length < 3) continue
+
+      const line0 = head[0]
+      const line1 = head[1] ?? ''
+      const line2 = head[2] ?? ''
+
+      // Already portable? Bash shebang + relative bash exec? skip.
+      const alreadyPortable =
+        line0 === '#!/usr/bin/env bash' &&
+        line1.includes('$(dirname "$0")') &&
+        line1.includes('/python')
+      if (alreadyPortable) continue
+
+      // uv polyglot pattern: `'''exec' '<abs>' "$0" "$@"` then `' '''`
+      const polyglotExecAbs =
+        /^\s*'''exec'\s+'\/[^']+'\s+"\$0"\s+"\$@"\s*$/.test(line1) &&
+        /^'\s+'''\s*$/.test(line2)
+
+      // Plain absolute shebang `#!/abs/.../python`
+      const plainAbsShebang =
+        line0.startsWith('#!') &&
+        line0.length > 2 &&
+        line0[2] === '/' &&
+        !line0.includes('/usr/bin/env')
+
+      if (!polyglotExecAbs && !plainAbsShebang) continue
+
+      const lines = data.toString('latin1').split('\n')
+      let body: string
+      if (polyglotExecAbs) {
+        body = lines.slice(3).join('\n')
+      } else {
+        // Strip the absolute shebang only; keep the rest of the body so the
+        // python interpreter still parses its module. The bash wrapper will
+        // re-exec into bin/python with this same file as $0, and python's
+        // own parser will skip the leading bash polyglot lines (they're a
+        // triple-quoted string from python's POV).
+        body = lines.slice(1).join('\n')
+      }
+      const next = Buffer.from(portableHeader + body, 'latin1')
+      try {
+        fs.writeFileSync(p, next)
+        fs.chmodSync(p, 0o755)
+        repaired = true
+      } catch (err) {
+        console.warn(`[PathManager] failed to rewrite ${p}:`, err)
+      }
+    }
+
+    // ─── Persist cache key so we don't repeat work next launch ──────────
+    if (flagPath && cacheKey) {
+      try {
+        fs.mkdirSync(path.dirname(flagPath), { recursive: true })
+        fs.writeFileSync(flagPath, cacheKey, 'utf-8')
+      } catch (err) {
+        console.warn('[PathManager] could not persist repair flag:', err)
+      }
+    }
+
+    return repaired
+  }
+
   // ─── Internals ─────────────────────────────────────────────────────────
+
+  /**
+   * Path to the per-user flag file recording the last repaired venv version.
+   * Stored under Electron's userData (Application Support on macOS) so a
+   * fresh install of Forge wipes it and re-runs the repair on first launch.
+   */
+  private repairFlagPath(): string | null {
+    try {
+      const userData = app.getPath('userData')
+      return path.join(userData, 'cr-graph-venv-repair.flag')
+    } catch {
+      // app.getPath fails before app is ready in tests — caller treats null
+      // as "no caching, re-run on every call" which is still correct.
+      return null
+    }
+  }
+
+  /**
+   * Build a stable cache key that changes whenever the venv contents
+   * change (i.e. a new Forge build was installed). We use the mtime of
+   * `cr-graph-venv/bin/code-review-graph` because every fresh build
+   * regenerates that file — combined with Forge's own version string this
+   * is enough to detect "new install, re-run repair".
+   */
+  private venvCacheKey(venvDir: string): string | null {
+    try {
+      const cli = path.join(venvDir, 'bin', 'code-review-graph')
+      const st = fs.statSync(cli)
+      const ver = app.getVersion?.() ?? 'unknown'
+      return `${ver}:${Math.floor(st.mtimeMs)}:${st.size}`
+    } catch {
+      return null
+    }
+  }
 
   private binIfExecutable(rel: string): string | null {
     const root = this.getBundledToolsRoot()

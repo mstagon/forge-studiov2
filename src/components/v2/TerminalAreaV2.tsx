@@ -412,6 +412,26 @@ function TabStrip({
   const visibleTabs = tabs.filter(
     (t) => !t.workspaceId || t.workspaceId === workspaceId,
   )
+  const [listOpen, setListOpen] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!listOpen) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (listRef.current && !listRef.current.contains(e.target as Node)) {
+        setListOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setListOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [listOpen])
 
   return (
     <div
@@ -464,7 +484,16 @@ function TabStrip({
           <Icon.Plus size={12} />
         </button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' }}>
+      <div
+        ref={listRef}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          padding: '0 8px',
+          position: 'relative',
+        }}
+      >
         <button
           onClick={onSplit}
           disabled={splitDisabled}
@@ -503,6 +532,125 @@ function TabStrip({
         >
           <Icon.Search size={12} />
         </button>
+        {/* "≡" tab-list dropdown — surfaces every open tab in this workspace
+            so users with many tabs can still jump / close even when the
+            horizontal strip overflows. */}
+        <button
+          onClick={() => setListOpen((v) => !v)}
+          title="All tabs"
+          aria-haspopup="listbox"
+          aria-expanded={listOpen}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 4,
+            background: listOpen ? 'var(--bg-3)' : 'transparent',
+            border: `1px solid ${listOpen ? 'var(--line-2)' : 'transparent'}`,
+            color: 'var(--text-3)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: 14,
+            lineHeight: 1,
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          ≡
+        </button>
+        {listOpen && (
+          <div
+            role="listbox"
+            style={{
+              position: 'absolute',
+              top: '100%',
+              right: 4,
+              marginTop: 4,
+              minWidth: 240,
+              maxWidth: 360,
+              maxHeight: 360,
+              overflowY: 'auto',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 6,
+              boxShadow: 'var(--shadow-pop)',
+              zIndex: 30,
+              padding: '4px 0',
+            }}
+          >
+            {visibleTabs.length === 0 && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  fontSize: 11.5,
+                  color: 'var(--text-3)',
+                }}
+              >
+                No tabs.
+              </div>
+            )}
+            {visibleTabs.map((tt) => {
+              const active = tt.id === activeTabId
+              return (
+                <div
+                  key={tt.id}
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onSelect(tt.id)
+                    setListOpen(false)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    background: active ? 'var(--bg-3)' : 'transparent',
+                    color: active ? 'var(--text-1)' : 'var(--text-2)',
+                    borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                    fontSize: 12,
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  <Dot
+                    color={active ? 'var(--success)' : 'var(--text-4)'}
+                    pulse={active}
+                    size={5}
+                  />
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {tt.title || 'Terminal'}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onClose(tt.id)
+                    }}
+                    title="Close"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-3)',
+                      cursor: 'pointer',
+                      padding: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Icon.X size={11} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

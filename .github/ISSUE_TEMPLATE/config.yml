@@ -1,0 +1,15 @@
+# Issue chooser configuration.
+# - Disables the "Open a blank issue" link so every report goes through one of
+#   the structured templates (bug / feature). This forces reporters to provide
+#   the minimum context needed to triage without back-and-forth.
+# - `contact_links` surfaces external destinations (discussion, security policy)
+#   without polluting the issue tracker.
+blank_issues_enabled: false
+
+contact_links:
+  - name: 💬 Question / general discussion
+    url: https://github.com/mstagon/forge-studio/discussions
+    about: 사용법 / 디자인 / 로드맵 같은 일반 토론은 Discussions 에서 다뤄주세요.
+  - name: 🔐 Security report
+    url: https://github.com/mstagon/forge-studio/security/advisories/new
+    about: 보안 취약점은 공개 이슈 대신 Security Advisory 로 비공개 보고해주세요.

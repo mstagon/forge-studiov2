@@ -15,6 +15,29 @@ import { useEffect, useRef, useState } from 'react'
 // TODO: foundation import
 import { Kbd } from './primitives'
 import { Icon } from './icons'
+import { t } from '@/i18n'
+
+/**
+ * Translate a `PaletteGroup` label for display. Group ids stay English in
+ * source so seed data + filter / fuzzy-match keep working — only the rendered
+ * header gets localized.
+ */
+function localizeGroup(g: PaletteGroup): string {
+  switch (g) {
+    case 'Recent':
+      return t('commandPalette.groupRecent')
+    case 'Workspace':
+      return t('commandPalette.groupWorkspace')
+    case 'Library':
+      return t('commandPalette.groupLibrary')
+    case 'Run actions':
+      return t('commandPalette.groupRunActions')
+    case 'Settings':
+      return t('commandPalette.groupSettings')
+    default:
+      return g
+  }
+}
 
 export type PaletteGroup = 'Recent' | 'Workspace' | 'Library' | 'Run actions' | 'Settings'
 
@@ -218,7 +241,7 @@ export function CommandPalette({
                 fontSize: 12,
               }}
             >
-              결과 없음
+              {t('commandPalette.noResults')}
             </div>
           )}
           {flat.map((row, i) => {
@@ -236,7 +259,7 @@ export function CommandPalette({
                     fontWeight: 600,
                   }}
                 >
-                  {row.g}
+                  {localizeGroup(row.g!)}
                 </div>
               )
             }

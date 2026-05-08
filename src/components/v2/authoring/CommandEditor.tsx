@@ -1,9 +1,14 @@
 /**
- * SkillEditor — modal form for creating / editing a Claude Code skill.
+ * CommandEditor — modal form for creating / editing a Claude Code slash command.
  *
- * On disk this writes `<wsPath>/.claude/skills/<name>/SKILL.md` (the directory
- * is the unit, hence rename = mv on the directory). Frontmatter mirrors the
- * scanner shape: name, description, globs (or files).
+ * On disk this writes `<wsPath>/.claude/commands/<name>.md` with optional YAML
+ * frontmatter (description / argument-hint) followed by the command body
+ * markdown that Claude renders when the user runs `/<name>`.
+ *
+ * Validation:
+ *   - name: required, slug-shaped (`[A-Za-z0-9._-]+`), unique vs `existingNames`
+ *   - description: optional but recommended (used in the Library / palette)
+ *   - body: optional but recommended
  */
 
 import { useEffect, useState } from 'react'
@@ -19,35 +24,35 @@ import { Icon } from '../icons'
 
 const NAME_RE = /^[A-Za-z0-9._-]+$/
 
-export interface SkillEditorProps {
+export interface CommandEditorProps {
   workspacePath: string
+  /** Existing command name when editing; absent → create mode. */
   editing?: string
+  /** Lowercased existing names for collision detection. */
   existingNames: string[]
-  /** When duplicating, copy frontmatter + body from this source skill. */
+  /** When duplicating, source command file to copy. */
   duplicateFrom?: string
   /** Suggested new name when duplicating. */
   initialName?: string
   onClose: () => void
-  onSaved: (skillName: string) => void
+  onSaved: (commandName: string) => void
 }
 
-interface SkillFormState {
+interface CommandFormState {
   name: string
   description: string
-  globs: string
+  argHint: string
   body: string
-  syncRouting: boolean
 }
 
-const EMPTY: SkillFormState = {
+const EMPTY: CommandFormState = {
   name: '',
   description: '',
-  globs: '',
-  body: '# Description\n\n자동 적용 패턴과 핵심 가이드를 정리한다.\n',
-  syncRouting: false,
+  argHint: '',
+  body: '# Description\n\n사용자가 `/<command>` 를 호출했을 때 Claude 가 수행할 작업을 적습니다.\n',
 }
 
-export function SkillEditor({
+export function CommandEditor({
   workspacePath,
   editing,
   existingNames,
@@ -55,11 +60,11 @@ export function SkillEditor({
   initialName,
   onClose,
   onSaved,
-}: SkillEditorProps) {
+}: CommandEditorProps) {
   const isEdit = !!editing
   const isDuplicate = !isEdit && !!duplicateFrom
   const needsLoad = isEdit || isDuplicate
-  const [form, setForm] = useState<SkillFormState>({
+  const [form, setForm] = useState<CommandFormState>({
     ...EMPTY,
     name: initialName ?? '',
   })
@@ -67,22 +72,26 @@ export function SkillEditor({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Load existing file when editing or duplicating.
   useEffect(() => {
     const source = editing ?? duplicateFrom
     if (!source) return
     let cancelled = false
     ;(async () => {
       try {
-        const file = `${workspacePath}/.claude/skills/${source}/SKILL.md`
+        const file = `${workspacePath}/.claude/commands/${source}.md`
         const raw = await window.api.harness.readFile(file)
         if (cancelled) return
         const parsed = parseFrontmatter(raw)
         setForm({
           name: isEdit ? source : (initialName ?? `${source}-copy`),
           description: parsed.data.description ?? '',
-          globs: parsed.data.globs ?? parsed.data.files ?? '',
+          argHint:
+            parsed.data['argument-hint'] ??
+            parsed.data['argHint'] ??
+            parsed.data.args ??
+            '',
           body: parsed.body || '',
-          syncRouting: false,
         })
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -101,15 +110,14 @@ export function SkillEditor({
     !isEdit &&
     nameValid &&
     existingNames.map((n) => n.toLowerCase()).includes(nameLower)
-  const descriptionValid = form.description.trim().length > 0
-  const canSave = nameValid && !nameCollides && descriptionValid && !saving && !loading
+  const canSave = nameValid && !nameCollides && !saving && !loading
 
   const nameError = !form.name.trim()
     ? null
     : !nameValid
       ? '이름은 영문/숫자/._- 만 허용됩니다'
       : nameCollides
-        ? '이미 같은 이름의 스킬이 있습니다'
+        ? '이미 같은 이름의 커맨드가 있습니다'
         : null
 
   async function handleSave() {
@@ -118,27 +126,18 @@ export function SkillEditor({
     setError(null)
     try {
       if (isEdit && editing) {
-        const composed = composeSkillFile(form)
-        await window.api.harness.updateSkill(workspacePath, editing, composed)
+        const composed = composeCommandFile(form)
+        await window.api.harness.updateCommand(workspacePath, editing, composed)
         if (form.name !== editing) {
-          await window.api.harness.renameSkill(workspacePath, editing, form.name)
+          await window.api.harness.renameCommand(workspacePath, editing, form.name)
         }
       } else {
-        await window.api.harness.createSkill(workspacePath, {
+        await window.api.harness.createCommand(workspacePath, {
           name: form.name,
-          description: form.description,
-          globs: form.globs || undefined,
+          description: form.description || undefined,
+          argHint: form.argHint || undefined,
           body: form.body || undefined,
         })
-        if (form.syncRouting) {
-          await window.api.harness
-            .syncRouting(workspacePath, 'skill', {
-              name: form.name,
-              description: form.description,
-              pattern: form.globs,
-            })
-            .catch(() => {})
-        }
       }
       onSaved(form.name)
     } catch (err) {
@@ -150,8 +149,8 @@ export function SkillEditor({
 
   return (
     <Modal
-      title={isEdit ? `Skill · ${editing}` : 'New Skill'}
-      subtitle="Claude Code skill (.claude/skills/<name>/SKILL.md)"
+      title={isEdit ? `Command · /${editing}` : 'New Command'}
+      subtitle="Claude Code slash command (.claude/commands/<name>.md)"
       onClose={onClose}
       width={760}
       footer={
@@ -176,72 +175,68 @@ export function SkillEditor({
         <div style={{ color: 'var(--text-3)', fontSize: 12 }}>불러오는 중…</div>
       ) : (
         <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field
+              label="Name"
+              required
+              hint="`/이름` 으로 호출됩니다"
+              error={nameError}
+              htmlFor="cmd-name"
+            >
+              <TextInput
+                id="cmd-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="ship"
+                error={!!nameError}
+              />
+            </Field>
+            <Field label="Argument hint" hint="optional · 사용자에게 보이는 인자 안내">
+              <TextInput
+                value={form.argHint}
+                onChange={(e) => setForm({ ...form, argHint: e.target.value })}
+                placeholder="<title> [--draft]"
+              />
+            </Field>
+          </div>
           <Field
-            label="Name"
-            required
-            hint="디렉터리명이 됩니다"
-            error={nameError}
-            htmlFor="skill-name"
+            label="Description"
+            hint="Library / Command Palette 에 노출됩니다"
           >
-            <TextInput
-              id="skill-name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="api-contract"
-              error={!!nameError}
-            />
-          </Field>
-          <Field label="Description" required>
             <TextInput
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="API 계약 동기화 가이드"
-              error={form.description.trim() === '' && form.name !== ''}
+              placeholder="린트 → 테스트 → 푸시 → PR 생성 일괄"
             />
           </Field>
-          <Field label="Glob 패턴" hint="자동 트리거되는 파일 패턴">
-            <TextInput
-              value={form.globs}
-              onChange={(e) => setForm({ ...form, globs: e.target.value })}
-              placeholder="server/src/**/dto/**, client/data/**/dto/**"
-            />
-          </Field>
-          <Field label="Body (Markdown)">
+          <Field
+            label="Body (Markdown)"
+            hint={
+              <span>
+                <code style={{ fontFamily: 'var(--font-mono)' }}>$ARGUMENTS</code> 로 인자 참조
+              </span>
+            }
+          >
             <TextArea
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
-              rows={14}
+              rows={16}
               mono
             />
           </Field>
-          {!isEdit && (
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                color: 'var(--text-2)',
-                marginTop: 4,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={form.syncRouting}
-                onChange={(e) => setForm({ ...form, syncRouting: e.target.checked })}
-              />
-              CLAUDE.md의 Skill Routing 표에 자동 추가
-            </label>
-          )}
         </>
       )}
     </Modal>
   )
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────
+
 function parseFrontmatter(raw: string): { data: Record<string, string>; body: string } {
   const lines = raw.split(/\r?\n/)
-  if (lines[0]?.trim() !== '---') return { data: {}, body: raw }
+  if (lines[0]?.trim() !== '---') {
+    return { data: {}, body: raw }
+  }
   const data: Record<string, string> = {}
   let i = 1
   for (; i < lines.length; i++) {
@@ -264,11 +259,14 @@ function parseFrontmatter(raw: string): { data: Record<string, string>; body: st
   return { data, body: lines.slice(i).join('\n') }
 }
 
-function composeSkillFile(form: SkillFormState): string {
+function composeCommandFile(form: CommandFormState): string {
   const fm: Record<string, string | undefined> = {
-    name: form.name,
-    description: form.description,
-    globs: form.globs || undefined,
+    description: form.description || undefined,
+    'argument-hint': form.argHint || undefined,
+  }
+  const hasFm = Object.values(fm).some(Boolean)
+  if (!hasFm) {
+    return form.body.startsWith('\n') ? form.body : '\n' + form.body
   }
   const lines = ['---']
   for (const [k, v] of Object.entries(fm)) {

@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 import { Icon, type IconProps } from './icons'
 import type { ViewKey } from './types'
+import { t } from '@/i18n'
 
 interface NavItem {
   id: ViewKey
@@ -18,12 +19,19 @@ interface NavItem {
   badge?: number
 }
 
-export const NAV_ITEMS_V2: NavItem[] = [
-  { id: 'workspace', label: 'Workspace', icon: Icon.Folder, kbd: '⌘1' },
-  { id: 'git',       label: 'Git',       icon: Icon.Git,    kbd: '⌘2' },
-  { id: 'dashboard', label: 'Dashboard', icon: Icon.Grid,   kbd: '⌘3' },
-  { id: 'library',   label: 'Library',   icon: Icon.Cube,   kbd: '⌘4' },
-]
+// Built lazily so each render picks up the current locale (handy for the
+// language toggle which forces a window reload but tests may swap locales
+// without one).
+function buildNavItems(): NavItem[] {
+  return [
+    { id: 'workspace', label: t('sidebar.workspace'), icon: Icon.Folder, kbd: '⌘1' },
+    { id: 'git',       label: t('sidebar.git'),       icon: Icon.Git,    kbd: '⌘2' },
+    { id: 'dashboard', label: t('sidebar.dashboard'), icon: Icon.Grid,   kbd: '⌘3' },
+    { id: 'library',   label: t('sidebar.library'),   icon: Icon.Cube,   kbd: '⌘4' },
+  ]
+}
+
+export const NAV_ITEMS_V2: NavItem[] = buildNavItems()
 
 export interface SidebarV2Props {
   view: ViewKey
@@ -84,7 +92,7 @@ export function SidebarV2({ view, onView }: SidebarV2Props) {
       {/* Settings at the bottom — also a real sidebar item per v2 design */}
       <button
         onClick={() => onView('settings')}
-        title="Settings  ⌘,"
+        title={`${t('sidebar.settings')}  ⌘,`}
         style={{
           width: 32, height: 32, margin: '2px auto', borderRadius: 6,
           background: view === 'settings' ? 'var(--bg-3)' : 'transparent',

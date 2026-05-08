@@ -211,6 +211,23 @@ npm run lint
 `resources/harness-template/`. On clean checkouts (no parent harness) the script
 no-ops and keeps the committed template — safe to run anywhere.
 
+### Issue / PR labels
+
+Labels live in [`.github/labels.yml`](.github/labels.yml). Bootstrap them once
+per repo:
+
+```bash
+# Option A — github-cli + a small loop (no external action needed)
+yq '.[] | "gh label create \"" + .name + "\" --color \"" + .color + "\" --description \"" + .description + "\" --force"' .github/labels.yml | bash
+
+# Option B — drop a one-shot workflow using EndBug/label-sync@v2 against the
+# same file. Recommended once contributors land.
+```
+
+The Issue / PR templates (`.github/ISSUE_TEMPLATE/*`, `PULL_REQUEST_TEMPLATE.md`)
+auto-attach `type: bug` / `type: feature`; reviewers add `priority:` and
+`status:` labels manually.
+
 ### Project structure
 
 ```

@@ -34,6 +34,11 @@ export interface AgentEditorProps {
   editing?: string
   /** Lowercased existing names for collision detection. */
   existingNames: string[]
+  /** When duplicating, pre-fill from this source agent (name suggested by
+   *  the parent, body / frontmatter loaded from disk). */
+  duplicateFrom?: string
+  /** When duplicating, the suggested new name (e.g. `<source>-copy`). */
+  initialName?: string
   onClose: () => void
   onSaved: (agentName: string) => void
 }
@@ -60,27 +65,35 @@ export function AgentEditor({
   workspacePath,
   editing,
   existingNames,
+  duplicateFrom,
+  initialName,
   onClose,
   onSaved,
 }: AgentEditorProps) {
   const isEdit = !!editing
-  const [form, setForm] = useState<AgentFormState>(EMPTY)
-  const [loading, setLoading] = useState(isEdit)
+  const isDuplicate = !isEdit && !!duplicateFrom
+  const needsLoad = isEdit || isDuplicate
+  const [form, setForm] = useState<AgentFormState>({
+    ...EMPTY,
+    name: initialName ?? '',
+  })
+  const [loading, setLoading] = useState(needsLoad)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Load existing file when editing.
+  // Load existing file when editing or duplicating.
   useEffect(() => {
-    if (!isEdit || !editing) return
+    const source = editing ?? duplicateFrom
+    if (!source) return
     let cancelled = false
     ;(async () => {
       try {
-        const file = `${workspacePath}/.claude/agents/${editing}.md`
+        const file = `${workspacePath}/.claude/agents/${source}.md`
         const raw = await window.api.harness.readFile(file)
         if (cancelled) return
         const parsed = parseFrontmatter(raw)
         setForm({
-          name: editing,
+          name: isEdit ? source : (initialName ?? `${source}-copy`),
           description: parsed.data.description ?? '',
           tools: parsed.data.tools ?? '',
           model: parsed.data.model ?? '',
@@ -96,7 +109,7 @@ export function AgentEditor({
     return () => {
       cancelled = true
     }
-  }, [isEdit, editing, workspacePath])
+  }, [isEdit, editing, duplicateFrom, initialName, workspacePath])
 
   const nameLower = form.name.trim().toLowerCase()
   const nameValid = nameLower !== '' && NAME_RE.test(form.name.trim())

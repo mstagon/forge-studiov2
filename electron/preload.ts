@@ -39,6 +39,7 @@ const api = {
       path: string
       templatePath?: string
       claudeMdPath?: string
+      preset?: string
       splitRepos?: {
         enabled: boolean
         baseName: string
@@ -74,6 +75,41 @@ const api = {
       ipcRenderer.invoke('harness:getInstalledVersion', workspacePath),
     update: (workspacePath: string): Promise<{ backupPath: string; version: string }> =>
       ipcRenderer.invoke('harness:update', workspacePath),
+
+    /** Sanity-check the workspace harness: missing files, broken refs, etc. */
+    lint: (
+      workspacePath: string,
+    ): Promise<{
+      errors: { file: string; line?: number; severity: 'error' | 'warning' | 'info'; message: string; fix?: string }[]
+      warnings: { file: string; line?: number; severity: 'error' | 'warning' | 'info'; message: string; fix?: string }[]
+      info: { file: string; line?: number; severity: 'error' | 'warning' | 'info'; message: string; fix?: string }[]
+      checkedAt: string
+    }> => ipcRenderer.invoke('harness:lint', workspacePath),
+
+    /** Diff bundled template vs workspace `.claude/` for the update preview UI. */
+    previewUpdate: (
+      workspacePath: string,
+    ): Promise<{
+      added: { rel: string; size?: number }[]
+      removed: { rel: string; size?: number }[]
+      modified: { rel: string; binary: boolean; diff: string }[]
+      unchanged: number
+    }> => ipcRenderer.invoke('harness:previewUpdate', workspacePath),
+
+    /** Compose what Claude sees on session start (CLAUDE.md + @-loaded rules + hook list). */
+    previewSessionContext: (
+      workspacePath: string,
+    ): Promise<{
+      sections: {
+        kind: 'claude-md' | 'rule' | 'hook'
+        label: string
+        file: string
+        content: string
+        missing?: boolean
+      }[]
+      totalChars: number
+      tokenEstimate: number
+    }> => ipcRenderer.invoke('harness:previewSessionContext', workspacePath),
     listAgents: (workspacePath: string) =>
       ipcRenderer.invoke('harness:listAgents', workspacePath),
     listSkills: (workspacePath: string) =>
@@ -239,6 +275,47 @@ const api = {
       entry: { name: string; description?: string; pattern?: string }
     ): Promise<{ updated: boolean; file: string }> =>
       ipcRenderer.invoke('harness:syncRouting', workspacePath, kind, entry),
+  },
+
+  // ─── Presets ─────────────────────────────────────────────────────
+  preset: {
+    list: (): Promise<
+      {
+        id: string
+        name: string
+        description?: string
+        source: 'bundled' | 'user'
+        templatePath: string
+        claudeMdPath?: string
+      }[]
+    > => ipcRenderer.invoke('preset:list'),
+    apply: (
+      workspacePath: string,
+      presetId: string,
+    ): Promise<{
+      ok: true
+      preset: {
+        id: string
+        name: string
+        description?: string
+        source: 'bundled' | 'user'
+        templatePath: string
+        claudeMdPath?: string
+      }
+    }> => ipcRenderer.invoke('preset:apply', workspacePath, presetId),
+    save: (
+      workspacePath: string,
+      options: { id: string; name?: string; description?: string },
+    ): Promise<{
+      id: string
+      name: string
+      description?: string
+      source: 'bundled' | 'user'
+      templatePath: string
+      claudeMdPath?: string
+    }> => ipcRenderer.invoke('preset:save', workspacePath, options),
+    delete: (presetId: string): Promise<void> =>
+      ipcRenderer.invoke('preset:delete', presetId),
   },
 
   // ─── Filesystem ──────────────────────────────────────────────────

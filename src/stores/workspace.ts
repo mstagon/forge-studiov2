@@ -21,7 +21,8 @@ interface WorkspaceState {
     name: string,
     dirPath: string,
     splitRepos?: SplitReposOptions,
-    crGraph?: { autoBuild?: boolean }
+    crGraph?: { autoBuild?: boolean },
+    preset?: string
   ) => Promise<Workspace>
   openWorkspace: (dirPath: string) => Promise<Workspace>
   removeWorkspace: (id: string) => void
@@ -73,7 +74,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     name: string,
     dirPath: string,
     splitRepos?: SplitReposOptions,
-    crGraph?: { autoBuild?: boolean }
+    crGraph?: { autoBuild?: boolean },
+    preset?: string
   ) => {
     const templatePath = await window.api.workspace.getTemplatePath()
     const claudeMdPath = await window.api.workspace.getClaudeMdPath()
@@ -82,6 +84,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       path: dirPath,
       templatePath,
       claudeMdPath,
+      // When `preset` is supplied, the main process resolves the preset's own
+      // template paths via PresetManager and overrides the defaults above.
+      preset: preset && preset !== '__default__' ? preset : undefined,
       splitRepos: splitRepos?.enabled ? splitRepos : undefined,
       crGraph: crGraph?.autoBuild ? { autoBuild: true } : undefined,
     })

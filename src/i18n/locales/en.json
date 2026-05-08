@@ -26,6 +26,13 @@
     "finish": "Finish",
     "retry": "Retry"
   },
+  "sidebar": {
+    "workspace": "Workspace",
+    "git": "Git",
+    "dashboard": "Dashboard",
+    "library": "Library",
+    "settings": "Settings"
+  },
   "topbar": {
     "searchPlaceholder": "Search files, commands, agents…",
     "notifications": "Notifications",
@@ -122,9 +129,21 @@
     "none": "None"
   },
   "wizard": {
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "title": "Create new team",
+    "subtitle": "Multiple agents work in parallel on isolated worktrees",
+    "step1": "Name + goal",
+    "step2": "Members",
+    "step3": "Strategy",
+    "step4": "Confirm",
+    "startTeam": "Start team"
   },
   "commandPalette": {
-    "noResults": "No results"
+    "noResults": "No results",
+    "groupRecent": "Recent",
+    "groupWorkspace": "Workspace",
+    "groupLibrary": "Library",
+    "groupRunActions": "Run actions",
+    "groupSettings": "Settings"
   }
 }

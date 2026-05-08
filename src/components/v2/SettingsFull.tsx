@@ -16,7 +16,25 @@ import { Btn, Pill, Dot, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import type { WorkspaceSummary } from './types'
 import { CodeGraphViz } from './CodeGraphViz'
+import { HarnessLintPanel } from './HarnessLintPanel'
+import { SessionPreview } from './SessionPreview'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { HookProfileDashboard } from './HookProfileDashboard'
+import { SettingsErrorLog } from './SettingsErrorLog'
+import { McpServerEditor } from './authoring/McpServerEditor'
+import { PermissionsEditor } from './authoring/PermissionsEditor'
+import { HookEditor } from './authoring/HookEditor'
+import {
+  DeleteConfirmModal,
+  UndoToast,
+} from './authoring/LibraryRowMenu'
+import {
+  getLanguage,
+  setLanguage,
+  SUPPORTED_LANGUAGES,
+  t,
+  type SupportedLanguage,
+} from '@/i18n'
 
 export interface SettingsFullProps {
   workspaces: WorkspaceSummary[]
@@ -24,7 +42,7 @@ export interface SettingsFullProps {
   workspace?: WorkspaceSummary
 }
 
-type SectionId = 'general' | 'harness' | 'agents' | 'integrations' | 'account'
+type SectionId = 'general' | 'harness' | 'agents' | 'integrations' | 'account' | 'error-log'
 
 interface SectionSpec {
   id: SectionId
@@ -35,11 +53,12 @@ interface SectionSpec {
 export function SettingsFull({ workspaces, workspace }: SettingsFullProps) {
   const [section, setSection] = useState<SectionId>('general')
   const sections: SectionSpec[] = [
-    { id: 'general',      label: 'General',      icon: Icon.Cog },
-    { id: 'harness',      label: 'Harness',      icon: Icon.Bolt },
-    { id: 'agents',       label: 'Agents',       icon: Icon.Users },
-    { id: 'integrations', label: 'Integrations', icon: Icon.Layers },
-    { id: 'account',      label: 'Account',      icon: Icon.Lock },
+    { id: 'general',      label: t('settings.general'),      icon: Icon.Cog },
+    { id: 'harness',      label: t('settings.harness'),      icon: Icon.Bolt },
+    { id: 'agents',       label: t('settings.agents'),       icon: Icon.Users },
+    { id: 'integrations', label: t('settings.integrations'), icon: Icon.Layers },
+    { id: 'account',      label: t('settings.account'),      icon: Icon.Lock },
+    { id: 'error-log',    label: t('settings.errorLog'),     icon: Icon.Activity },
   ]
 
   return (
@@ -73,7 +92,7 @@ export function SettingsFull({ workspaces, workspace }: SettingsFullProps) {
             textTransform: 'uppercase',
           }}
         >
-          Settings
+          {t('settings.title')}
         </div>
         {sections.map((s) => {
           const SIcon = s.icon
@@ -111,6 +130,7 @@ export function SettingsFull({ workspaces, workspace }: SettingsFullProps) {
         {section === 'agents' && <SettingsAgents />}
         {section === 'integrations' && <SettingsIntegrations />}
         {section === 'account' && <SettingsAccount />}
+        {section === 'error-log' && <SettingsErrorLog />}
       </div>
     </div>
   )
@@ -279,12 +299,12 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
   const [confirmDestructive, setConfirmDestructive] = useState(true)
   return (
     <>
-      <SectionHeader title="General" sub="기본 워크스페이스, 모델, UI 동작" />
+      <SectionHeader title={t('settings.general')} sub={t('settings.generalSub')} />
       <SettingsCard
-        title="Workspaces"
+        title={t('settings.workspaces')}
         right={
           <Btn variant="ghost" icon={<Icon.Plus size={11} />}>
-            Add workspace
+            {t('settings.addWorkspace')}
           </Btn>
         }
       >
@@ -312,9 +332,9 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
                 {w.path} · harness {w.harness}
               </div>
             </div>
-            {w.current && <Pill color="var(--accent)">CURRENT</Pill>}
+            {w.current && <Pill color="var(--accent)">{t('settings.current')}</Pill>}
             <Btn variant="ghost" icon={<Icon.Cog size={11} />}>
-              Configure
+              {t('common.configure')}
             </Btn>
           </div>
         ))}
@@ -322,18 +342,18 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
 
       <SettingsCard title="Defaults">
         <Row
-          label="Default model"
-          sub="새 Run 생성 시 멤버에 적용되는 모델"
+          label={t('settings.defaultModel')}
+          sub={t('settings.defaultModelSub')}
           right={<Select value="sonnet-4.5" />}
         />
         <Row
-          label="Default effort"
-          sub="thinking budget. high는 대형 변경에만 권장"
+          label={t('settings.defaultEffort')}
+          sub={t('settings.defaultEffortSub')}
           right={<Select value="medium" />}
         />
         <Row
-          label="Worktree root"
-          sub="격리 워크트리가 만들어지는 경로"
+          label={t('settings.worktreeRoot')}
+          sub={t('settings.worktreeRootSub')}
           right={
             <code
               className="mono"
@@ -350,27 +370,72 @@ export function SettingsGeneral({ workspaces }: SettingsGeneralProps) {
           }
         />
         <Row
-          label="Max parallel runs"
-          sub="동시에 활성화할 수 있는 Run 수 (resource bar 기준)"
+          label={t('settings.maxParallelRuns')}
+          sub={t('settings.maxParallelRunsSub')}
           right={<Select value="8" />}
           last
         />
       </SettingsCard>
 
       <SettingsCard title="UI">
+        <LanguageRow />
         <Row
-          label="Auto focus next blocked agent"
-          sub="머지 충돌·승인 대기시 해당 패널로 자동 점프"
+          label={t('settings.autoFocusBlocked')}
+          sub={t('settings.autoFocusBlockedSub')}
           right={<Toggle value={autoFocus} onChange={setAutoFocus} />}
         />
         <Row
-          label="Confirm destructive commands"
-          sub="rm -rf, migrate reset 등 사용자 확인"
+          label={t('settings.confirmDestructive')}
+          sub={t('settings.confirmDestructiveSub')}
           right={<Toggle value={confirmDestructive} onChange={setConfirmDestructive} />}
         />
         <OnboardingResetRow />
       </SettingsCard>
     </>
+  )
+}
+
+/**
+ * Language toggle — flips the i18n stub's `currentLanguage` and reloads the
+ * window so every component re-renders with the new strings. The full-app
+ * reload is intentional: the t() lookups capture the language at render time
+ * and there is no global subscription mechanism in the stub.
+ */
+function LanguageRow() {
+  const [lang, setLang] = useState<SupportedLanguage>(() => getLanguage())
+  return (
+    <Row
+      label={t('settings.language')}
+      sub={t('settings.languageSub')}
+      right={
+        <select
+          value={lang}
+          onChange={(e) => {
+            const next = e.target.value as SupportedLanguage
+            if (!SUPPORTED_LANGUAGES.includes(next)) return
+            setLang(next)
+            setLanguage(next)
+            // Force a reload so all t() calls re-evaluate. cheap & predictable
+            // — we don't have an i18n provider in the stub.
+            if (typeof window !== 'undefined') {
+              window.location.reload()
+            }
+          }}
+          style={{
+            background: 'var(--bg-3)',
+            color: 'var(--text-1)',
+            border: '1px solid var(--line-2)',
+            borderRadius: 5,
+            padding: '4px 8px',
+            fontSize: 12,
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          <option value="ko">{t('settings.languageKorean')}</option>
+          <option value="en">{t('settings.languageEnglish')}</option>
+        </select>
+      }
+    />
   )
 }
 
@@ -415,14 +480,26 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
   const [betaChannel, setBetaChannel] = useState(false)
   return (
     <>
-      <SectionHeader title="Harness" sub="forge 자체의 업데이트와 정책" />
+      <SectionHeader title={t('settings.harness')} sub={t('settings.harnessSub')} />
+
+      {/* Lint summary + on-demand re-run, opens a full modal with file groups. */}
+      <HarnessLintPanel workspacePath={workspace?.path} />
+
+      {/* What Claude actually sees on session start (CLAUDE.md + @-rules + hooks). */}
+      <SessionPreview workspacePath={workspace?.path} />
 
       <CodeReviewGraphCard workspace={workspace} />
 
+      <McpServersCard workspace={workspace} />
+      <PermissionsCard workspace={workspace} />
+      <HooksCard workspace={workspace} />
+
+      <HookProfileDashboard />
+
       <SettingsCard title="Version">
         <Row
-          label="Current version"
-          sub="모든 Run이 이 버전에서 실행됩니다"
+          label={t('settings.currentVersion')}
+          sub={t('settings.currentVersionSub')}
           right={
             <span className="mono" style={{ fontSize: 12, color: 'var(--text-1)' }}>
               0.3.9
@@ -430,18 +507,18 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
           }
         />
         <Row
-          label="Update channel"
-          sub="stable / beta / nightly"
+          label={t('settings.updateChannel')}
+          sub={t('settings.updateChannelSub')}
           right={<Select value="stable" />}
         />
         <Row
-          label="Auto-update"
-          sub="새 stable 빌드를 자동 적용"
+          label={t('settings.autoUpdate')}
+          sub={t('settings.autoUpdateSub')}
           right={<Toggle value={autoUpdate} onChange={setAutoUpdate} />}
         />
         <Row
-          label="Beta channel"
-          sub="실험 기능 미리보기 (안정성 보증 없음)"
+          label={t('settings.betaChannel')}
+          sub={t('settings.betaChannelSub')}
           right={<Toggle value={betaChannel} onChange={setBetaChannel} />}
           last
         />
@@ -449,8 +526,8 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
 
       <SettingsCard title="Telemetry">
         <Row
-          label="Send anonymous usage"
-          sub="런 통계 + 충돌 리포트. 코드 내용은 전송하지 않음"
+          label={t('settings.telemetry')}
+          sub={t('settings.telemetrySub')}
           right={<Toggle value={telemetry} onChange={setTelemetry} />}
           last
         />
@@ -496,7 +573,7 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
 export function SettingsAgents() {
   return (
     <>
-      <SectionHeader title="Agents" sub="에이전트 풀 기본값과 동시성" />
+      <SectionHeader title={t('settings.agents')} sub={t('settings.agentsSub')} />
 
       <SettingsCard
         title="Pool defaults"
@@ -625,7 +702,7 @@ export function SettingsIntegrations() {
   ]
   return (
     <>
-      <SectionHeader title="Integrations" sub="외부 서비스 연결과 MCP 서버" />
+      <SectionHeader title={t('settings.integrations')} sub={t('settings.integrationsSub')} />
 
       <SettingsCard
         title="Connections"
@@ -779,7 +856,7 @@ export function SettingsAccount() {
   ]
   return (
     <>
-      <SectionHeader title="Account" sub="프로파일, 청구, API 키" />
+      <SectionHeader title={t('settings.account')} sub={t('settings.accountSub')} />
 
       <SettingsCard title="Profile">
         <Row
@@ -1223,5 +1300,370 @@ function CodeReviewGraphCard({ workspace }: CodeReviewGraphCardProps) {
         <CodeGraphViz workspacePath={wsPath} onClose={() => setVizOpen(false)} />
       )}
     </>
+  )
+}
+
+// ─── MCP servers card ──────────────────────────────────────────────
+//
+// Lists every entry in `.claude/mcp.json` with its transport + tool count
+// proxy (args length / URL). Each row gets [Edit][Delete]; the card header
+// has "+ MCP server" → opens McpServerEditor in create mode.
+
+interface McpServerEntry {
+  name: string
+  spec: {
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    type?: 'stdio' | 'http' | 'sse'
+    url?: string
+    disabled?: boolean
+  }
+}
+
+interface McpServersCardProps {
+  workspace?: WorkspaceSummary
+}
+
+function McpServersCard({ workspace }: McpServersCardProps) {
+  const wsPath = workspace?.path
+  const [servers, setServers] = useState<McpServerEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<McpServerEntry | { create: true } | null>(null)
+  const [deleting, setDeleting] = useState<McpServerEntry | null>(null)
+  const [toast, setToast] = useState<{ message: string } | null>(null)
+
+  async function refresh() {
+    if (!wsPath) {
+      setServers([])
+      setLoading(false)
+      return
+    }
+    try {
+      const list = (await window.api.harness.listMcpServers(wsPath)) as McpServerEntry[]
+      setServers(list)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsPath])
+
+  async function handleDelete(entry: McpServerEntry) {
+    if (!wsPath) return
+    await window.api.harness.removeMcpServer(wsPath, entry.name)
+    setDeleting(null)
+    setToast({ message: `MCP 서버 ${entry.name} 삭제됨` })
+    await refresh()
+  }
+
+  return (
+    <SettingsCard
+      title="MCP servers"
+      right={
+        <Btn
+          variant="ghost"
+          icon={<Icon.Plus size={11} />}
+          onClick={() => setEditing({ create: true })}
+          disabled={!wsPath}
+        >
+          MCP server
+        </Btn>
+      }
+    >
+      {!wsPath ? (
+        <Row label="활성 워크스페이스 없음" sub="워크스페이스를 선택하면 MCP 설정을 편집할 수 있습니다." last />
+      ) : loading ? (
+        <Row label="불러오는 중…" last />
+      ) : servers.length === 0 ? (
+        <Row
+          label="등록된 MCP 서버 없음"
+          sub=".claude/mcp.json 의 mcpServers 가 비어 있습니다."
+          last
+        />
+      ) : (
+        servers.map((s, i) => {
+          const transport = s.spec.type ?? 'stdio'
+          const target =
+            transport === 'stdio'
+              ? `${s.spec.command ?? ''} ${(s.spec.args ?? []).join(' ')}`.trim()
+              : (s.spec.url ?? '')
+          return (
+            <div
+              key={s.name}
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                borderBottom: i < servers.length - 1 ? '1px solid var(--line-1)' : 'none',
+              }}
+            >
+              <Dot
+                color={s.spec.disabled ? 'var(--text-4)' : 'var(--success)'}
+                size={6}
+              />
+              <span
+                className="mono"
+                style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 600 }}
+              >
+                {s.name}
+              </span>
+              <Pill color="var(--text-3)">{transport}</Pill>
+              {s.spec.disabled && <Pill color="var(--warning)">DISABLED</Pill>}
+              <code
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-3)',
+                  background: 'var(--bg-3)',
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 360,
+                }}
+              >
+                {target || '—'}
+              </code>
+              <div style={{ flex: 1 }} />
+              <Btn variant="ghost" onClick={() => setEditing(s)}>
+                Edit
+              </Btn>
+              <Btn variant="ghost" onClick={() => setDeleting(s)}>
+                <Icon.X size={11} />
+              </Btn>
+            </div>
+          )
+        })
+      )}
+
+      {editing && wsPath && (
+        <McpServerEditor
+          workspacePath={wsPath}
+          editing={'create' in editing ? undefined : editing}
+          existingNames={servers.map((s) => s.name)}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null)
+            await refresh()
+          }}
+        />
+      )}
+
+      {deleting && wsPath && (
+        <DeleteConfirmModal
+          kind="mcp-server"
+          name={deleting.name}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => handleDelete(deleting)}
+        />
+      )}
+
+      {toast && (
+        <UndoToast
+          message={toast.message}
+          onUndo={null}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </SettingsCard>
+  )
+}
+
+// ─── Permissions card ──────────────────────────────────────────────
+
+interface PermissionsCardProps {
+  workspace?: WorkspaceSummary
+}
+
+function PermissionsCard({ workspace }: PermissionsCardProps) {
+  const wsPath = workspace?.path
+  const [perms, setPerms] = useState<{ allow: string[]; deny: string[] }>({
+    allow: [],
+    deny: [],
+  })
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+
+  async function refresh() {
+    if (!wsPath) {
+      setPerms({ allow: [], deny: [] })
+      setLoading(false)
+      return
+    }
+    try {
+      const next = await window.api.harness.getPermissions(wsPath)
+      setPerms(next)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsPath])
+
+  return (
+    <SettingsCard
+      title="Permissions"
+      right={
+        <Btn
+          variant="ghost"
+          icon={<Icon.Lock size={11} />}
+          onClick={() => setOpen(true)}
+          disabled={!wsPath}
+        >
+          Edit
+        </Btn>
+      }
+    >
+      {!wsPath ? (
+        <Row label="활성 워크스페이스 없음" last />
+      ) : loading ? (
+        <Row label="불러오는 중…" last />
+      ) : (
+        <>
+          <Row
+            label="Allow rules"
+            sub="명시적으로 허용된 명령 / 경로 패턴"
+            right={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Dot color="var(--success)" size={6} />
+                <span
+                  className="mono tabular"
+                  style={{ fontSize: 12, color: 'var(--text-1)' }}
+                >
+                  {perms.allow.length}
+                </span>
+              </span>
+            }
+          />
+          <Row
+            label="Deny rules"
+            sub="차단된 명령 / 경로 패턴 (Allow 보다 우선)"
+            right={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Dot color="var(--danger)" size={6} />
+                <span
+                  className="mono tabular"
+                  style={{ fontSize: 12, color: 'var(--text-1)' }}
+                >
+                  {perms.deny.length}
+                </span>
+              </span>
+            }
+            last
+          />
+        </>
+      )}
+
+      {open && wsPath && (
+        <PermissionsEditor
+          workspacePath={wsPath}
+          onClose={() => setOpen(false)}
+          onSaved={(next) => {
+            setPerms(next)
+            setOpen(false)
+          }}
+        />
+      )}
+    </SettingsCard>
+  )
+}
+
+// ─── Hooks card ────────────────────────────────────────────────────
+
+interface HooksCardProps {
+  workspace?: WorkspaceSummary
+}
+
+function HooksCard({ workspace }: HooksCardProps) {
+  const wsPath = workspace?.path
+  const [eventCounts, setEventCounts] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  async function refresh() {
+    if (!wsPath) {
+      setEventCounts({})
+      setLoading(false)
+      return
+    }
+    try {
+      const list = (await window.api.harness.listHooks(wsPath)) as Array<{ event: string }>
+      const counts: Record<string, number> = {}
+      for (const h of list) {
+        counts[h.event] = (counts[h.event] ?? 0) + 1
+      }
+      setEventCounts(counts)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsPath])
+
+  const events = ['SessionStart', 'PreToolUse', 'PostToolUse', 'Stop', 'PreCompact', 'Notification']
+
+  return (
+    <SettingsCard
+      title="Hooks"
+      right={
+        <Btn
+          variant="ghost"
+          icon={<Icon.Plus size={11} />}
+          onClick={() => setCreating(true)}
+          disabled={!wsPath}
+        >
+          hook
+        </Btn>
+      }
+    >
+      {!wsPath ? (
+        <Row label="활성 워크스페이스 없음" last />
+      ) : loading ? (
+        <Row label="불러오는 중…" last />
+      ) : (
+        events.map((ev, i) => (
+          <Row
+            key={ev}
+            label={ev}
+            sub={`${eventCounts[ev] ?? 0}개 등록됨`}
+            right={
+              <span
+                className="mono tabular"
+                style={{ fontSize: 12, color: 'var(--text-1)' }}
+              >
+                {eventCounts[ev] ?? 0}
+              </span>
+            }
+            last={i === events.length - 1}
+          />
+        ))
+      )}
+
+      {creating && wsPath && (
+        <HookEditor
+          workspacePath={wsPath}
+          onClose={() => setCreating(false)}
+          onSaved={async () => {
+            setCreating(false)
+            await refresh()
+          }}
+        />
+      )}
+    </SettingsCard>
   )
 }
