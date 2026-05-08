@@ -5,8 +5,27 @@ import fs from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { EventEmitter } from 'events'
+import { pathManager } from './PathManager'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Resolve the tmux binary at call time. Falls back to PATH `tmux` so the
+ * watcher still works on dev hosts that haven't downloaded the bundle.
+ */
+function tmuxBin(): string {
+  return pathManager.getTmux() ?? 'tmux'
+}
+
+/** Build an env that includes bundled bin/ on PATH for tmux subprocesses. */
+function tmuxEnv(): NodeJS.ProcessEnv {
+  return pathManager.augmentEnv({ ...process.env })
+}
+
+/** Strict tmux pane-id form (`%42`, `@7`, `$3`). Anything else is rejected. */
+function isTmuxPaneId(value: string | undefined | null): value is string {
+  return !!value && /^[%@$][A-Za-z0-9_-]+$/.test(value)
+}
 
 export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
 export type TeamStatus = 'active' | 'paused'
@@ -339,17 +358,21 @@ export class AgentTeamWatcher extends EventEmitter {
   /** Return true when `git` resolves on PATH and is invokable. */
   private async hasGit(): Promise<boolean> {
     try {
-      await execFileAsync('git', ['--version'], { timeout: 3000 })
+      await execFileAsync('git', ['--version'], { timeout: 3000, env: tmuxEnv() })
       return true
     } catch {
       return false
     }
   }
 
-  /** Return true when `tmux` resolves on PATH. */
+  /**
+   * Return true when `tmux` resolves — checking the bundled binary first so
+   * Dock-launched apps (which inherit a sparse PATH) still find the bundled
+   * tmux even when the system PATH lacks /opt/homebrew/bin.
+   */
   private async hasTmux(): Promise<boolean> {
     try {
-      await execFileAsync('tmux', ['-V'], { timeout: 3000 })
+      await execFileAsync(tmuxBin(), ['-V'], { timeout: 3000, env: tmuxEnv() })
       return true
     } catch {
       return false
@@ -360,6 +383,7 @@ export class AgentTeamWatcher extends EventEmitter {
     try {
       const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'branch', '--show-current'], {
         timeout: 5000,
+        env: tmuxEnv(),
       })
       const cur = stdout.trim()
       if (cur) return cur
@@ -373,13 +397,19 @@ export class AgentTeamWatcher extends EventEmitter {
   private async ensureBranch(workspacePath: string, newBranch: string, fromBranch: string): Promise<boolean> {
     try {
       // If branch already exists, just succeed.
-      await execFileAsync('git', ['-C', workspacePath, 'rev-parse', '--verify', newBranch], { timeout: 4000 })
+      await execFileAsync('git', ['-C', workspacePath, 'rev-parse', '--verify', newBranch], {
+        timeout: 4000,
+        env: tmuxEnv(),
+      })
       return true
     } catch {
       // doesn't exist yet, create
     }
     try {
-      await execFileAsync('git', ['-C', workspacePath, 'branch', newBranch, fromBranch], { timeout: 8000 })
+      await execFileAsync('git', ['-C', workspacePath, 'branch', newBranch, fromBranch], {
+        timeout: 8000,
+        env: tmuxEnv(),
+      })
       return true
     } catch {
       return false
@@ -462,7 +492,7 @@ export class AgentTeamWatcher extends EventEmitter {
             await execFileAsync(
               'git',
               ['-C', wsPath, 'worktree', 'add', '-b', memberBranch, worktreePath, teamBaseBranch],
-              { timeout: 30_000 }
+              { timeout: 30_000, env: tmuxEnv() }
             )
             member.worktreePath = worktreePath
             member.branch = memberBranch
@@ -483,28 +513,55 @@ export class AgentTeamWatcher extends EventEmitter {
       // ── tmux session ───────────────────────────────────────────────
       if (tmuxOk && memberCwd) {
         const session = teamSessionName(teamId, m.agentId)
+        const tmux = tmuxBin()
+        const env = tmuxEnv()
         try {
           await execFileAsync(
-            'tmux',
+            tmux,
             ['new-session', '-d', '-s', session, '-c', memberCwd],
-            { timeout: 8000 }
+            { timeout: 8000, env }
           )
+          // Capture the real pane id (`%N`) of the freshly-created session so
+          // PtyManager.createTmuxAttach (which strictly validates the
+          // `%`/`@`/`$` form) can attach. The legacy `session:0.0` form was
+          // rejected as "Invalid tmux target", leaving the live terminal grid
+          // unable to mount any pane.
+          let realPaneId: string | null = null
+          try {
+            const { stdout } = await execFileAsync(
+              tmux,
+              ['display-message', '-p', '-t', session, '#{pane_id}'],
+              { timeout: 3000, env }
+            )
+            const candidate = stdout.trim()
+            if (isTmuxPaneId(candidate)) realPaneId = candidate
+          } catch {
+            // pane lookup failed — fall through; member ends up without a
+            // valid tmuxPaneId so the UI shows a degraded state instead of a
+            // bogus "session:0.0" target.
+          }
           if (autoStart) {
             try {
-              await execFileAsync('tmux', ['send-keys', '-t', session, 'claude', 'Enter'], {
+              await execFileAsync(tmux, ['send-keys', '-t', session, 'claude', 'Enter'], {
                 timeout: 4000,
+                env,
               })
             } catch {
               // ignore — session exists, claude just didn't auto-fire.
             }
           }
-          // We don't have the actual %N pane id, so use session:window.pane
-          // form which createTmuxAttach won't accept. Provide the session name
-          // only; UI may fall back to `tmux attach -t <session>` for now.
-          member.tmuxPaneId = `${session}:0.0`
-          member.backendType = 'tmux'
-          member.cwd = memberCwd
-          tmuxSessionsStarted++
+          if (realPaneId) {
+            member.tmuxPaneId = realPaneId
+            member.backendType = 'tmux'
+            member.cwd = memberCwd
+            tmuxSessionsStarted++
+          } else {
+            // Session exists but we couldn't resolve a valid pane id. Keep
+            // the cwd so the UI can show the member, but omit tmuxPaneId so
+            // the renderer falls back to a non-tmux terminal instead of
+            // crashing on attach.
+            member.cwd = memberCwd
+          }
         } catch {
           // tmux unavailable / collision — leave tmuxPaneId unset.
         }
@@ -557,78 +614,164 @@ export class AgentTeamWatcher extends EventEmitter {
   }
 
   /**
-   * Pause every member of a team. tmux sessions are sent Ctrl-Z (SIGTSTP via
-   * suspend-client equivalent isn't safe here — we just flag config, since
-   * killing would lose context). Renderer can re-attach after resume.
+   * Resolve the pane's foreground PID via `tmux display-message -p
+   * '#{pane_pid}'`. The pane_pid is the *direct child* of tmux (typically the
+   * shell), so SIGSTOP/SIGCONT on it pauses the shell and any descendants
+   * (claude, child agents) by virtue of process-group inheritance on most
+   * shells. Returns null when tmux can't be queried or the pid is unparsable.
    */
-  async pause(teamId: string): Promise<{ ok: boolean }> {
+  private async resolvePanePid(paneId: string): Promise<number | null> {
+    if (!isTmuxPaneId(paneId)) return null
+    try {
+      const { stdout } = await execFileAsync(
+        tmuxBin(),
+        ['display-message', '-p', '-t', paneId, '#{pane_pid}'],
+        { timeout: 3000, env: tmuxEnv() }
+      )
+      const pid = parseInt(stdout.trim(), 10)
+      return Number.isFinite(pid) && pid > 0 ? pid : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Stop or continue the foreground process tree of a tmux pane. We send the
+   * signal to the pane's process group (`-PID`) so children (claude →
+   * sub-agents) get the signal too. Returns true when the signal landed.
+   *
+   * Falls back to no-op on platforms that don't support POSIX kill (Windows)
+   * — caller should treat false as "couldn't truly suspend, fell back to
+   * detach" and surface the degraded state to the user.
+   */
+  private signalPaneTree(pid: number, signal: 'SIGSTOP' | 'SIGCONT'): boolean {
+    try {
+      // Negative PID = process group. The shell tmux spawns is normally a
+      // session leader so this hits its descendants too. If group signaling
+      // fails (e.g. the pane child isn't a group leader), fall back to PID.
+      try {
+        process.kill(-pid, signal)
+        return true
+      } catch {
+        process.kill(pid, signal)
+        return true
+      }
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Pause every member of a team. We send SIGSTOP to the foreground process
+   * group of each member's pane so the underlying agent (claude / hooks /
+   * children) actually halts — preventing further file edits and token spend.
+   * If pane PID resolution or signaling fails, we fall back to detach-client
+   * (cosmetic only) and emit a `pause:degraded` event so the UI can warn.
+   */
+  async pause(teamId: string): Promise<{ ok: boolean; degraded?: boolean }> {
     if (!teamId) throw new Error('teamId is required')
     const found = await this.readConfig(teamId)
     if (!found) return { ok: false }
     const tmuxOk = await this.hasTmux()
     found.config.status = 'paused'
+    let degraded = false
     for (const m of found.config.members) {
       m.state = 'idle'
-      if (tmuxOk && m.tmuxPaneId) {
+      if (!tmuxOk || !isTmuxPaneId(m.tmuxPaneId)) {
+        degraded = true
+        continue
+      }
+      const pid = await this.resolvePanePid(m.tmuxPaneId)
+      const stopped = pid != null && this.signalPaneTree(pid, 'SIGSTOP')
+      if (!stopped) {
+        // Fallback: detach the client so the user no longer sees it; warn the
+        // caller that the agent process is still running.
         const session = teamSessionName(teamId, m.agentId)
-        // detach-client: drops any attached client without killing the session
-        // so claude keeps running but the user no longer sees it.
-        await execFileAsync('tmux', ['detach-client', '-s', session], { timeout: 3000 }).catch(() => {})
+        await execFileAsync(tmuxBin(), ['detach-client', '-s', session], {
+          timeout: 3000,
+          env: tmuxEnv(),
+        }).catch(() => {})
+        degraded = true
       }
     }
     await this.writeConfig(found.configPath, found.config)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true }
+    if (degraded) this.emit('pause:degraded', teamId)
+    return { ok: true, degraded }
   }
 
-  async resume(teamId: string): Promise<{ ok: boolean }> {
+  async resume(teamId: string): Promise<{ ok: boolean; degraded?: boolean }> {
     if (!teamId) throw new Error('teamId is required')
     const found = await this.readConfig(teamId)
     if (!found) return { ok: false }
+    const tmuxOk = await this.hasTmux()
     found.config.status = 'active'
+    let degraded = false
     for (const m of found.config.members) {
       m.state = 'active'
+      if (!tmuxOk || !isTmuxPaneId(m.tmuxPaneId)) continue
+      const pid = await this.resolvePanePid(m.tmuxPaneId)
+      const cont = pid != null && this.signalPaneTree(pid, 'SIGCONT')
+      if (!cont) degraded = true
     }
     await this.writeConfig(found.configPath, found.config)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true }
+    return { ok: true, degraded }
   }
 
-  async pauseMember(teamId: string, agentId: string): Promise<{ ok: boolean }> {
+  async pauseMember(teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> {
     if (!teamId || !agentId) throw new Error('teamId and agentId are required')
     const found = await this.readConfig(teamId)
     if (!found) return { ok: false }
     const member = found.config.members.find((m) => m.agentId === agentId)
     if (!member) return { ok: false }
     member.state = 'idle'
+    let degraded = false
     const tmuxOk = await this.hasTmux()
-    if (tmuxOk && member.tmuxPaneId) {
-      const session = teamSessionName(teamId, agentId)
-      await execFileAsync('tmux', ['detach-client', '-s', session], { timeout: 3000 }).catch(() => {})
+    if (tmuxOk && isTmuxPaneId(member.tmuxPaneId)) {
+      const pid = await this.resolvePanePid(member.tmuxPaneId)
+      const stopped = pid != null && this.signalPaneTree(pid, 'SIGSTOP')
+      if (!stopped) {
+        const session = teamSessionName(teamId, agentId)
+        await execFileAsync(tmuxBin(), ['detach-client', '-s', session], {
+          timeout: 3000,
+          env: tmuxEnv(),
+        }).catch(() => {})
+        degraded = true
+      }
+    } else {
+      degraded = true
     }
     await this.writeConfig(found.configPath, found.config)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true }
+    return { ok: true, degraded }
   }
 
-  async resumeMember(teamId: string, agentId: string): Promise<{ ok: boolean }> {
+  async resumeMember(teamId: string, agentId: string): Promise<{ ok: boolean; degraded?: boolean }> {
     if (!teamId || !agentId) throw new Error('teamId and agentId are required')
     const found = await this.readConfig(teamId)
     if (!found) return { ok: false }
     const member = found.config.members.find((m) => m.agentId === agentId)
     if (!member) return { ok: false }
     member.state = 'active'
+    let degraded = false
+    const tmuxOk = await this.hasTmux()
+    if (tmuxOk && isTmuxPaneId(member.tmuxPaneId)) {
+      const pid = await this.resolvePanePid(member.tmuxPaneId)
+      const cont = pid != null && this.signalPaneTree(pid, 'SIGCONT')
+      if (!cont) degraded = true
+    }
     await this.writeConfig(found.configPath, found.config)
     await this.refresh()
     this.emit('teams', this.list())
     this.emit('change', teamId)
-    return { ok: true }
+    return { ok: true, degraded }
   }
 
   // ── Merge ────────────────────────────────────────────────────────────
@@ -657,10 +800,22 @@ export class AgentTeamWatcher extends EventEmitter {
 
     const baseBranch = cfg.baseBranch ?? `team/${teamId}`
     const strategy: MergeStrategy = opts.mergeStrategy ?? cfg.mergeStrategy ?? 'squash'
+    const env = tmuxEnv()
+
+    // Refuse to merge into a dirty workspace — otherwise we'd silently fold
+    // the user's WIP into the team merge commit.
+    const dirty = await this.workspaceDirty(wsPath)
+    if (dirty) {
+      return {
+        ok: false,
+        conflicts: [],
+        error: 'workspace has uncommitted changes; commit or stash before merging the team',
+      }
+    }
 
     // Move HEAD to baseBranch in the workspace so merges land there.
     try {
-      await execFileAsync('git', ['-C', wsPath, 'checkout', baseBranch], { timeout: 10_000 })
+      await execFileAsync('git', ['-C', wsPath, 'checkout', baseBranch], { timeout: 10_000, env })
     } catch (err) {
       return {
         ok: false,
@@ -676,23 +831,59 @@ export class AgentTeamWatcher extends EventEmitter {
         ? ['-C', wsPath, 'merge', '--squash', branch]
         : ['-C', wsPath, 'merge', '--no-ff', '--no-edit', branch]
       try {
-        await execFileAsync('git', args, { timeout: 30_000 })
-        if (strategy === 'squash') {
-          // --squash leaves changes staged; commit them before next member.
-          await execFileAsync(
-            'git',
-            ['-C', wsPath, 'commit', '-m', `team(${teamId}): squash merge ${branch}`],
-            { timeout: 10_000 }
-          ).catch(() => {})
-        }
+        await execFileAsync('git', args, { timeout: 30_000, env })
       } catch (err) {
         // Inspect conflict state, abort, return descriptors.
         const conflicts = await this.collectConflicts(wsPath, branch, baseBranch)
-        await execFileAsync('git', ['-C', wsPath, 'merge', '--abort'], { timeout: 5000 }).catch(() => {})
+        await execFileAsync('git', ['-C', wsPath, 'merge', '--abort'], {
+          timeout: 5000,
+          env,
+        }).catch(() => {})
         return {
           ok: false,
           conflicts,
           error: (err as Error).message,
+        }
+      }
+
+      if (strategy === 'squash') {
+        // --squash leaves changes staged; commit them before the next member.
+        // Failure here (missing identity, hook rejection, etc.) MUST abort —
+        // swallowing it leaves the workspace with staged-but-uncommitted
+        // changes while we report success, which is the H3 bug.
+        try {
+          await execFileAsync(
+            'git',
+            ['-C', wsPath, 'commit', '-m', `team(${teamId}): squash merge ${branch}`],
+            { timeout: 10_000, env }
+          )
+        } catch (err) {
+          const stderr = ((err as { stderr?: Buffer | string }).stderr ?? '').toString().trim()
+          // Reset the staged squash so we don't leave the index dirty for the
+          // user to clean up by hand. `git reset --merge` is the documented
+          // way to undo a squash that hasn't been committed.
+          await execFileAsync('git', ['-C', wsPath, 'reset', '--merge'], {
+            timeout: 5000,
+            env,
+          }).catch(() => {})
+          return {
+            ok: false,
+            conflicts: [],
+            error: `squash commit failed for ${branch}: ${stderr || (err as Error).message}`,
+          }
+        }
+      }
+
+      // After every merged branch, verify the workspace is clean. If it's
+      // not, something committed partial state (e.g. pre-commit hook silently
+      // unstaged files) and we should bail rather than continue stacking
+      // members on top of an inconsistent base.
+      const stillDirty = await this.workspaceDirty(wsPath)
+      if (stillDirty) {
+        return {
+          ok: false,
+          conflicts: [],
+          error: `workspace not clean after merging ${branch}; aborting`,
         }
       }
     }
@@ -700,7 +891,10 @@ export class AgentTeamWatcher extends EventEmitter {
     // Resolve final commit sha on the base branch.
     let commitSha: string | undefined
     try {
-      const { stdout } = await execFileAsync('git', ['-C', wsPath, 'rev-parse', 'HEAD'], { timeout: 4000 })
+      const { stdout } = await execFileAsync('git', ['-C', wsPath, 'rev-parse', 'HEAD'], {
+        timeout: 4000,
+        env,
+      })
       commitSha = stdout.trim() || undefined
     } catch {
       // ignore
@@ -709,6 +903,25 @@ export class AgentTeamWatcher extends EventEmitter {
     const result: TeamMergeResult = { ok: true, mergedBranch: baseBranch }
     if (commitSha) result.commitSha = commitSha
     return result
+  }
+
+  /**
+   * `git status --porcelain` returns one line per untracked/modified path.
+   * Empty stdout = clean tree. Used to gate merge entry/exit so we never
+   * report success while the index has staged-but-uncommitted changes.
+   */
+  private async workspaceDirty(wsPath: string): Promise<boolean> {
+    try {
+      const { stdout } = await execFileAsync(
+        'git',
+        ['-C', wsPath, 'status', '--porcelain'],
+        { timeout: 5000, env: tmuxEnv() }
+      )
+      return stdout.trim().length > 0
+    } catch {
+      // If status itself fails we can't trust the tree — treat as dirty.
+      return true
+    }
   }
 
   private async collectConflicts(
@@ -721,7 +934,7 @@ export class AgentTeamWatcher extends EventEmitter {
       const { stdout } = await execFileAsync(
         'git',
         ['-C', wsPath, 'diff', '--name-only', '--diff-filter=U'],
-        { timeout: 5000 }
+        { timeout: 5000, env: tmuxEnv() }
       )
       files = stdout.split('\n').map((s) => s.trim()).filter(Boolean)
     } catch {
@@ -765,12 +978,18 @@ export class AgentTeamWatcher extends EventEmitter {
     if (found) {
       const cfg = found.config
       const wsPath = cfg.workspacePath
+      const env = tmuxEnv()
 
-      // Kill tmux sessions (per member).
+      // Kill tmux sessions (per member). Use the bundled tmux when available
+      // so this works in Dock-launched apps without /opt/homebrew on PATH.
       if (tmuxOk) {
+        const tmux = tmuxBin()
         for (const m of cfg.members) {
           const session = teamSessionName(teamId, m.agentId)
-          await execFileAsync('tmux', ['kill-session', '-t', session], { timeout: 3000 }).catch(() => {})
+          await execFileAsync(tmux, ['kill-session', '-t', session], {
+            timeout: 3000,
+            env,
+          }).catch(() => {})
         }
       }
 
@@ -782,22 +1001,24 @@ export class AgentTeamWatcher extends EventEmitter {
           await execFileAsync(
             'git',
             ['-C', wsPath, 'worktree', 'remove', m.worktreePath, '--force'],
-            { timeout: 15_000 }
+            { timeout: 15_000, env }
           ).catch(() => {})
         }
         // Delete member branches.
         for (const m of cfg.members) {
           if (!m.branch || !m.branch.startsWith(`team/${teamId}`)) continue
           if (m.branch === cfg.baseBranch) continue
-          await execFileAsync('git', ['-C', wsPath, 'branch', '-D', m.branch], { timeout: 5000 }).catch(
-            () => {}
-          )
+          await execFileAsync('git', ['-C', wsPath, 'branch', '-D', m.branch], {
+            timeout: 5000,
+            env,
+          }).catch(() => {})
         }
         // Delete team base branch.
         const teamBase = cfg.baseBranch ?? `team/${teamId}`
-        await execFileAsync('git', ['-C', wsPath, 'branch', '-D', teamBase], { timeout: 5000 }).catch(
-          () => {}
-        )
+        await execFileAsync('git', ['-C', wsPath, 'branch', '-D', teamBase], {
+          timeout: 5000,
+          env,
+        }).catch(() => {})
       }
     }
 
