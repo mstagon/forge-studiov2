@@ -4,6 +4,76 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-05-08
+
+### Architecture — Forge Team only (서브에이전트 폐지)
+
+이번 마이너는 메인 Claude Code 세션의 병렬 실행 메커니즘을 **서브에이전트
+(`Agent`/`Task` 도구) 에서 Forge Team (격리 worktree + tmux + 별 Claude
+인스턴스) 로 전환**한다. 사용자 명시 요구: 서브에이전트는 절대 사용 금지,
+모든 위임은 진짜 격리 환경의 별도 Claude 프로세스로.
+
+#### Added
+
+##### `forge-team` CLI — 메인 세션이 호출할 헤드리스 팀 관리자
+- `electron/services/TeamOperations.ts` (NEW, 814 LOC) — 워치/Electron 의존성
+  없는 순수 함수. tmux/git/fs 작업의 단일 source of truth.
+- `bin/forge-team.ts` + `bin/forge-team` (bash shim) — Node 22.6+
+  `--experimental-strip-types` 직접 실행. 의존성 추가 0.
+- 명령어: `create / list / merge / pause / resume / remove`. stdout 단일 라인
+  JSON. exit 코드로 conflict 감지 (merge 실패 시 exit 2).
+- 호출 위치 3가지: 레포 체크아웃 / 패키지된 Forge.app / `npm link` 글로벌.
+- electron-builder `extraResources` 로 `Forge.app/Contents/Resources/forge-cli/`
+  에 번들 — 패키지 환경에서도 즉시 사용.
+
+##### `LiveTerminalsRoot` — App 레벨 XTerminal 인스턴스 풀
+- `src/components/v2/LiveTerminalsRoot.tsx` (NEW) — registry + portal hosts
+  를 App 레벨로 lift.
+- `src/stores/liveTerminals.ts` (NEW) — Zustand store. 활성 팀 멤버 목록
+  관리. 워크스페이스 swap 시 `clear()`.
+- 결과: **다른 화면 (Library/Dashboard/Settings) 갔다와도 PTY/스크롤백 유지**.
+  이전엔 `RunLiveView` unmount → 모든 XTerminal cleanup → tmux attach kill.
+
+#### Changed
+
+##### `electron/services/AgentTeamWatcher.ts` 1076 → 398 LOC 슬림
+- create/pause/resume/pauseMember/resumeMember/merge/remove 의 본문은
+  `TeamOperations` 위임. 공개 API 100% 호환 (preload.ts/main.ts 변경 0).
+- bug fix: `configPathFor()` 가 참조하던 미정의 `this.workspacePath` 필드
+  문제도 정리.
+
+##### CLAUDE.md / orchestration.md / agent-team.md 재작성
+- Agent Routing 표 → **Team Routing 표** (요청 유형 → 멤버 구성).
+- "Agent 도구로 병렬 호출" → "`forge-team create --members ...` 단일 호출".
+- ROLE 블록을 "Team Orchestrator" 로 변경. `Agent`/`Task` 도구 호출 금지
+  명시 + STOP-THE-LINE 추가.
+
+##### `resources/harness-template/.claude/settings.json`
+- `permissions.deny` 에 `"Agent"`, `"Task"` 추가 (서브에이전트 차단).
+- `PreToolUse Agent|Task` 인라인 훅 추가 — 사용 시 명시 메시지 ("forge-team
+  create 로 대신 만들어라") + exit 2.
+
+#### Removed (no longer used)
+
+- `LiveTerminalGrid` 의 자체 `SlotRegistry` + portal mount 영역 → App 레벨로
+  이동. 그리드는 layout + slot ref 등록만.
+- 메인 세션의 `Agent` / `Task` 도구 호출 — 정책상 차단.
+
+#### Compatibility
+
+- 기존 워크스페이스의 `.claude/teams/<id>/config.json` 포맷 변경 없음 — CLI
+  와 GUI 가 같은 파일을 읽고 쓴다.
+- 기존 IPC handler (preload.ts/main.ts) 변경 없음 — Watcher 의 공개 API 가
+  보존되었으므로 GUI 쪽은 영향 0.
+
+#### Known limitation (이전과 동일)
+
+`worktreeStrategy: isolated` 시 `team/<id>` 베이스 브랜치와
+`team/<id>/<agent>` 멤버 브랜치가 git refs 의 디렉토리 충돌로 동시 존재 불가
+→ shared 모드 silent fallback. 결과 envelope 의 `worktreesCreated: 0` 으로
+사용자에게 표시. 다음 라운드에서 베이스 브랜치를 `team/<id>-base` 로 변경
+검토.
+
 ## [0.5.5] — 2026-05-08
 
 ### Fixed — Codex adversarial review 라운드2 결함 4개

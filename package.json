@@ -1,9 +1,12 @@
 {
   "name": "forge-studio",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Forge Studio — Claude Code GUI Wrapper",
   "license": "GPL-3.0-or-later",
   "main": "dist-electron/main.js",
+  "bin": {
+    "forge-team": "bin/forge-team"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
@@ -17,6 +20,7 @@
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
+    "team": "node --experimental-strip-types --no-warnings bin/forge-team.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-rebuild && node scripts/patch-isbinaryfile.js"
   },
@@ -92,6 +96,16 @@
         "from": "resources/bundled-tools/darwin-arm64",
         "to": "bundled-tools",
         "filter": ["**/*", "!.gitkeep"]
+      },
+      {
+        "from": "bin",
+        "to": "forge-cli/bin",
+        "filter": ["forge-team", "forge-team.ts"]
+      },
+      {
+        "from": "electron/services",
+        "to": "forge-cli/electron/services",
+        "filter": ["TeamOperations.ts"]
       }
     ],
     "directories": {
