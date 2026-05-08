@@ -11,8 +11,9 @@
     "preview": "vite preview",
     "electron:dev": "vite",
     "sync-harness": "bash scripts/sync-harness.sh",
-    "electron:build": "npm run sync-harness && npm run build:renderer && electron-builder",
-    "release:dmg": "npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 -c.mac.identity=null",
+    "bundle:tools": "bash scripts/download-bundled-tools.sh && bash scripts/build-cr-graph-venv.sh",
+    "electron:build": "npm run sync-harness && npm run bundle:tools && npm run build:renderer && electron-builder",
+    "release:dmg": "npm run bundle:tools && npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 -c.mac.identity=null",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
@@ -86,6 +87,11 @@
         "from": "resources/harness-template",
         "to": "harness-template",
         "filter": ["**/*", "!.pdca-*", "!settings.local.json"]
+      },
+      {
+        "from": "resources/bundled-tools/darwin-arm64",
+        "to": "bundled-tools",
+        "filter": ["**/*", "!.gitkeep"]
       }
     ],
     "directories": {
