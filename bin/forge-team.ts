@@ -187,6 +187,155 @@ async function cmdPause(flags: Map<string, string>): Promise<void> {
   emit(result)
 }
 
+// ────────────────────────────────────────────────────────────────────
+// plan / execute — phase 별 sequential team orchestration
+// ────────────────────────────────────────────────────────────────────
+
+interface PlanPhase {
+  /** Phase 인덱스 (1부터). */
+  phase: number
+  /** Phase 의 한 줄 설명 (한국어 OK). */
+  description: string
+  /** 같은 phase 안의 멤버는 병렬 실행 (worktree 격리). */
+  parallel: boolean
+  /** 멤버 구성. forge-team create 의 --members 와 동일 shape. */
+  members: TeamCreateMember[]
+  /** 의존성 (다른 phase 인덱스 list). */
+  dependsOn?: number[]
+  /** Council 적용 여부 (v0.7.1+). */
+  council?: boolean
+}
+
+interface PlanDocument {
+  goal: string
+  workspaceId: string
+  phases: PlanPhase[]
+  /** v0.7.0 시점에는 사용자가 직접 채우거나 planner agent 가 출력. */
+  notes?: string
+}
+
+/**
+ * forge-team plan — goal 을 받아서 plan.json template 출력.
+ * v0.7.0: hardcoded sensible default phases (prisma → nestjs → flutter+cms 병렬).
+ *         사용자가 출력 받고 수정해서 execute 에 넘김.
+ * v0.7.1: planner agent (Council) 가 동적으로 plan 생성.
+ */
+async function cmdPlan(flags: Map<string, string>): Promise<void> {
+  const goal = requireFlag(flags, 'goal')
+  const workspacePath = requireFlag(flags, 'workspace')
+  const workspaceId = flags.get('workspace-id') || path.basename(path.resolve(workspacePath))
+
+  // Default template — 풀스택 피처 (DB → API → UI 병렬 → 통합 테스트)
+  const plan: PlanDocument = {
+    goal,
+    workspaceId,
+    phases: [
+      {
+        phase: 1,
+        description: '스키마 + 마이그레이션 (Prisma)',
+        parallel: false,
+        members: [{ agentId: 'prisma-data', task: `${goal} 의 스키마 + 마이그레이션`, model: 'gpt-5.5' }],
+      },
+      {
+        phase: 2,
+        description: 'API + 비즈니스 로직 (NestJS)',
+        parallel: false,
+        dependsOn: [1],
+        members: [{ agentId: 'nestjs-backend', task: `${goal} API`, model: 'claude-opus-4-7' }],
+      },
+      {
+        phase: 3,
+        description: 'UI + 상태관리 (Flutter, 병렬)',
+        parallel: true,
+        dependsOn: [2],
+        members: [
+          { agentId: 'flutter-ui', task: `${goal} 화면`, model: 'claude-opus-4-7' },
+          { agentId: 'riverpod-logic', task: `${goal} 상태관리`, model: 'claude-opus-4-7' },
+          { agentId: 'dio-retrofit', task: `${goal} API 클라이언트`, model: 'claude-opus-4-7' },
+        ],
+      },
+      {
+        phase: 4,
+        description: '통합 테스트 + 코드 리뷰',
+        parallel: true,
+        dependsOn: [3],
+        members: [
+          { agentId: 'test-writer', task: `${goal} e2e 테스트`, model: 'claude-opus-4-7' },
+          { agentId: 'code-reviewer', task: 'diff 리뷰', model: 'claude-opus-4-7' },
+          { agentId: 'security-auditor', task: 'OWASP 점검', model: 'gpt-5.5' },
+          { agentId: 'spec-verifier', task: '스펙 정합성', model: 'gpt-5.5' },
+        ],
+      },
+    ],
+    notes:
+      'v0.7.0 template. 멤버 task 채우고 execute 로 phase 별 sequential. ' +
+      '같은 phase 안 멤버는 worktree 격리되어 병렬 안전. dependsOn 순서대로 자동 진행.',
+  }
+
+  emit(plan)
+}
+
+/**
+ * forge-team execute — plan.json 의 한 phase 만 실행.
+ *   --plan <file>     plan JSON 파일
+ *   --phase <n>       실행할 phase (없으면 첫 미완료 phase 추론은 v0.7.1)
+ *   --merge           phase 완료 후 자동 merge (모든 멤버 done 가정)
+ *
+ * v0.7.0: 단일 phase 만 실행. phase 의 모든 멤버를 forge-team create 로 spawn.
+ *         완료 자동 감지는 v0.7.1+ (멤버가 inbox 'task_complete' 보내는 패턴).
+ *         사용자가 모든 멤버 끝나면 --merge 다시 호출.
+ */
+async function cmdExecute(flags: Map<string, string>): Promise<void> {
+  const planFile = requireFlag(flags, 'plan')
+  const workspacePath = requireFlag(flags, 'workspace')
+  const phaseArg = flags.get('phase')
+  const merge = flags.get('merge') === 'true'
+
+  const fs = await import('fs/promises')
+  let plan: PlanDocument
+  try {
+    const buf = await fs.readFile(planFile, 'utf-8')
+    plan = JSON.parse(buf) as PlanDocument
+  } catch (err) {
+    fail(`plan 파일 읽기 실패: ${(err as Error).message}`)
+  }
+
+  if (!phaseArg) {
+    fail('--phase <n> 필요. 첫 phase 부터 sequential 자동 실행은 v0.7.1+')
+  }
+  const phaseNum = parseInt(phaseArg, 10)
+  if (isNaN(phaseNum)) fail(`--phase 는 숫자여야: ${phaseArg}`)
+
+  const phase = plan.phases.find((p) => p.phase === phaseNum)
+  if (!phase) fail(`phase ${phaseNum} 없음 (plan 의 phases: ${plan.phases.map((p) => p.phase).join(', ')})`)
+
+  if (merge) {
+    // Caller signals phase 완료 — base branch 로 merge 시도
+    // 다만 plan 의 phase 자체가 한 팀 ≠ 한 phase 라 — 사용자가 team-id 명시 필요
+    const teamId = requireFlag(flags, 'team-id')
+    const result = await ops.merge(workspacePath, teamId, {
+      mergeStrategy: (flags.get('merge-strategy') as MergeStrategy | undefined) ?? 'squash',
+    })
+    emit({ phase: phaseNum, ...result })
+    if (!result.ok) process.exit(2)
+    return
+  }
+
+  // Spawn — phase 의 모든 멤버를 한 forge-team create 로
+  const teamName = `${plan.goal.slice(0, 24)}-phase${phaseNum}`
+  const result = await ops.create({
+    workspaceId: plan.workspaceId,
+    workspacePath,
+    name: teamName,
+    goal: phase.description,
+    members: phase.members,
+    worktreeStrategy: (flags.get('worktree-strategy') as WorktreeStrategy | undefined) ?? 'isolated',
+    mergeStrategy: (flags.get('merge-strategy') as MergeStrategy | undefined) ?? 'squash',
+    autoStartClaude: flags.get('no-auto-start') !== 'true',
+  })
+  emit({ phase: phaseNum, ...result, instructions: `완료 후 \`forge-team execute --plan ${planFile} --phase ${phaseNum} --team-id ${result.teamId} --merge\`` })
+}
+
 async function cmdResume(flags: Map<string, string>): Promise<void> {
   const workspacePath = resolveWorkspace(flags)
   const teamId = requireFlag(flags, 'team-id')
@@ -212,6 +361,8 @@ function printHelp(): void {
       '  merge    Merge member branches back into the team base branch',
       '  pause    Pause an entire team or a single member (--agent-id)',
       '  resume   Resume an entire team or a single member (--agent-id)',
+      '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
+      '  execute  plan.json 의 단일 phase 실행 (--phase n) 또는 머지 (--merge)',
       '',
       'Common flags:',
       '  --workspace <path>          Workspace root (required)',
@@ -271,6 +422,13 @@ async function main(): Promise<void> {
         break
       case 'resume':
         await cmdResume(flags)
+        break
+      case 'plan':
+        await cmdPlan(flags)
+        break
+      case 'execute':
+      case 'run':
+        await cmdExecute(flags)
         break
       default:
         fail(`unknown command: ${command} (try \`forge-team help\`)`)
