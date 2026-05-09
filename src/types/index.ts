@@ -208,6 +208,9 @@ export interface Team {
 export interface TeamCreateMember {
   agentId: string
   task?: string
+  /** Provider model id (claude-opus-4-7 / gpt-5.5 / etc). 멤버 spawn 시
+   *  ProviderRouter 가 해당 CLI 로 dispatch. 미지정 시 claude default. */
+  model?: string
 }
 
 export interface TeamCreateOptions {
