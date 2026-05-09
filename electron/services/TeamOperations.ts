@@ -3,6 +3,7 @@ import os from 'os'
 import fs from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { resolveProvider } from './ProviderRouter'
 
 const execFileAsync = promisify(execFile)
 
@@ -42,12 +43,7 @@ export interface TeamCreateMember {
 
 /** Map a model identifier to the bypass-mode launch command. */
 export function modelLaunchCommand(model: string | undefined): string {
-  const m = (model ?? '').toLowerCase()
-  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('codex')) {
-    return 'codex --dangerously-bypass-approvals-and-sandbox'
-  }
-  // Default: claude (opus / sonnet / haiku / claude-* / unspecified).
-  return 'claude --dangerously-skip-permissions'
+  return resolveProvider(model).launchCommand
 }
 
 export interface TeamCreateOptions {
