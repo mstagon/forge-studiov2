@@ -30,6 +30,8 @@ export interface TeamMember {
   /** Optional tmux pane id — when present, the member can attach to a real
    *  terminal session via `window.api.teams.openAgentTerminal`. */
   tmuxPaneId?: string
+  /** Inbox unread count — drives the AgentCard mail icon badge. */
+  unreadCount?: number
 }
 
 export interface Team {

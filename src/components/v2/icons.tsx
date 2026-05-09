@@ -64,6 +64,7 @@ export const Icon = {
   File:     (p: IconProps) => <I {...p}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></I>,
   Diff:     (p: IconProps) => <I {...p}><path d="M5 4v16M5 8h6M5 14h6M19 4v16M13 16h6M13 10h6"/></I>,
   Send:     (p: IconProps) => <I {...p}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></I>,
+  Mail:     (p: IconProps) => <I {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></I>,
   Dot:      (p: IconProps) => <I {...p}><circle cx="12" cy="12" r="4" fill="currentColor"/></I>,
   More:     (p: IconProps) => <I {...p}><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></I>,
   Kbd:      (p: IconProps) => <I {...p}><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></I>,

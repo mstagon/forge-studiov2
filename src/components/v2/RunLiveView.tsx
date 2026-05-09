@@ -23,6 +23,7 @@ import type { Team, TeamMember, ActivityItem, MemberState, TerminalLine } from '
 import { MergeConflictView, type ConflictItem } from './MergeConflictView'
 import { LiveTerminalGrid } from './LiveTerminalGrid'
 import { useLiveTerminalsStore } from '@/stores/liveTerminals'
+import { InboxPanel } from './InboxPanel'
 import {
   useTeamActivityStore,
   type ActivityEntry as RealActivityEntry,
@@ -75,6 +76,7 @@ export function RunLiveView({
 }: RunLiveViewProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [feedOpen, setFeedOpen] = useState(true)
+  const [inboxAgent, setInboxAgent] = useState<string | null>(null)
   // Local paused fallback for the design demo (when no real backend status).
   const [localPaused, setLocalPaused] = useState(false)
   const paused = team.status === 'paused' || localPaused
@@ -369,6 +371,8 @@ export function RunLiveView({
                 }
                 onTogglePause={() => handlePauseMember(m)}
                 onOpenTerminal={() => handleOpenAgentTerminal(m)}
+                onOpenInbox={() => setInboxAgent(m.name ?? m.agentId)}
+                unreadCount={m.unreadCount ?? 0}
               />
             ))}
           </div>
@@ -489,6 +493,14 @@ export function RunLiveView({
           onClose={() => setActiveConflict(null)}
         />
       )}
+      {inboxAgent && (
+        <InboxPanel
+          teamId={team.id}
+          agentName={inboxAgent}
+          otherMembers={team.members.map((m) => ({ agentId: m.agentId, name: m.name }))}
+          onClose={() => setInboxAgent(null)}
+        />
+      )}
     </div>
   )
 }
@@ -560,6 +572,10 @@ interface AgentCardProps {
   onTogglePause?: () => void
   /** Open the agent's tmux pane in a new terminal tab. */
   onOpenTerminal?: () => void
+  /** Open the inbox panel for this member (member ↔ member messages). */
+  onOpenInbox?: () => void
+  /** Unread message count for the inbox icon badge. */
+  unreadCount?: number
 }
 
 function AgentCard({
@@ -568,6 +584,8 @@ function AgentCard({
   onClick,
   onTogglePause,
   onOpenTerminal,
+  onOpenInbox,
+  unreadCount = 0,
 }: AgentCardProps) {
   const a = AGENT_BY_ID[member.agentId]
   const stateC = STATE_COLOR[member.state]
@@ -672,6 +690,43 @@ function AgentCard({
             >
               <Icon.Terminal size={11} />
             </CardIconBtn>
+          )}
+          {onOpenInbox && (
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <CardIconBtn
+                title={`${a.name} inbox · 팀원 메시지`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpenInbox()
+                }}
+              >
+                <Icon.Mail size={11} />
+              </CardIconBtn>
+              {unreadCount > 0 && (
+                <span
+                  aria-label={`${unreadCount} unread`}
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    minWidth: 14,
+                    height: 14,
+                    padding: '0 4px',
+                    background: 'var(--danger)',
+                    color: '#fff',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    borderRadius: 7,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>
