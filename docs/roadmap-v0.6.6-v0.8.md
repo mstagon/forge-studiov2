@@ -211,35 +211,39 @@ GUI 가 chokidar 로 자동 반영 (~120ms)
 
 ## 8. 진행 추적 체크리스트
 
-### v0.6.5 (현재 빌드 완료, 검증 대기)
-- [x] WorkspaceV2 mount 보존
-- [ ] 사용자가 새 .app 으로 시나리오 검증 (+ 버튼 → claude → Library → 다시)
-- [ ] 결과 보고 — 통과 / 실패
+### v0.6.5 ✅ (2026-05-08)
+- [x] WorkspaceV2 항상 mount + display 토글
 
-### v0.6.6 (다음)
-- [ ] baseBranch 네이밍 fix (`team/<id>-base`)
-- [ ] worktree 생성 정상 작동 검증
-- [ ] inbox sendMessage IPC + handler
-- [ ] inbox UI (RunLiveView 멤버 카드 클릭 → 패널)
-- [ ] 멤버 config 에 model 필드 (조용히 추가)
-- [ ] CHANGELOG + tag + DMG + release
+### v0.6.6 ✅ (2026-05-09)
+- [x] baseBranch 네이밍 fix (`team/<id>-base`)
+- [x] inbox sendMessage / readInbox / markInboxRead IPC + handlers
+- [x] InboxPanel UI (멤버 카드 mail 아이콘 클릭 → 우측 패널)
+- [x] 멤버 카드 unreadCount 배지
+- [x] 멤버 config 에 model 필드 + bypass flag 분기 (claude/codex)
 
-### v0.7.0
-- [ ] ProviderRouter
-- [ ] CouncilOrchestrator (planner)
-- [ ] forge-team plan / execute CLI
-- [ ] CHANGELOG + tag + DMG + release
+### v0.7.0 ✅ (2026-05-10)
+- [x] ProviderRouter (claude/codex 매핑 + bypass flag + --model arg)
+- [x] forge-team plan CLI (default 풀스택 phase template)
+- [x] forge-team execute CLI (--phase n 단일 실행 / --merge)
 
-### v0.7.1
-- [ ] Code review 3종 모델 다양화
-- [ ] Council escalation 메커니즘
+### v0.7.1 ✅ (2026-05-10)
+- [x] AgentCard model 배지 (OPUS/SONNET/HAIKU/GPT/CLAUDE)
+- [x] Wizard onCreate 의 defaultModelFor() 자동 매핑
 
-### v0.8.0
-- [ ] Sprint Manager 탭
-- [ ] Discussion 탭
-- [ ] Wizard Council 토글
-- [ ] 멤버 model 배지
-- [ ] 자동 dependency 분석
+### v0.8.0 ✅ (2026-05-10) — Minimum viable
+- [x] Sprint Manager 탭 (⌘5)
+- [x] plan.json 로드/편집 (textarea + 파일)
+- [x] phase 카드 + 의존성 표시 + Spawn 버튼
+- [x] 진행률 추적 (멤버 status 기반)
+
+### v0.8.1+ (다음)
+- [ ] Council 자동 토론 (멤버 inbox round-robin prompt)
+- [ ] 자동 dependency 분석 (멤버 task 의 expected_files 추적 → 같은 파일 → sequential 변환)
+- [ ] phase 자동 진행 (이전 phase done 감지 시 다음 spawn)
+- [ ] Discussion 탭 (RunLiveView 의 Council round 메시지)
+- [ ] Wizard "Council mode" 토글 + UI
+- [ ] 사용자 명시 멤버 model 선택 UI (Wizard step 추가)
+- [ ] 충돌 자동 감지 + 사용자 alert
 
 ## 9. Known issues / 결정사항
 
