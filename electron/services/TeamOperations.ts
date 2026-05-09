@@ -31,6 +31,23 @@ export type MergeStrategy = 'squash' | 'sequential'
 export interface TeamCreateMember {
   agentId: string
   task?: string
+  /**
+   * Provider model id. Routes to the correct CLI on autoStart:
+   *   - claude / opus / sonnet / haiku  →  `claude --dangerously-skip-permissions`
+   *   - gpt / o1 / o3 / codex            →  `codex --dangerously-bypass-approvals-and-sandbox`
+   * Defaults to claude (Anthropic) when omitted.
+   */
+  model?: string
+}
+
+/** Map a model identifier to the bypass-mode launch command. */
+export function modelLaunchCommand(model: string | undefined): string {
+  const m = (model ?? '').toLowerCase()
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('codex')) {
+    return 'codex --dangerously-bypass-approvals-and-sandbox'
+  }
+  // Default: claude (opus / sonnet / haiku / claude-* / unspecified).
+  return 'claude --dangerously-skip-permissions'
 }
 
 export interface TeamCreateOptions {
@@ -300,7 +317,13 @@ export class TeamOperations {
     let teamBaseBranch: string | undefined
     if (gitOk && opts.worktreeStrategy === 'isolated') {
       baseBranch = await this.resolveBaseBranch(wsPath)
-      teamBaseBranch = `team/${teamId}`
+      // baseBranch suffix `-base` — git refs hierarchy is filesystem-like and
+      // a branch named `team/<id>` cannot coexist with member branches
+      // `team/<id>/<agent>` (file vs directory clash). Pre-v0.6.6 layouts
+      // hit this and silently fell back to shared mode. The `-base` suffix
+      // keeps the parent dir `team/` clean: `team/<id>-base` is a file,
+      // `team/<id>/` is a directory, both fit under the same parent.
+      teamBaseBranch = `team/${teamId}-base`
       await this.ensureBranch(wsPath, teamBaseBranch, baseBranch)
     } else if (gitOk) {
       baseBranch = await this.resolveBaseBranch(wsPath)
@@ -318,7 +341,10 @@ export class TeamOperations {
         agentId: m.agentId,
         name: m.agentId,
         agentType: m.agentId,
-        model: 'sonnet-4.5',
+        // Honor the caller's model override; default to claude opus for new
+        // members. The autoStart spawner reads this to pick the right CLI
+        // (claude vs codex) with the matching bypass flag.
+        model: m.model ?? 'claude-opus-4-7',
         joinedAt: now + idx,
         task: m.task,
         state: 'active',
@@ -380,7 +406,12 @@ export class TeamOperations {
           }
           if (autoStart) {
             try {
-              await execFileAsync(tmux, ['send-keys', '-t', session, 'claude', 'Enter'], {
+              // bypass-permissions: 멤버는 자율 실행이 정책. 사용자가 매 도구마다
+              // 승인할 수 없으므로 모델별 적절한 bypass flag 로 spawn.
+              // 격리 worktree + isolated tmux session 이라 blast radius 는 멤버 본인
+              // worktree 로 한정됨 (메인 세션 + 다른 멤버 분리).
+              const launchCmd = modelLaunchCommand(member.model)
+              await execFileAsync(tmux, ['send-keys', '-t', session, launchCmd, 'Enter'], {
                 timeout: 4000,
                 env,
               })
@@ -582,6 +613,93 @@ export class TeamOperations {
   }
 
   // ── Merge ────────────────────────────────────────────────────────────
+
+  /**
+   * Append a message to a team member's inbox file. The watcher's
+   * loadInbox/summariseInbox already reads `<teamDir>/inboxes/<member>.json`
+   * — this method just writes new entries that conform to the InboxMessage
+   * shape. Used for inter-member communication (Council, async hand-off).
+   */
+  async sendInboxMessage(
+    workspacePath: string | null,
+    teamId: string,
+    fromAgent: string,
+    toAgent: string,
+    text: string,
+    summary?: string
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!teamId || !fromAgent || !toAgent || !text) {
+      return { ok: false, error: 'teamId, fromAgent, toAgent, text are required' }
+    }
+    const teamsDir = this.teamsDirFor(workspacePath)
+    const teamDir = path.join(teamsDir, teamId)
+    const inboxDir = path.join(teamDir, 'inboxes')
+    const inboxPath = path.join(inboxDir, `${toAgent}.json`)
+    try {
+      await fs.mkdir(inboxDir, { recursive: true })
+      let existing: unknown[] = []
+      try {
+        const buf = await fs.readFile(inboxPath, 'utf-8')
+        const parsed = JSON.parse(buf)
+        if (Array.isArray(parsed)) existing = parsed
+      } catch {
+        // first message in this inbox — leave existing as []
+      }
+      existing.push({
+        from: fromAgent,
+        text,
+        summary: summary ?? text.slice(0, 120),
+        timestamp: new Date().toISOString(),
+        read: false,
+      })
+      await fs.writeFile(inboxPath, JSON.stringify(existing, null, 2), 'utf-8')
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
+  /**
+   * Mark all messages in a member's inbox as read. The renderer calls this
+   * when the user opens the inbox panel for that member.
+   */
+  async markInboxRead(
+    workspacePath: string | null,
+    teamId: string,
+    agentName: string
+  ): Promise<{ ok: boolean; error?: string }> {
+    const teamsDir = this.teamsDirFor(workspacePath)
+    const inboxPath = path.join(teamsDir, teamId, 'inboxes', `${agentName}.json`)
+    try {
+      const buf = await fs.readFile(inboxPath, 'utf-8')
+      const parsed = JSON.parse(buf)
+      if (!Array.isArray(parsed)) return { ok: true }
+      const updated = parsed.map((m: { read?: boolean }) => ({ ...m, read: true }))
+      await fs.writeFile(inboxPath, JSON.stringify(updated, null, 2), 'utf-8')
+      return { ok: true }
+    } catch (err) {
+      const msg = (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : (err as Error).message
+      return msg ? { ok: false, error: msg } : { ok: true }
+    }
+  }
+
+  /** Read a member's inbox messages (newest first). */
+  async readInbox(
+    workspacePath: string | null,
+    teamId: string,
+    agentName: string
+  ): Promise<Array<{ from: string; text: string; summary?: string; timestamp: string; read?: boolean }>> {
+    const teamsDir = this.teamsDirFor(workspacePath)
+    const inboxPath = path.join(teamsDir, teamId, 'inboxes', `${agentName}.json`)
+    try {
+      const buf = await fs.readFile(inboxPath, 'utf-8')
+      const parsed = JSON.parse(buf)
+      if (!Array.isArray(parsed)) return []
+      return parsed.slice().reverse()
+    } catch {
+      return []
+    }
+  }
 
   async merge(
     workspacePath: string | null,

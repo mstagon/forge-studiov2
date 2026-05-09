@@ -375,6 +375,26 @@ export class AgentTeamWatcher extends EventEmitter {
     return this.ops.merge(this.workspacePath, teamId, opts)
   }
 
+  /** Member ↔ member 메시지: 상대 멤버의 inbox 에 entry append. */
+  async sendInboxMessage(
+    workspacePath: string | null,
+    teamId: string,
+    fromAgent: string,
+    toAgent: string,
+    text: string,
+    summary?: string
+  ): Promise<{ ok: boolean; error?: string }> {
+    return this.ops.sendInboxMessage(workspacePath ?? this.workspacePath, teamId, fromAgent, toAgent, text, summary)
+  }
+
+  async readInbox(workspacePath: string | null, teamId: string, agentName: string) {
+    return this.ops.readInbox(workspacePath ?? this.workspacePath, teamId, agentName)
+  }
+
+  async markInboxRead(workspacePath: string | null, teamId: string, agentName: string) {
+    return this.ops.markInboxRead(workspacePath ?? this.workspacePath, teamId, agentName)
+  }
+
   /**
    * Tear down a team:
    *   1. Kill each member tmux session.
