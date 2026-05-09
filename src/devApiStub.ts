@@ -138,6 +138,9 @@ export function installDevApiStub(): void {
       openAgentTerminal: (() => Promise.resolve('dev-pty-1')) as AnyFn,
       subscribe: noopUnsub as AnyFn,
       onUpdate: noopUnsub as AnyFn,
+      sendMessage: resolveOk as AnyFn,
+      readInbox: resolveEmptyArr as AnyFn,
+      markInboxRead: resolveOk as AnyFn,
     }),
     git: loggingProxy('git', {
       status: (() =>

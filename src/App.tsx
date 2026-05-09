@@ -74,6 +74,7 @@ function toV2Team(team: StoreTeam): V2Team {
       pane: m.name?.slice(0, 4).toUpperCase() ?? 'PANE',
       name: m.name,
       tmuxPaneId: m.tmuxPaneId,
+      unreadCount: m.unreadCount,
     }
   })
   // Aggregate run status: paused (team) > blocked > active > paused (members)
@@ -560,10 +561,25 @@ export default function App() {
     )
   }
 
-  // Map current view → main content
-  let main: React.ReactNode
-  if (view === 'workspace') {
-    main = (
+  // Map current view → main content.
+  //
+  // WorkspaceV2 stays mounted across view changes (display toggled via the
+  // wrapper below). Otherwise navigating to Library/Settings/Git tears down
+  // TerminalAreaV2 + its private SlotRegistry + every <XTerminal>, killing
+  // the user's `claude` shell and resetting the viewport on return — exactly
+  // the "다른 화면 갔다오면 터미널 초기화" regression we kept missing.
+  // Other views (git/dashboard/library/settings) stay conditional because
+  // they don't host live PTYs.
+  const workspaceVisible = view === 'workspace'
+  const workspaceNode = (
+    <div
+      style={{
+        display: workspaceVisible ? 'flex' : 'none',
+        flex: 1,
+        minHeight: 0,
+        flexDirection: 'column',
+      }}
+    >
       <WorkspaceV2
         workspace={activeSummary}
         runs={runs}
@@ -573,21 +589,31 @@ export default function App() {
         onNewRun={onNewRun}
         harnessUpdate={!!harnessUpdateAvailable}
       />
-    )
-  } else if (view === 'git') {
-    main = <GitPanelWired />
+    </div>
+  )
+
+  let secondaryView: React.ReactNode = null
+  if (view === 'git') {
+    secondaryView = <GitPanelWired />
   } else if (view === 'dashboard') {
-    main = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
+    secondaryView = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
   } else if (view === 'library') {
-    main = (
+    secondaryView = (
       <Library
         workspace={activeSummary}
         onApplyComposition={onApplyComposition}
       />
     )
   } else if (view === 'settings') {
-    main = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
+    secondaryView = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
   }
+
+  const main = (
+    <>
+      {workspaceNode}
+      {secondaryView}
+    </>
+  )
 
   return (
     <LiveTerminalsRoot>

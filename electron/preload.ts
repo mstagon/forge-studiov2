@@ -408,6 +408,15 @@ const api = {
       conflicts?: { file: string; theirsBranch: string; oursBranch: string; conflictMarkers: string }[]
       error?: string
     }> => ipcRenderer.invoke('teams:merge', teamId, opts),
+    /** Member ↔ member 메시지: 상대 멤버의 inbox 에 entry append. */
+    sendMessage: (opts: { teamId: string; fromAgent: string; toAgent: string; text: string; summary?: string }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('teams:sendMessage', opts),
+    /** 멤버의 inbox 읽기 (newest first). */
+    readInbox: (opts: { teamId: string; agentName: string }): Promise<Array<{ from: string; text: string; summary?: string; timestamp: string; read?: boolean }>> =>
+      ipcRenderer.invoke('teams:readInbox', opts),
+    /** 멤버의 inbox 모든 메시지 read 플래그 갱신. */
+    markInboxRead: (opts: { teamId: string; agentName: string }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('teams:markInboxRead', opts),
   },
 
   // ─── Team Activity ───────────────────────────────────────────────
