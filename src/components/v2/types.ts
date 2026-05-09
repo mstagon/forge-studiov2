@@ -87,7 +87,7 @@ export interface TerminalLine {
 
 export type TerminalLines = Record<string, TerminalLine[]>
 
-export type ViewKey = 'workspace' | 'git' | 'dashboard' | 'library' | 'settings'
+export type ViewKey = 'workspace' | 'git' | 'dashboard' | 'library' | 'settings' | 'sprint'
 
 export interface ResourceUsage {
   cpu: number

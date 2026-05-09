@@ -28,6 +28,7 @@ function buildNavItems(): NavItem[] {
     { id: 'git',       label: t('sidebar.git'),       icon: Icon.Git,    kbd: '⌘2' },
     { id: 'dashboard', label: t('sidebar.dashboard'), icon: Icon.Grid,   kbd: '⌘3' },
     { id: 'library',   label: t('sidebar.library'),   icon: Icon.Cube,   kbd: '⌘4' },
+    { id: 'sprint',    label: 'Sprint',                icon: Icon.Layers, kbd: '⌘5' },
   ]
 }
 
