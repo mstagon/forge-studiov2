@@ -1161,7 +1161,38 @@ ipcMain.handle(
   }
 )
 
+/**
+ * Cache of agent-terminal PTYs keyed by `${teamId}:${agentName}`.
+ *
+ * Why cache: previously every renderer-side mount of <XTerminal> for an agent
+ * called this handler, which always spawned a fresh `tmux attach` PTY. The
+ * old PTY's master fd would eventually close (component unmount, cleanup),
+ * sending SIGHUP through tmux to the pane's `claude` process — exactly the
+ * "다른 화면 갔다오면 claude 꺼짐" regression. Even with our v0.6.3 portal
+ * lift + cleanup-skip, transient remounts still produced new attach clients
+ * with their own empty xterm buffers (= "터미널 내부 내용 전부 초기화됨").
+ *
+ * With this cache, the SAME ptyId is returned for the same (teamId, agentName),
+ * so the renderer reuses the same data stream. The cache entry is cleared
+ * automatically on PTY exit (process death) or when the team is removed.
+ */
+const agentPtyCache = new Map<string, string>()
+
+function agentPtyKey(teamId: string, agentName: string): string {
+  return `${teamId}:${agentName}`
+}
+
 ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; agentName: string; cols: number; rows: number }) => {
+  const cacheKey = agentPtyKey(options.teamId, options.agentName)
+  const cached = agentPtyCache.get(cacheKey)
+  if (cached) {
+    // Reuse the existing PTY. The renderer re-subscribes to data/exit events
+    // on its own (window.api.pty.onData/onExit), so we don't need to re-wire
+    // the bridge here. Returning the same id keeps the tmux attach client
+    // alive across <XTerminal> remounts — no new SIGHUP, no buffer reset.
+    return cached
+  }
+
   const teams = agentTeamWatcher.list()
   const team = teams.find((t) => t.id === options.teamId)
   if (!team) throw new Error(`Team not found: ${options.teamId}`)
@@ -1176,12 +1207,16 @@ ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; ag
     rows: options.rows,
     paneId: member.tmuxPaneId,
   })
+  agentPtyCache.set(cacheKey, id)
 
   ptyManager.onData(id, (data) => {
     mainWindow?.webContents.send(`pty:data:${id}`, data)
   })
 
   ptyManager.onExit(id, (exitCode) => {
+    // The PTY died (claude exit, tmux session kill, manual dispose). Clear
+    // the cache so the next openAgentTerminal call provisions a fresh attach.
+    agentPtyCache.delete(cacheKey)
     mainWindow?.webContents.send(`pty:exit:${id}`, exitCode)
   })
 
