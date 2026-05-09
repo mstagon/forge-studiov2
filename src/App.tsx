@@ -12,6 +12,7 @@ import { useLiveTerminalsStore } from './stores/liveTerminals'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
 import { Library } from './components/v2/Library'
 import { SettingsFull } from './components/v2/SettingsFull'
+import { SprintManager } from './components/v2/SprintManager'
 import { Wizard, type WizardResult } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
@@ -629,6 +630,8 @@ export default function App() {
     )
   } else if (view === 'settings') {
     secondaryView = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
+  } else if (view === 'sprint') {
+    secondaryView = <SprintManager />
   }
 
   const main = (
