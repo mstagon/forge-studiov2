@@ -75,6 +75,7 @@ function toV2Team(team: StoreTeam): V2Team {
       name: m.name,
       tmuxPaneId: m.tmuxPaneId,
       unreadCount: m.unreadCount,
+      model: m.model,
     }
   })
   // Aggregate run status: paused (team) > blocked > active > paused (members)
@@ -345,6 +346,25 @@ export default function App() {
     setWizardOpen(true)
   }
 
+  /**
+   * Map an agent id to its recommended provider model — drives default model
+   * selection on team create. roadmap-v0.6.6-v0.8.md "에이전트별 추천 모델"
+   * 표 그대로:
+   *   - GPT 강점 (blast radius / 형식 검증 / 정확성):
+   *     prisma-data, security-auditor, spec-verifier, refactor-cleaner
+   *   - Opus 강점 (creative / 큰 그림 / 자연어): 그 외
+   * Council (양 model 동시 spawn) 은 v0.8.x — 여기선 단일 best-fit.
+   */
+  function defaultModelFor(agentId: string): string {
+    const gpt = new Set([
+      'prisma-data',
+      'security-auditor',
+      'spec-verifier',
+      'refactor-cleaner',
+    ])
+    return gpt.has(agentId) ? 'gpt-5.5' : 'claude-opus-4-7'
+  }
+
   const onWizardCreate = async (result: WizardResult) => {
     if (!activeWorkspace) {
       // Without a workspace we have nowhere to write the team config — silently
@@ -358,7 +378,10 @@ export default function App() {
         workspacePath: activeWorkspace.path,
         name: result.name,
         goal: result.goal,
-        members: result.members.map((agentId) => ({ agentId })),
+        // 각 멤버의 default model 매핑 — roadmap 의 "에이전트별 추천 모델" 적용:
+        // GPT (영향 분석/형식 검증) vs Opus (creative/큰 그림). 사용자가
+        // Wizard UI 에서 override 하는 건 v0.8.0+.
+        members: result.members.map((agentId) => ({ agentId, model: defaultModelFor(agentId) })),
         worktreeStrategy: result.worktree,
         mergeStrategy: result.merge,
       })

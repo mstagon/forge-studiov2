@@ -768,12 +768,48 @@ function AgentCard({
       >
         <span>{member.tokens > 0 ? `${(member.tokens / 1000).toFixed(1)}k` : '—'} tok</span>
         <span>{member.files} 파일</span>
+        {member.model && (
+          <span
+            title={`provider model: ${member.model}`}
+            style={{
+              padding: '0 5px',
+              borderRadius: 3,
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              border: '1px solid var(--line-2)',
+              color: modelBadgeColor(member.model),
+              background: 'transparent',
+            }}
+          >
+            {modelBadgeLabel(member.model)}
+          </span>
+        )}
         <span style={{ color: stateC, fontWeight: 600, letterSpacing: 0.3 }}>
           {STATE_LABEL[member.state]}
         </span>
       </div>
     </div>
   )
+}
+
+function modelBadgeLabel(model: string): string {
+  const m = model.toLowerCase()
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('codex') || m.startsWith('openai')) {
+    return 'GPT'
+  }
+  if (m.includes('opus')) return 'OPUS'
+  if (m.includes('sonnet')) return 'SONNET'
+  if (m.includes('haiku')) return 'HAIKU'
+  return 'CLAUDE'
+}
+
+function modelBadgeColor(model: string): string {
+  const m = model.toLowerCase()
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('codex') || m.startsWith('openai')) {
+    return 'var(--info)'
+  }
+  return 'var(--accent)'
 }
 
 // ─── Tiny icon-only button used inside AgentCard ────────────────────
