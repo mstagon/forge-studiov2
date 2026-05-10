@@ -214,6 +214,50 @@ export class TeamOperations {
     }
   }
 
+  /**
+   * 빈 repo (initial commit 없음) 시 자동 initial commit 만들어 base 를 확보.
+   * 워크스페이스가 `git init` 만 한 상태이거나 빈 디렉토리들만 있으면 branch
+   * 자체가 못 만들어져 worktree 생성 실패 → silent fallback to shared 가
+   * 발생. v0.9.5 — 사용자가 "빈 프로젝트로 팀 만들기" 시도해도 작동.
+   */
+  private async ensureInitialCommit(workspacePath: string): Promise<void> {
+    const env = this.tmuxEnv()
+    try {
+      // `git rev-parse HEAD` 가 통과하면 commit 이미 있음 → no-op
+      await execFileAsync('git', ['-C', workspacePath, 'rev-parse', 'HEAD'], {
+        timeout: 3000,
+        env,
+      })
+      return
+    } catch {
+      // commit 없음 — 진행
+    }
+    try {
+      // 빈 commit 으로 base 만들기. 사용자 데이터 안 건드림.
+      await execFileAsync(
+        'git',
+        ['-C', workspacePath, 'commit', '--allow-empty', '-m', 'forge-team: initial commit (auto)'],
+        { timeout: 5000, env }
+      )
+    } catch (err) {
+      // commit 자체 실패 — git config user.name/email 미설정 가능. 명시 fallback.
+      const stderr = ((err as { stderr?: Buffer | string }).stderr ?? '').toString()
+      if (stderr.includes('user.name') || stderr.includes('user.email')) {
+        try {
+          await execFileAsync('git', ['-C', workspacePath, 'config', 'user.name', 'Forge Team'], { timeout: 3000, env })
+          await execFileAsync('git', ['-C', workspacePath, 'config', 'user.email', 'forge-team@local'], { timeout: 3000, env })
+          await execFileAsync(
+            'git',
+            ['-C', workspacePath, 'commit', '--allow-empty', '-m', 'forge-team: initial commit (auto)'],
+            { timeout: 5000, env }
+          )
+        } catch {
+          // 두 번째 시도도 실패 — 그냥 계속 (worktree 생성 시 다시 실패할 거)
+        }
+      }
+    }
+  }
+
   private async resolveBaseBranch(workspacePath: string): Promise<string> {
     try {
       const { stdout } = await execFileAsync(
@@ -323,6 +367,10 @@ export class TeamOperations {
     let baseBranch: string | undefined
     let teamBaseBranch: string | undefined
     if (gitOk && opts.worktreeStrategy === 'isolated') {
+      // Empty repo guard: 빈 워크스페이스(initial commit 없음)는 branch 자체를
+      // 못 만든다 → ensureBranch silent 실패 → worktreesCreated:0 fallback.
+      // v0.9.5 — 자동 initial commit 로 base 보장 (사용자가 빈 폴더로 시작해도 작동).
+      await this.ensureInitialCommit(wsPath)
       baseBranch = await this.resolveBaseBranch(wsPath)
       // baseBranch suffix `-base` — git refs hierarchy is filesystem-like and
       // a branch named `team/<id>` cannot coexist with member branches
@@ -378,7 +426,17 @@ export class TeamOperations {
             member.branch = memberBranch
             memberCwd = worktreePath
             worktreesCreated++
-          } catch {
+          } catch (err) {
+            // v0.9.5 — silent fallback 대신 stderr 노출로 사용자가 진단 가능.
+            // 흔한 원인: 워크스페이스에 commit 0 (ensureInitialCommit 가 fix
+            // 시도하지만 실패할 수도) / 같은 worktree path 가 이미 존재 /
+            // refs hierarchy 충돌.
+            const stderr = ((err as { stderr?: Buffer | string }).stderr ?? '').toString().trim()
+            const message = stderr || (err as Error).message
+            process.stderr.write(
+              `[forge-team] worktree 생성 실패 (${m.agentId}): ${message}\n` +
+              `  → shared 모드로 fallback. 멤버는 메인 워크트리에서 작업.\n`
+            )
             memberCwd = wsPath
           }
         }
@@ -413,17 +471,43 @@ export class TeamOperations {
           }
           if (autoStart) {
             try {
-              // bypass-permissions: 멤버는 자율 실행이 정책. 사용자가 매 도구마다
-              // 승인할 수 없으므로 모델별 적절한 bypass flag 로 spawn.
-              // 격리 worktree + isolated tmux session 이라 blast radius 는 멤버 본인
-              // worktree 로 한정됨 (메인 세션 + 다른 멤버 분리).
+              // bypass-permissions: 멤버는 자율 실행이 정책. 모델별 적절한
+              // bypass flag 로 spawn. 격리 worktree + isolated tmux session 이라
+              // blast radius 는 멤버 본인 worktree 로 한정됨.
               const launchCmd = modelLaunchCommand(member.model)
               await execFileAsync(tmux, ['send-keys', '-t', session, launchCmd, 'Enter'], {
                 timeout: 4000,
                 env,
               })
+
+              // v0.9.5 — task 자동 주입. claude/codex 가 부팅 시간 필요해서
+              // 1.5s 대기 후 task 텍스트 send. 부팅 안 끝났으면 멤버가 입력
+              // buffering 해서 처리 (claude/codex 둘 다 readline buffering).
+              if (member.task) {
+                const taskPrompt = [
+                  `당신은 팀 "${opts.name}" 의 멤버 "${member.name}".`,
+                  `목표: ${opts.goal ?? opts.name}`,
+                  `자기 task: ${member.task}`,
+                  member.worktreePath && member.worktreePath !== wsPath
+                    ? `자기 worktree: ${member.worktreePath} (cwd 이미 거기). git commit 은 자기 worktree 에서.`
+                    : `자기 worktree: 메인 디렉토리 공유 (shared mode). 자기 sub-directory 만 건드리고 git add/commit 은 메인 세션에 위임.`,
+                  member.branch
+                    ? `자기 브랜치: ${member.branch}`
+                    : '',
+                  `진행: 자율적으로 자기 task 수행. 막히면 inbox 에 다른 멤버 또는 메인에게 메시지.`,
+                ].filter(Boolean).join('\n')
+
+                // 1.5s 대기 — claude/codex 부팅 + 첫 prompt 표시까지 충분.
+                // tmux 의 sleep 은 send-keys 의 -t flag 와 함께 못 써서
+                // 별도 setTimeout 으로 순서 보장.
+                await new Promise<void>((resolve) => setTimeout(resolve, 1500))
+                await execFileAsync(tmux, ['send-keys', '-t', session, taskPrompt, 'Enter'], {
+                  timeout: 4000,
+                  env,
+                })
+              }
             } catch {
-              // ignore
+              // ignore — autoStart 실패는 non-fatal (사용자가 수동 send-keys 가능)
             }
           }
           if (realPaneId) {
