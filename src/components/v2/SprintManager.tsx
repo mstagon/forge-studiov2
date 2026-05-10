@@ -15,7 +15,7 @@
 //   - phase 자동 진행 (이전 phase 모두 done 이면 다음 자동 spawn)
 //   - 결과 머지 자동
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useAgentTeamStore } from '@/stores/agentTeam'
 import type { TeamCreateMember } from '@/types'
@@ -60,6 +60,8 @@ export function SprintManager() {
   const [error, setError] = useState<string | null>(null)
   const [busyPhase, setBusyPhase] = useState<number | null>(null)
   const [spawnedTeams, setSpawnedTeams] = useState<Record<number, string>>({})
+  const [mergedPhases, setMergedPhases] = useState<Set<number>>(new Set())
+  const [autoAdvance, setAutoAdvance] = useState(true)
 
   const plan: PlanDocument | null = useMemo(() => {
     try {
@@ -82,6 +84,46 @@ export function SprintManager() {
     const running = team.members.filter((m) => m.status === 'running' || m.status === 'active').length
     return { total, done, running }
   }
+
+  // 단계 머지 + (옵션) 다음 단계 자동 spawn
+  const handleMergeAndAdvance = useCallback(
+    async (p: PlanPhase) => {
+      if (!plan || !activeWorkspace) return
+      const teamId = spawnedTeams[p.phase]
+      if (!teamId) return
+      setBusyPhase(p.phase)
+      setError(null)
+      try {
+        const result = await useAgentTeamStore.getState().merge(teamId)
+        if (!result || result.ok === false) {
+          setError(`병합 실패: ${result?.error ?? '알 수 없음'}`)
+          return
+        }
+        setMergedPhases((prev) => {
+          const next = new Set(prev)
+          next.add(p.phase)
+          return next
+        })
+        // 자동 진행: 의존성이 이 phase 만이고 아직 spawn 안 된 다음 단계 자동 시작
+        if (autoAdvance) {
+          const next = plan.phases.find(
+            (q) =>
+              !spawnedTeams[q.phase] &&
+              q.dependsOn?.includes(p.phase) &&
+              (q.dependsOn ?? []).every((d) => mergedPhases.has(d) || d === p.phase),
+          )
+          if (next) {
+            await handleSpawn(next)
+          }
+        }
+      } catch (err) {
+        setError((err as Error).message)
+      } finally {
+        setBusyPhase(null)
+      }
+    },
+    [plan, activeWorkspace, spawnedTeams, autoAdvance, mergedPhases],
+  )
 
   async function handleSpawn(p: PlanPhase) {
     if (!activeWorkspace) {
@@ -141,9 +183,17 @@ export function SprintManager() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h1 style={{ margin: 0, fontSize: 22, color: 'var(--text-1)' }}>작업 계획</h1>
-        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1 }}>
           단계별 팀 작업 실행 — 큰 작업을 여러 단계로 쪼개고 각 단계마다 멤버 팀 spawn
         </span>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={autoAdvance}
+            onChange={(e) => setAutoAdvance(e.target.checked)}
+          />
+          자동 진행 (단계 머지 후 다음 단계 자동 시작)
+        </label>
       </div>
 
       {/* Plan input */}
@@ -327,9 +377,11 @@ export function SprintManager() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {teamId ? (
-                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                    <span style={{ fontSize: 11, color: mergedPhases.has(p.phase) ? 'var(--success)' : 'var(--text-3)' }}>
                       <Icon.Check size={11} style={{ verticalAlign: -2, marginRight: 4 }} />
-                      팀 시작됨 — {progress.running}/{progress.total} 작업 중, {progress.done} 완료
+                      {mergedPhases.has(p.phase)
+                        ? '병합 완료'
+                        : `팀 시작됨 — ${progress.running}/${progress.total} 작업 중, ${progress.done} 완료`}
                     </span>
                   ) : (
                     <span style={{ fontSize: 11, color: dependencyMet ? 'var(--text-3)' : 'var(--warn)' }}>
@@ -353,6 +405,25 @@ export function SprintManager() {
                       }}
                     >
                       {busyPhase === p.phase ? '시작 중…' : '단계 시작'}
+                    </button>
+                  )}
+                  {teamId && !mergedPhases.has(p.phase) && (
+                    <button
+                      disabled={busyPhase === p.phase}
+                      onClick={() => void handleMergeAndAdvance(p)}
+                      title="이 단계의 모든 멤버 작업이 끝났으면 머지 후 다음 단계 자동 시작 (자동 진행 켜진 경우)"
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        background: 'var(--success)',
+                        border: '1px solid var(--line-2)',
+                        color: 'var(--bg-1)',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {busyPhase === p.phase ? '머지 중…' : '단계 완료 + 머지'}
                     </button>
                   )}
                 </div>
