@@ -1227,9 +1227,8 @@ ipcMain.handle('teams:openAgentTerminal', (_event, options: { teamId: string; ag
 // ─── IPC Handlers: Inbox (member ↔ member 메시지) ───────────────────
 
 ipcMain.handle('teams:sendMessage', async (_event, opts: { teamId: string; fromAgent: string; toAgent: string; text: string; summary?: string }) => {
-  const ws = workspaceManager.getActive()
   return agentTeamWatcher.sendInboxMessage(
-    ws?.path ?? null,
+    activeWorkspacePathForMetrics,
     opts.teamId,
     opts.fromAgent,
     opts.toAgent,
@@ -1239,18 +1238,15 @@ ipcMain.handle('teams:sendMessage', async (_event, opts: { teamId: string; fromA
 })
 
 ipcMain.handle('teams:readInbox', async (_event, opts: { teamId: string; agentName: string }) => {
-  const ws = workspaceManager.getActive()
-  return agentTeamWatcher.readInbox(ws?.path ?? null, opts.teamId, opts.agentName)
+  return agentTeamWatcher.readInbox(activeWorkspacePathForMetrics, opts.teamId, opts.agentName)
 })
 
 ipcMain.handle('teams:markInboxRead', async (_event, opts: { teamId: string; agentName: string }) => {
-  const ws = workspaceManager.getActive()
-  return agentTeamWatcher.markInboxRead(ws?.path ?? null, opts.teamId, opts.agentName)
+  return agentTeamWatcher.markInboxRead(activeWorkspacePathForMetrics, opts.teamId, opts.agentName)
 })
 
 ipcMain.handle('teams:detectConflicts', async (_event, opts: { teamId: string }) => {
-  const ws = workspaceManager.getActive()
-  return agentTeamWatcher.detectMemberConflicts(ws?.path ?? null, opts.teamId)
+  return agentTeamWatcher.detectMemberConflicts(activeWorkspacePathForMetrics, opts.teamId)
 })
 
 // ─── IPC Handlers: Integrations / .env tokens ───────────────────────
