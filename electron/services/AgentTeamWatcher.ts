@@ -395,6 +395,11 @@ export class AgentTeamWatcher extends EventEmitter {
     return this.ops.markInboxRead(workspacePath ?? this.workspacePath, teamId, agentName)
   }
 
+  /** 멤버 worktree 사이의 같은 파일 수정 감지 — 머지 충돌 사전 경고. */
+  async detectMemberConflicts(workspacePath: string | null, teamId: string) {
+    return this.ops.detectMemberConflicts(workspacePath ?? this.workspacePath, teamId)
+  }
+
   /**
    * Tear down a team:
    *   1. Kill each member tmux session.

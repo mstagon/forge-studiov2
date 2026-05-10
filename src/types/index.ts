@@ -221,6 +221,8 @@ export interface TeamCreateOptions {
   members: TeamCreateMember[]
   worktreeStrategy: WorktreeStrategy
   mergeStrategy: MergeStrategy
+  /** 협의 모드 (Council) — 멤버 inbox 에 협의 지시 자동 작성. */
+  council?: boolean
 }
 
 export type SidebarView = 'workspaces' | 'git' | 'teams' | 'dashboard' | 'settings'

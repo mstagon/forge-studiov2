@@ -1098,9 +1098,10 @@ ipcMain.handle(
       workspacePath: string
       name: string
       goal?: string
-      members: { agentId: string; task?: string }[]
+      members: { agentId: string; task?: string; model?: string }[]
       worktreeStrategy: 'isolated' | 'shared'
       mergeStrategy: 'squash' | 'sequential'
+      council?: boolean
     }
   ) => {
     const result = await agentTeamWatcher.create(opts)
@@ -1245,6 +1246,11 @@ ipcMain.handle('teams:readInbox', async (_event, opts: { teamId: string; agentNa
 ipcMain.handle('teams:markInboxRead', async (_event, opts: { teamId: string; agentName: string }) => {
   const ws = workspaceManager.getActive()
   return agentTeamWatcher.markInboxRead(ws?.path ?? null, opts.teamId, opts.agentName)
+})
+
+ipcMain.handle('teams:detectConflicts', async (_event, opts: { teamId: string }) => {
+  const ws = workspaceManager.getActive()
+  return agentTeamWatcher.detectMemberConflicts(ws?.path ?? null, opts.teamId)
 })
 
 // ─── IPC Handlers: Team Activity ────────────────────────────────────
