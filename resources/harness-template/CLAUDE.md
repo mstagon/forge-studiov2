@@ -52,7 +52,39 @@
 
 ---
 
-# 큰 피처 기획 강제 워크플로 (MANDATORY)
+# 시나리오 분기 — 작은 기능 vs 큰 앱
+
+요청 받으면 먼저 **시나리오 판정** 후 적절한 워크플로:
+
+| 시그널 | 분류 | 워크플로 |
+|---|---|---|
+| 기존 client/server/cms 가 부트스트랩 됨 + 명확한 scope ("OAuth 추가", "검색 화면", "버그 fix") | **A. 작은 기능** | Phase 0 mini → Phase 1 단일 → Phase 2 통합 |
+| 빈 디렉토리 또는 client/server/cms 비어있음 + 큰 주제 ("앱 만들어줘", "채팅앱", "쇼핑몰") | **B. 큰 앱** | Phase 0~5 풀 워크플로 |
+
+## 시나리오 A — 작은 기능 추가 (예: "OAuth 로그인")
+
+### Phase 0-mini: 외부 의존만 빠르게 확인
+- 새 외부 provider 필요한가? (OAuth = Google / Kakao / GitHub 중)
+- 새 환경 변수 필요한가? (Settings → Integrations 토큰 입력 안내)
+
+### Phase 1: 단일 phase 4명 병렬 (의존 chain 짧음)
+```
+test-writer (Tests, 먼저 spawn)
+  + prisma-data (Database, schema 변경)
+  + nestjs-backend (Backend, API)
+  + flutter-ui (Frontend, UI)
+```
+isolated worktree 격리되어 4명 병렬 OK. 머지 후 다음.
+
+### Phase 2: 통합 테스트 + 리뷰
+- code-reviewer + security-auditor 병렬
+- /verify + /test-coverage
+
+## 시나리오 B — 큰 앱 부트스트랩 (예: "1ㄷ1 채팅앱")
+
+전체 Phase 0~5 풀 워크플로 — 아래 강제 단계 따름.
+
+# 큰 피처 기획 강제 워크플로 (MANDATORY for 시나리오 B)
 
 큰 작업 ("앱 만들어줘", "기능 추가해줘") 받으면 **반드시 다음 0~5 단계
 순서대로**. 이전 단계 결과 없이 다음 단계 못 간다.
@@ -131,12 +163,48 @@ default (각 항목의 첫 옵션 = Recommended) 선택 후 명시.
 Plan 의 phase 별로 sequential. 각 phase 안의 members 는 parallel:true 면
 한 번에 spawn, false 면 한 명씩.
 
+**핵심**: `--members` 에 JSON 배열로 전달해서 `role` + `expectedFiles` 를
+포함시켜라. 이 정보가 멤버 spawn 시 task prompt 에 자동 주입되어
+**멤버가 자기 영역 + 다른 멤버 영역 + 충돌 회피 지시 모두 인지** 한다.
+이게 핵심 — 동일 폴더 작업 시 충돌 사전 방지의 메커니즘.
+
 ```bash
+MEMBERS='[
+  {
+    "agentId": "test-writer",
+    "role": "Tests",
+    "task": "Phase 1 의 모든 module 의 실패 테스트 먼저 작성",
+    "expectedFiles": ["server/test/**/*.spec.ts", "client/test/**/*.dart"],
+    "model": "claude-opus-4-7"
+  },
+  {
+    "agentId": "prisma-data",
+    "role": "Database",
+    "task": "User Friendship ChatRoom Message MessageRead 스키마 + 마이그레이션",
+    "expectedFiles": ["prisma/schema.prisma", "prisma/migrations/**"],
+    "model": "gpt-5.5"
+  },
+  {
+    "agentId": "nestjs-backend",
+    "role": "Backend",
+    "task": "프로젝트 부트스트랩 + 인증 모듈 (Passport + JWT + bcrypt)",
+    "expectedFiles": ["server/src/**", "server/package.json", "server/tsconfig.json"],
+    "model": "claude-opus-4-7"
+  },
+  {
+    "agentId": "flutter-ui",
+    "role": "Frontend",
+    "task": "Flutter 부트스트랩 + Clean Architecture 골격 + 로그인/회원가입 화면",
+    "expectedFiles": ["client/**", "client/pubspec.yaml"],
+    "model": "claude-opus-4-7"
+  }
+]'
+
 forge-team create \
-  --workspace <ws> \
-  --name "<goal>-phase<n>" \
-  --goal "<phase description>" \
-  --members "<agentId1:task1,agentId2:task2,...>" \
+  --workspace . \
+  --name "chat-app-phase1" \
+  --goal "1ㄷ1 채팅앱 부트스트랩 + 스키마 + 인증" \
+  --members "$MEMBERS" \
   --worktree-strategy isolated \
   --merge-strategy squash \
   --auto-start
@@ -145,6 +213,44 @@ forge-team create \
 **`worktreesCreated: 0` 이 나오면 즉시 중단**. shared mode fallback 은
 멤버끼리 git race 발생 → 사용자에게 보고하고 재시도. v0.9.5 부터 빈 repo
 자동 처리되지만 다른 결함이면 stderr 로 표시됨.
+
+### 멤버에 자동 주입되는 prompt (참고)
+
+forge-team CLI 가 멤버 spawn 직후 tmux send-keys 로 다음 prompt 자동 전송
+(claude/codex 부팅 후 1.5s):
+
+```
+[Forge Team 자동 안내] 당신은 팀 "<name>" 의 멤버 "<member-name>".
+역할: <role>
+팀 목표: <goal>
+
+### 당신의 task
+<task>
+
+### 당신의 책임 영역 (only these files)
+  - <expectedFiles[0]>
+  - <expectedFiles[1]>
+이 영역 외의 파일은 수정하지 마세요. 다른 멤버 영역 침범 금지.
+
+### 같은 팀의 다른 멤버 (절대 그들 영역 건드리지 마세요)
+  - Backend (nestjs-backend) — 영역: server/**, server/package.json
+  - Database (prisma-data) — 영역: prisma/schema.prisma, prisma/migrations/**
+  - Tests (test-writer) — 영역: server/test/**, client/test/**
+다른 멤버 영역에 변경 필요하면 inbox 로 협의 요청.
+
+### 작업 환경
+- 자기 worktree: <path> (격리됨)
+- 자기 브랜치: <branch> — 작업 중 자유롭게 commit
+- 메인 세션이 추후 forge-team merge 로 통합
+
+### 진행 룰
+- TDD 우선
+- 자기 task 외엔 손대지 말 것
+- 막히면 inbox 의 다른 멤버 또는 메인에게 메시지
+```
+
+이게 **메인 세션이 팀원에게 역할 + 계획을 주입하는 메커니즘**. 동일 폴더에서도
+멤버가 자기 영역 외 안 건드리게 강제.
 
 ## Phase 4 — 머지 + 검증 (per phase)
 
