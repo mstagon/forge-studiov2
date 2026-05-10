@@ -16,6 +16,7 @@ import { Btn, Pill, Dot, AvatarStack } from './primitives'
 import { Icon } from './icons'
 import type { WorkspaceSummary } from './types'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useModelPolicyStore, type ModelRole } from '@/stores/modelPolicy'
 import { CodeGraphViz } from './CodeGraphViz'
 import { HarnessLintPanel } from './HarnessLintPanel'
 import { SessionPreview } from './SessionPreview'
@@ -306,26 +307,86 @@ function Toggle({ value, onChange }: ToggleProps) {
   )
 }
 
-function Select({ value }: { value: string }) {
+/**
+ * 진짜 native select. onChange 가 있으면 controlled, 없으면 read-only
+ * (마이그레이션 호환 — onChange 안 단 옛 호출은 그대로 표시만).
+ *
+ * 기본값으로 Anthropic + OpenAI 의 자주 쓰는 모델 list 를 옵션 으로 제공.
+ * 호출자가 options 를 명시하면 그것 우선.
+ */
+const DEFAULT_MODEL_OPTIONS = [
+  'claude-opus-4-7',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+  'opus-4',
+  'sonnet-4.5',
+  'haiku-4.5',
+  'gpt-5.5',
+  'o1-preview',
+  'o3',
+]
+
+function Select({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: string
+  options?: readonly string[]
+  onChange?: (v: string) => void
+  disabled?: boolean
+}) {
+  const opts = options ?? (DEFAULT_MODEL_OPTIONS.includes(value) ? DEFAULT_MODEL_OPTIONS : [value, ...DEFAULT_MODEL_OPTIONS])
+  if (!onChange) {
+    // 호출자가 onChange 안 줬으면 read-only 라벨 (옛 코드 호환)
+    return (
+      <div
+        style={{
+          height: 26,
+          padding: '0 8px',
+          borderRadius: 5,
+          background: 'var(--bg-3)',
+          border: '1px solid var(--line-2)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 12,
+          color: 'var(--text-3)',
+          cursor: 'not-allowed',
+          fontFamily: 'var(--font-mono)',
+          opacity: 0.7,
+        }}
+        title="이 항목은 아직 read-only — onChange 미구현"
+      >
+        {value} <Icon.ChevronD size={11} />
+      </div>
+    )
+  }
   return (
-    <div
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
       style={{
         height: 26,
         padding: '0 8px',
         borderRadius: 5,
         background: 'var(--bg-3)',
         border: '1px solid var(--line-2)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
         fontSize: 12,
         color: 'var(--text-1)',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'var(--font-mono)',
+        appearance: 'auto',
       }}
     >
-      {value} <Icon.ChevronD size={11} style={{ color: 'var(--text-3)' }} />
-    </div>
+      {opts.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -634,6 +695,122 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
   )
 }
 
+// ─── Agents — Models per role + per-agent override ────────────────
+
+function ModelsPerRoleCard() {
+  const byRole = useModelPolicyStore((s) => s.byRole)
+  const setRoleModel = useModelPolicyStore((s) => s.setRoleModel)
+  const reset = useModelPolicyStore((s) => s.reset)
+
+  const roles: Array<{ role: ModelRole; description: string }> = [
+    { role: 'Frontend', description: 'flutter-ui / riverpod-logic / dio-retrofit / nextjs-cms' },
+    { role: 'Backend', description: 'nestjs-backend / nestjs-auth' },
+    { role: 'Database', description: 'prisma-data / postgres-patterns (정확성 강점 → GPT 권장)' },
+    { role: 'Tests', description: 'test-writer / tdd-guide / flutter-driver-e2e' },
+    { role: 'Review', description: 'code-reviewer / security-auditor / spec-verifier / refactor-cleaner' },
+    { role: 'Architecture', description: 'tech-architect / planner' },
+    { role: 'Other', description: 'doc-updater / build-error-resolver / loop-operator / harness-optimizer / 사용자 정의' },
+  ]
+
+  return (
+    <SettingsCard
+      title="역할별 모델"
+      right={
+        <button
+          onClick={() => reset('all')}
+          style={{
+            padding: '4px 10px',
+            fontSize: 11,
+            background: 'transparent',
+            border: '1px solid var(--line-2)',
+            color: 'var(--text-3)',
+            borderRadius: 4,
+            cursor: 'pointer',
+          }}
+          title="모든 역할/에이전트 매핑을 default 로 리셋"
+        >
+          기본값으로
+        </button>
+      }
+    >
+      {roles.map((r, i) => (
+        <Row
+          key={r.role}
+          label={r.role}
+          sub={r.description}
+          right={
+            <Select
+              value={byRole[r.role]}
+              onChange={(v) => setRoleModel(r.role, v)}
+            />
+          }
+          last={i === roles.length - 1}
+        />
+      ))}
+    </SettingsCard>
+  )
+}
+
+function AgentOverridesCard() {
+  const byAgent = useModelPolicyStore((s) => s.byAgent)
+  const setAgentModel = useModelPolicyStore((s) => s.setAgentModel)
+  const reset = useModelPolicyStore((s) => s.reset)
+  const resolve = useModelPolicyStore((s) => s.resolveModel)
+
+  const allAgents = [
+    'planner', 'tech-architect', 'flutter-ui', 'riverpod-logic', 'dio-retrofit',
+    'nestjs-backend', 'nestjs-auth', 'prisma-data', 'postgres-patterns', 'nextjs-cms',
+    'test-writer', 'tdd-guide', 'flutter-driver-e2e', 'code-reviewer', 'security-auditor',
+    'spec-verifier', 'refactor-cleaner', 'doc-updater', 'docs-lookup',
+    'build-error-resolver', 'loop-operator', 'harness-optimizer',
+  ]
+
+  return (
+    <SettingsCard
+      title="에이전트별 override"
+      right={
+        <span style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
+          비워두면 역할별 모델 사용
+        </span>
+      }
+    >
+      {allAgents.map((agent, i) => {
+        const explicit = byAgent[agent]
+        const effective = resolve(agent)
+        return (
+          <div
+            key={agent}
+            style={{
+              padding: '10px 16px',
+              borderBottom: i < allAgents.length - 1 ? '1px solid var(--line-1)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <span className="mono" style={{ fontSize: 12, color: 'var(--text-1)', flex: 1 }}>
+              {agent}
+            </span>
+            {!explicit && (
+              <span style={{ fontSize: 10, color: 'var(--text-4)' }}>
+                자동 ({effective.toLowerCase().startsWith('gpt') ? 'GPT' : effective.toUpperCase().replace('CLAUDE-', '')})
+              </span>
+            )}
+            <Select
+              value={explicit ?? '(자동)'}
+              options={['(자동)', ...DEFAULT_MODEL_OPTIONS]}
+              onChange={(v) => {
+                if (v === '(자동)') reset({ agentId: agent })
+                else setAgentModel(agent, v)
+              }}
+            />
+          </div>
+        )
+      })}
+    </SettingsCard>
+  )
+}
+
 // ─── Agents ───────────────────────────────────────────────────────
 
 export function SettingsAgents() {
@@ -694,26 +871,8 @@ export function SettingsAgents() {
         />
       </SettingsCard>
 
-      <SettingsCard title="Models per role">
-        {(
-          [
-            { role: 'Frontend', model: 'sonnet-4.5', count: 1 },
-            { role: 'Backend', model: 'sonnet-4.5', count: 1 },
-            { role: 'Database', model: 'sonnet-4.5', count: 1 },
-            { role: 'Tests', model: 'haiku-4.5', count: 1 },
-            { role: 'Review', model: 'opus-4', count: 1 },
-            { role: 'Architecture', model: 'opus-4', count: 1 },
-          ] as const
-        ).map((r, i, arr) => (
-          <Row
-            key={r.role}
-            label={r.role}
-            sub={`${r.count} agents`}
-            right={<Select value={r.model} />}
-            last={i === arr.length - 1}
-          />
-        ))}
-      </SettingsCard>
+      <ModelsPerRoleCard />
+      <AgentOverridesCard />
     </>
   )
 }

@@ -5,6 +5,7 @@ import { useGitStore } from './stores/git'
 import { useAgentTeamStore } from './stores/agentTeam'
 import { useLibraryStore } from './stores/library'
 import { subscribeToMainErrors } from './stores/errorLog'
+import { useModelPolicyStore } from './stores/modelPolicy'
 
 import { Shell } from './components/v2/Shell'
 import { LiveTerminalsRoot } from './components/v2/LiveTerminalsRoot'
@@ -154,7 +155,11 @@ export default function App() {
   const [wizardPrefill, setWizardPrefill] = useState<string[] | undefined>(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState<{ name: string; count: number } | null>(null)
-  const [model] = useState({ id: 'sonnet-4.5', label: 'sonnet-4.5' })
+  // TopBar 의 모델 라벨 — modelPolicy store 의 'Other' 역할 default 표시.
+  // 사용자가 Settings 에서 변경하면 즉시 갱신. 클릭 시 Settings 의 Agents
+  // 섹션으로 이동 — Agent별 + 역할별 매핑 UI.
+  const topBarModel = useModelPolicyStore((s) => s.byRole.Other)
+  const model = useMemo(() => ({ id: topBarModel, label: topBarModel }), [topBarModel])
   // Harness update preview modal — opened from the orange HarnessBanner's
   // "diff 보기" button. Renders the file tree + per-file unified diff.
   const [updatePreviewOpen, setUpdatePreviewOpen] = useState(false)
@@ -348,22 +353,12 @@ export default function App() {
   }
 
   /**
-   * Map an agent id to its recommended provider model — drives default model
-   * selection on team create. roadmap-v0.6.6-v0.8.md "에이전트별 추천 모델"
-   * 표 그대로:
-   *   - GPT 강점 (blast radius / 형식 검증 / 정확성):
-   *     prisma-data, security-auditor, spec-verifier, refactor-cleaner
-   *   - Opus 강점 (creative / 큰 그림 / 자연어): 그 외
-   * Council (양 model 동시 spawn) 은 v0.8.x — 여기선 단일 best-fit.
+   * Map an agent id to its model. Settings → "역할별 모델" + "에이전트별
+   * override" 가 사용자 정책의 source of truth. 사용자가 명시 안 한
+   * 항목은 store 의 default (GPT 강점 = Database / 그 외 Opus).
    */
   function defaultModelFor(agentId: string): string {
-    const gpt = new Set([
-      'prisma-data',
-      'security-auditor',
-      'spec-verifier',
-      'refactor-cleaner',
-    ])
-    return gpt.has(agentId) ? 'gpt-5.5' : 'claude-opus-4-7'
+    return useModelPolicyStore.getState().resolveModel(agentId)
   }
 
   const onWizardCreate = async (result: WizardResult) => {
