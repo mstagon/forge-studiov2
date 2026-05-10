@@ -43,6 +43,18 @@ export interface TeamCreateMember {
    * Defaults to claude (Anthropic) when omitted.
    */
   model?: string
+  /**
+   * 자기 책임 파일/디렉토리 path 들. 다른 멤버는 건드리지 말 것 — 메인 세션의
+   * Phase 1 plan 의 expectedFiles 와 동일. autoStart task prompt 에 자동
+   * 포함되어 멤버 claude/codex 가 자기 영역 + 다른 멤버 영역 알고 충돌 회피.
+   * Shared worktree 모드에서 특히 중요.
+   */
+  expectedFiles?: string[]
+  /**
+   * 멤버의 역할 한 줄 — Frontend / Backend / Database 등. autoStart prompt
+   * 에 명시되어 멤버가 자기 정체성 명확. 빠뜨리면 agentId 에서 자동 추론.
+   */
+  role?: string
 }
 
 /** Map a model identifier to the bypass-mode launch command. */
@@ -109,6 +121,10 @@ export interface RawMember {
   worktreePath?: string
   branch?: string
   state?: 'active' | 'idle'
+  /** 자기 책임 영역 — autoStart prompt + Discussion/충돌 감지에 활용. */
+  expectedFiles?: string[]
+  /** 멤버 역할 (Frontend/Backend/Database 등). */
+  role?: string
 }
 
 export interface RawConfig {
@@ -403,6 +419,10 @@ export class TeamOperations {
         joinedAt: now + idx,
         task: m.task,
         state: 'active',
+        // v0.9.7 — boundary 정보. autoStart task prompt 가 자기 영역 + 다른
+        // 멤버 영역 명시해서 shared/isolated 어느 모드든 충돌 회피.
+        expectedFiles: m.expectedFiles,
+        role: m.role,
       }
 
       // ── Worktree provisioning ──────────────────────────────────────
@@ -450,7 +470,15 @@ export class TeamOperations {
       if (tmuxOk && memberCwd) {
         const session = teamSessionName(teamId, m.agentId)
         const tmux = this.tmuxBin()
-        const env = this.tmuxEnv()
+        // v0.9.7 — FORGE_TEAM_ID + FORGE_MEMBER_NAME env 주입.
+        // forge-boundary-guard.sh PreToolUse hook 이 이걸 보고 멤버 영역
+        // 외 파일 수정 시도 차단. 메인 세션은 이 env 없어서 통과.
+        const env = {
+          ...this.tmuxEnv(),
+          FORGE_TEAM_ID: teamId,
+          FORGE_MEMBER_NAME: member.name,
+          FORGE_TEAM_NAME: opts.name,
+        }
         try {
           await execFileAsync(
             tmux,
@@ -480,26 +508,63 @@ export class TeamOperations {
                 env,
               })
 
-              // v0.9.5 — task 자동 주입. claude/codex 가 부팅 시간 필요해서
-              // 1.5s 대기 후 task 텍스트 send. 부팅 안 끝났으면 멤버가 입력
-              // buffering 해서 처리 (claude/codex 둘 다 readline buffering).
+              // v0.9.5 — task 자동 주입. claude/codex 부팅 1.5s 후 prompt send.
+              // v0.9.7 — 멤버 별 역할 + 자기 책임 영역 + 다른 멤버 영역 + 충돌
+              // 회피 지시 자동 포함. 사용자 요구: "메인 세션이 팀원 역할 + 계획
+              // 명확히 주입해야 동일 폴더에서도 충돌 안 남".
               if (member.task) {
-                const taskPrompt = [
-                  `당신은 팀 "${opts.name}" 의 멤버 "${member.name}".`,
-                  `목표: ${opts.goal ?? opts.name}`,
-                  `자기 task: ${member.task}`,
-                  member.worktreePath && member.worktreePath !== wsPath
-                    ? `자기 worktree: ${member.worktreePath} (cwd 이미 거기). git commit 은 자기 worktree 에서.`
-                    : `자기 worktree: 메인 디렉토리 공유 (shared mode). 자기 sub-directory 만 건드리고 git add/commit 은 메인 세션에 위임.`,
-                  member.branch
-                    ? `자기 브랜치: ${member.branch}`
-                    : '',
-                  `진행: 자율적으로 자기 task 수행. 막히면 inbox 에 다른 멤버 또는 메인에게 메시지.`,
-                ].filter(Boolean).join('\n')
+                const others = rawMembers.filter((o) => o.name !== member.name)
+                const otherRoles = others
+                  .map((o) => {
+                    const roleLabel = o.role ? `${o.role} (${o.name})` : o.name
+                    const files = o.expectedFiles?.length
+                      ? ` — 영역: ${o.expectedFiles.join(', ')}`
+                      : ''
+                    return `  - ${roleLabel}${files}`
+                  })
+                  .join('\n')
 
-                // 1.5s 대기 — claude/codex 부팅 + 첫 prompt 표시까지 충분.
-                // tmux 의 sleep 은 send-keys 의 -t flag 와 함께 못 써서
-                // 별도 setTimeout 으로 순서 보장.
+                const lines: string[] = []
+                lines.push(`[Forge Team 자동 안내] 당신은 팀 "${opts.name}" 의 멤버 "${member.name}".`)
+                if (member.role) lines.push(`역할: ${member.role}`)
+                lines.push(`팀 목표: ${opts.goal ?? opts.name}`)
+                lines.push('')
+                lines.push(`### 당신의 task`)
+                lines.push(member.task)
+                if (member.expectedFiles?.length) {
+                  lines.push('')
+                  lines.push(`### 당신의 책임 영역 (only these files)`)
+                  lines.push(member.expectedFiles.map((f) => `  - ${f}`).join('\n'))
+                  lines.push(`이 영역 외의 파일은 수정하지 마세요. 다른 멤버 영역 침범 금지.`)
+                }
+                if (others.length > 0) {
+                  lines.push('')
+                  lines.push(`### 같은 팀의 다른 멤버 (절대 그들 영역 건드리지 마세요)`)
+                  lines.push(otherRoles)
+                  lines.push(`다른 멤버 영역에 변경 필요하면 inbox 로 협의 요청 (forge-team-cli send-message).`)
+                }
+                lines.push('')
+                lines.push(`### 작업 환경`)
+                if (member.worktreePath && member.worktreePath !== wsPath) {
+                  lines.push(`- 자기 worktree: ${member.worktreePath} (격리됨, 다른 멤버와 별도)`)
+                  lines.push(`- 자기 브랜치: ${member.branch} — 작업 중 자유롭게 commit`)
+                  lines.push(`- 메인 세션이 추후 forge-team merge 로 통합`)
+                } else {
+                  lines.push(`- 메인 디렉토리 공유 (shared mode — worktree 격리 X)`)
+                  lines.push(`- 자기 sub-directory / 영역만 수정. git add/commit 은 메인 세션 일괄 처리.`)
+                  lines.push(`- 다른 멤버와 git race 가능 — 자기 영역 외엔 절대 건드리지 말 것.`)
+                }
+                lines.push('')
+                lines.push(`### 진행 룰`)
+                lines.push(`- TDD 우선: 실패 테스트 먼저 → 통과 코드. 멤버에 test-writer 가 있으면 그 결과 활용.`)
+                lines.push(`- 자기 task 외엔 손대지 말 것. 추가 작업 필요하면 메인 세션에게 inbox 로 의견 요청.`)
+                lines.push(`- 막히면 inbox 의 다른 멤버 또는 메인에게 메시지: \`forge-team-cli send-message --team-id ${teamId} --from ${member.name} --to <상대> --text "..."\``)
+                lines.push(`- 충돌/혼란 시 사용자 결정 받기보다 우선 inbox 협의.`)
+                lines.push('')
+                lines.push(`이제 자율적으로 task 진행하세요.`)
+
+                const taskPrompt = lines.join('\n')
+
                 await new Promise<void>((resolve) => setTimeout(resolve, 1500))
                 await execFileAsync(tmux, ['send-keys', '-t', session, taskPrompt, 'Enter'], {
                   timeout: 4000,
