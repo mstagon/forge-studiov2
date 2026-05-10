@@ -359,7 +359,7 @@ export function RunLiveView({
             flexDirection: 'column',
           }}
         >
-          <SectionHead title="Members" sub={`${team.members.length}`} />
+          <SectionHead title="멤버" sub={`${team.members.length}`} />
           <div style={{ overflowY: 'auto', flex: 1, padding: 8 }}>
             {team.members.map((m) => (
               <AgentCard
@@ -438,8 +438,8 @@ export function RunLiveView({
             }}
           >
             <SectionHead
-              title="Activity"
-              sub="real-time"
+              title="활동"
+              sub="실시간"
               right={
                 <button
                   onClick={() => setFeedOpen(false)}
