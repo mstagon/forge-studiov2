@@ -162,6 +162,15 @@ export function installDevApiStub(): void {
       read: resolveEmptyStr as AnyFn,
       write: (() => Promise.resolve()) as AnyFn,
     }),
+    // Mirrors preload.ts `fs` namespace. Stores like useFilesStore call
+    // `window.api.fs.listDir(...)` directly; without this stub, browser-mode
+    // (Vite without Electron) crashes the renderer with "Cannot read
+    // properties of undefined (reading 'listDir')".
+    fs: loggingProxy('fs', {
+      listDir: (() => Promise.resolve({ entries: [] })) as AnyFn,
+      readFile: (() =>
+        Promise.resolve({ content: null, truncated: false, binary: false, size: 0 })) as AnyFn,
+    }),
     system: loggingProxy('system', {
       openExternal: (() => Promise.resolve()) as AnyFn,
       showItemInFolder: (() => Promise.resolve()) as AnyFn,
