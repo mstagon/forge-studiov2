@@ -3,7 +3,11 @@ import os from 'os'
 import fs from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { resolveProvider } from './ProviderRouter'
+// .ts 확장자 명시 — Node 의 --experimental-strip-types 가 packaged
+// forge-team CLI 에서 module 을 resolve 할 때 ESM resolver 가 implicit
+// extension 을 안 채워주므로 명시 필요 (v0.9.4 fix). bin/forge-team.ts
+// 도 같은 패턴으로 './TeamOperations.ts' 명시 중.
+import { resolveProvider } from './ProviderRouter.ts'
 
 const execFileAsync = promisify(execFile)
 
