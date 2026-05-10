@@ -379,10 +379,12 @@ export default function App() {
         workspacePath: activeWorkspace.path,
         name: result.name,
         goal: result.goal,
-        // 각 멤버의 default model 매핑 — roadmap 의 "에이전트별 추천 모델" 적용:
-        // GPT (영향 분석/형식 검증) vs Opus (creative/큰 그림). 사용자가
-        // Wizard UI 에서 override 하는 건 v0.8.0+.
-        members: result.members.map((agentId) => ({ agentId, model: defaultModelFor(agentId) })),
+        // 각 멤버의 model 매핑: 사용자가 Wizard 에서 명시 선택 → memberModels[agentId],
+        // 미선택 → defaultModelFor(agentId) 자동 매핑 (roadmap "에이전트별 추천 모델").
+        members: result.members.map((agentId) => ({
+          agentId,
+          model: result.memberModels?.[agentId] || defaultModelFor(agentId),
+        })),
         worktreeStrategy: result.worktree,
         mergeStrategy: result.merge,
       })

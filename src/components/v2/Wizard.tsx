@@ -28,6 +28,16 @@ export interface WizardResult {
   members: string[]
   worktree: WorktreeStrategy
   merge: MergeStrategy
+  /**
+   * 멤버별 명시 model 선택 (옵션). 미지정 시 App.tsx 의 defaultModelFor()
+   * 가 agentId 기반 자동 매핑.
+   */
+  memberModels?: Record<string, string>
+  /**
+   * Council mode — 같은 멤버를 Opus + GPT 둘 다 spawn 해서 inbox round
+   * 토론 진행 (v0.9.0+). 지금은 토글만 — 효과 v0.9.x.
+   */
+  council?: boolean
 }
 
 export interface WizardProps {
@@ -49,6 +59,8 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
   const [selected, setSelected] = useState<string[]>([])
   const [worktree, setWorktree] = useState<WorktreeStrategy>('isolated')
   const [merge, setMerge] = useState<MergeStrategy>('squash')
+  const [memberModels, setMemberModels] = useState<Record<string, string>>({})
+  const [council, setCouncil] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -58,6 +70,8 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
       setSelected(prefillMembers ?? [])
       setWorktree('isolated')
       setMerge('squash')
+      setMemberModels({})
+      setCouncil(false)
     }
   }, [open, prefillMembers])
 
@@ -70,7 +84,7 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
     step === 4
 
   const submit = () => {
-    onCreate({ name, goal, members: selected, worktree, merge })
+    onCreate({ name, goal, members: selected, worktree, merge, memberModels, council })
     onClose()
   }
 
@@ -234,12 +248,21 @@ export function Wizard({ open, onClose, onCreate, prefillMembers }: WizardProps)
           {step === 1 && <Step1 name={name} setName={setName} goal={goal} setGoal={setGoal} />}
           {step === 2 && <Step2 selected={selected} setSelected={setSelected} />}
           {step === 3 && (
-            <Step3
-              worktree={worktree}
-              setWorktree={setWorktree}
-              merge={merge}
-              setMerge={setMerge}
-            />
+            <>
+              <Step3
+                worktree={worktree}
+                setWorktree={setWorktree}
+                merge={merge}
+                setMerge={setMerge}
+              />
+              <ModelAndCouncilStep
+                selected={selected}
+                memberModels={memberModels}
+                setMemberModels={setMemberModels}
+                council={council}
+                setCouncil={setCouncil}
+              />
+            </>
           )}
           {step === 4 && (
             <Step4
@@ -670,6 +693,120 @@ interface Step4Props {
   selected: string[]
   worktree: WorktreeStrategy
   merge: MergeStrategy
+}
+
+// ─── ModelAndCouncilStep: Step3 옆에 인라인으로 표시 ────────────────────
+
+interface ModelAndCouncilProps {
+  selected: string[]
+  memberModels: Record<string, string>
+  setMemberModels: (m: Record<string, string>) => void
+  council: boolean
+  setCouncil: (b: boolean) => void
+}
+
+function ModelAndCouncilStep({
+  selected,
+  memberModels,
+  setMemberModels,
+  council,
+  setCouncil,
+}: ModelAndCouncilProps) {
+  return (
+    <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--line-1)' }}>
+      <div style={{ marginBottom: 12 }}>
+        <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 4 }}>
+          AI 모델 선택
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          멤버 별로 어떤 AI 를 쓸지 명시. 미선택 시 자동: GPT 강점(스키마/보안/스펙)
+          → GPT, 그 외 → Claude Opus.
+        </div>
+      </div>
+      {selected.length === 0 ? (
+        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>
+          멤버를 먼저 선택하세요 (Step 2)
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+          {selected.map((agentId) => (
+            <div
+              key={agentId}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                background: 'var(--bg-1)',
+                border: '1px solid var(--line-1)',
+                borderRadius: 6,
+              }}
+            >
+              <span className="mono" style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>
+                {agentId}
+              </span>
+              <select
+                value={memberModels[agentId] ?? ''}
+                onChange={(e) => {
+                  const next = { ...memberModels }
+                  if (e.target.value === '') delete next[agentId]
+                  else next[agentId] = e.target.value
+                  setMemberModels(next)
+                }}
+                style={{
+                  background: 'var(--bg-2)',
+                  color: 'var(--text-1)',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 4,
+                  padding: '3px 6px',
+                  fontSize: 11,
+                }}
+              >
+                <option value="">자동</option>
+                <option value="claude-opus-4-7">Opus 4.7</option>
+                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+                <option value="claude-haiku-4-5">Haiku 4.5</option>
+                <option value="gpt-5.5">GPT-5.5</option>
+                <option value="o1-preview">o1-preview</option>
+                <option value="o3">o3</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Council toggle */}
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
+          marginTop: 16,
+          padding: '10px 12px',
+          background: council ? 'var(--accent-dim)' : 'var(--bg-1)',
+          border: `1px solid ${council ? 'var(--accent-line)' : 'var(--line-1)'}`,
+          borderRadius: 6,
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={council}
+          onChange={(e) => setCouncil(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>
+            협의 모드 (Council)
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+            같은 멤버를 Opus + GPT 두 모델로 동시 spawn 해서 inbox 로 round
+            토론. 합의안 출력. (구현: v0.9.x — 지금은 토글만 저장)
+          </div>
+        </div>
+      </label>
+    </div>
+  )
 }
 
 function Step4({ name, goal, selected, worktree, merge }: Step4Props) {
