@@ -86,8 +86,79 @@ isolated worktree 격리되어 4명 병렬 OK. 머지 후 다음.
 
 # 큰 피처 기획 강제 워크플로 (MANDATORY for 시나리오 B)
 
-큰 작업 ("앱 만들어줘", "기능 추가해줘") 받으면 **반드시 다음 0~5 단계
+큰 작업 ("앱 만들어줘", "기능 추가해줘") 받으면 **반드시 다음 -1~5 단계
 순서대로**. 이전 단계 결과 없이 다음 단계 못 간다.
+
+## Phase -1 — 기획 + 아키텍처 (Council 권장)
+
+진짜 plan 짜기 전에 **architect + planner** Council 로 큰 결정.
+단일 모델로 plan 내면 빈틈 많음 — Opus 의 큰 그림 + GPT 의 영향
+분석/edge case 두 시각 둘 다 필요.
+
+```bash
+forge-team create \
+  --workspace . \
+  --name "<goal>-architect" \
+  --goal "<사용자 요청 한 줄> — 아키텍처 + Phase 구조 + 멤버 분배 결정" \
+  --members '[
+    { "agentId": "tech-architect", "role": "Architecture", "task": "...", "model": "claude-opus-4-7" },
+    { "agentId": "planner",        "role": "Architecture", "task": "...", "model": "gpt-5.5" }
+  ]' \
+  --council \
+  --auto-start
+```
+
+산출물: phases.json (Phase 0~5 구조 + file-level 멤버 분배 + 의존성).
+
+## File-level Specialization (필수 — 팀 의미)
+
+**한 멤버 = 하나의 파일 카테고리**. 한 멤버가 UI + state + API + entity 다 하면
+팀 의미 0 — Phase 1 plan 짤 때 file-level 까지 분리하라.
+
+### Client (Flutter) 분배
+
+| 에이전트 | role | expectedFiles |
+|---|---|---|
+| `flutter-ui` | Frontend-View | `client/lib/presentation/screens/**`, `client/lib/presentation/widgets/**` |
+| `riverpod-logic` | Frontend-State | `client/lib/presentation/controllers/**`, `client/lib/presentation/providers/**`, `client/lib/domain/usecase/**` |
+| `dio-retrofit` | Frontend-Network | `client/lib/data/remote/**`, `client/lib/core/network/**` |
+| `freezed-models` | Frontend-Models | `client/lib/domain/entity/**`, `client/lib/data/**/dto/**` |
+
+### Server (NestJS) 분배
+
+| 에이전트 | role | expectedFiles |
+|---|---|---|
+| `prisma-data` | Database | `prisma/schema.prisma`, `prisma/migrations/**`, `server/src/prisma/**` |
+| `nestjs-backend` | Backend-Logic | `server/src/<domain>/<domain>.controller.ts`, `server/src/<domain>/<domain>.service.ts`, `server/src/<domain>/dto/**` |
+| `nestjs-auth` | Backend-Auth | `server/src/auth/**` |
+| `nestjs-module` | Backend-Module | `server/src/<domain>/<domain>.module.ts`, `server/src/app.module.ts` |
+
+### CMS (Next.js) 분배
+
+| 에이전트 | role | expectedFiles |
+|---|---|---|
+| `nextjs-cms` | CMS | `cms/app/**`, `cms/components/**`, `cms/lib/**` |
+
+### Tests / Cross-cutting
+
+| 에이전트 | role | expectedFiles |
+|---|---|---|
+| `test-writer` | Tests | `client/test/**`, `server/test/**`, `cms/__tests__/**`, `integration_test/**` |
+| `code-reviewer` | Review | (수정 X — diff 만 분석) |
+| `security-auditor` | Review | (수정 X — OWASP 검수) |
+| `spec-verifier` | Review | (수정 X — DTO sync 등 영향 분석) |
+
+### 자동 sequential 변환 룰
+
+같은 phase 안의 멤버들의 expectedFiles 가 **겹치면 충돌 가능 → 자동
+sequential 변환**. parallel:false 처리.
+
+예 — 화면 추가 시 같은 `screens/**` 영역에 두 멤버 작업 → 한 명만 spawn,
+완료 후 두 번째.
+
+또 — 한 멤버의 expectedFiles 가 다른 멤버 영역의 prefix 면 (예: `client/**` vs
+`client/lib/data/**`) — 더 좁은 멤버가 우선, 넓은 멤버는 그 외 영역만 +
+narrow 멤버 영역 read-only access.
 
 ## Phase 0 — 외부 인프라 사전 확인 (코드 작성 전 필수)
 
