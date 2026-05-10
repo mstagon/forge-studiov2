@@ -140,9 +140,9 @@ export function SprintManager() {
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 22, color: 'var(--text-1)' }}>Sprint</h1>
+        <h1 style={{ margin: 0, fontSize: 22, color: 'var(--text-1)' }}>작업 계획</h1>
         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          phase 기반 plan 실행 — `forge-team plan --goal "X"` 으로 plan.json 생성
+          단계별 팀 작업 실행 — 큰 작업을 여러 단계로 쪼개고 각 단계마다 멤버 팀 spawn
         </span>
       </div>
 
@@ -159,7 +159,7 @@ export function SprintManager() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>plan.json</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>계획 파일 (plan.json)</span>
           <button
             onClick={handleLoadFile}
             style={{
@@ -172,7 +172,7 @@ export function SprintManager() {
               cursor: 'pointer',
             }}
           >
-            파일 선택
+            파일 열기
           </button>
           <button
             onClick={() => setPlanText(JSON.stringify(SAMPLE_PLAN, null, 2))}
@@ -186,16 +186,16 @@ export function SprintManager() {
               cursor: 'pointer',
             }}
           >
-            예제 plan
+            예제 계획
           </button>
           <span style={{ flex: 1 }} />
           {plan ? (
             <span style={{ fontSize: 11, color: 'var(--success)' }}>
-              ✓ 유효 ({plan.phases.length} phases)
+              ✓ 유효 ({plan.phases.length} 단계)
             </span>
           ) : (
             <span style={{ fontSize: 11, color: 'var(--danger)' }}>
-              JSON parse 실패
+              계획 형식 오류 — JSON 확인
             </span>
           )}
         </div>
@@ -261,17 +261,17 @@ export function SprintManager() {
                   <span style={{ flex: 1 }} />
                   {p.parallel && (
                     <span style={{ fontSize: 10, color: 'var(--info)', padding: '2px 6px', border: '1px solid var(--line-2)', borderRadius: 3 }}>
-                      병렬
+                      동시 실행
                     </span>
                   )}
                   {p.council && (
                     <span style={{ fontSize: 10, color: 'var(--warn)', padding: '2px 6px', border: '1px solid var(--warn)', borderRadius: 3 }}>
-                      Council
+                      협의
                     </span>
                   )}
                   {p.dependsOn && p.dependsOn.length > 0 && (
                     <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
-                      ← phase {p.dependsOn.join(', ')}
+                      ← {p.dependsOn.join(', ')} 단계 후
                     </span>
                   )}
                 </div>
@@ -329,11 +329,11 @@ export function SprintManager() {
                   {teamId ? (
                     <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                       <Icon.Check size={11} style={{ verticalAlign: -2, marginRight: 4 }} />
-                      spawn 됨 — {progress.running}/{progress.total} 진행 중, {progress.done} done
+                      팀 시작됨 — {progress.running}/{progress.total} 작업 중, {progress.done} 완료
                     </span>
                   ) : (
                     <span style={{ fontSize: 11, color: dependencyMet ? 'var(--text-3)' : 'var(--warn)' }}>
-                      {dependencyMet ? '준비됨' : '의존 phase 미완료'}
+                      {dependencyMet ? '시작 가능' : '이전 단계 완료 대기'}
                     </span>
                   )}
                   <span style={{ flex: 1 }} />
@@ -352,7 +352,7 @@ export function SprintManager() {
                         cursor: dependencyMet ? 'pointer' : 'not-allowed',
                       }}
                     >
-                      {busyPhase === p.phase ? 'spawn 중…' : 'Spawn phase'}
+                      {busyPhase === p.phase ? '시작 중…' : '단계 시작'}
                     </button>
                   )}
                 </div>
