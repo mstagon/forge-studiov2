@@ -55,6 +55,13 @@ export interface TeamCreateOptions {
   worktreeStrategy: WorktreeStrategy
   mergeStrategy: MergeStrategy
   autoStartClaude?: boolean
+  /**
+   * 협의 모드: true 면 각 멤버 inbox 에 "Round 1: 자기 제안 작성 후 다른
+   * 멤버들에게 forge-team-cli 로 메시지 전달, Round 2: 다른 멤버 inbox
+   * 읽고 critique, Round 3: 합의안" 지시 메시지를 spawn 직후 자동 기록.
+   * Claude/Codex 가 첫 turn 에 inbox 읽고 따르도록 prompt engineering.
+   */
+  council?: boolean
 }
 
 export interface TeamCreateResult {
@@ -449,6 +456,34 @@ export class TeamOperations {
     const configPath = path.join(teamRoot, 'config.json')
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
 
+    // Council 모드: 각 멤버 inbox 에 협의 지시 첫 메시지 자동 작성.
+    // 멤버 claude/codex 가 spawn 직후 자기 inbox 보고 따르도록 prompt engineering.
+    if (opts.council && rawMembers.length > 1) {
+      const teamGoal = opts.goal ?? opts.name
+      const memberList = rawMembers.map((m) => m.name).join(', ')
+      for (const m of rawMembers) {
+        const others = rawMembers.filter((o) => o.name !== m.name).map((o) => o.name)
+        const text = [
+          `[협의 모드 자동 안내]`,
+          ``,
+          `당신은 팀 "${opts.name}" 의 멤버 "${m.name}". 목표: ${teamGoal}.`,
+          `다른 멤버: ${others.join(', ')}.`,
+          ``,
+          `협의 라운드:`,
+          `  1. 자기 제안 작성 → 다른 멤버 inbox 에 전달`,
+          `     (${others.map((o) => `\`forge-team-cli send-message --team-id ${teamId} --from ${m.name} --to ${o} --text "..."\``).join(' / ')})`,
+          `  2. 다른 멤버의 inbox 메시지 읽고 critique + 본인 제안 보완`,
+          `  3. 합의안 도출 → 모든 멤버에게 동일 메시지로 final 합의안 brodcast`,
+          ``,
+          `자기 worktree: ${m.worktreePath ?? '(공유)'}`,
+          `자기 브랜치: ${m.branch ?? '(unset)'}`,
+          ``,
+          `참고: 모든 ${memberList} 가 같은 메시지를 받았음. 각자 1번부터 진행.`,
+        ].join('\n')
+        await this.sendInboxMessage(opts.workspacePath, teamId, 'forge-team', m.name, text, '협의 모드 안내')
+      }
+    }
+
     return { teamId, configPath, worktreesCreated, tmuxSessionsStarted }
   }
 
@@ -677,6 +712,55 @@ export class TeamOperations {
       const msg = (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : (err as Error).message
       return msg ? { ok: false, error: msg } : { ok: true }
     }
+  }
+
+  /**
+   * 멤버 worktree 들의 변경 파일 비교 → 같은 파일 수정 alert.
+   *
+   * 같은 파일을 여러 멤버가 수정 중이면 머지 시 충돌 가능성. 사용자에게
+   * 미리 표시. v0.8.3 minimum: 단순 git status 기반. 고도화 (라인 단위
+   * overlap, semantic diff) 는 v0.9.x.
+   */
+  async detectMemberConflicts(
+    workspacePath: string | null,
+    teamId: string,
+  ): Promise<Array<{ file: string; members: string[] }>> {
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return []
+    const cfg = found.config
+    const env = this.tmuxEnv()
+    // (file → list of members touching it)
+    const fileMembers = new Map<string, Set<string>>()
+
+    for (const m of cfg.members) {
+      if (!m.worktreePath) continue
+      try {
+        const { stdout } = await execFileAsync(
+          'git',
+          ['-C', m.worktreePath, 'status', '--porcelain'],
+          { timeout: 5000, env },
+        )
+        const lines = stdout.split('\n').map((l) => l.trim()).filter(Boolean)
+        for (const line of lines) {
+          // porcelain v1: "XY <path>" — XY 2자리, then space, then path
+          const file = line.slice(3).split(' -> ').pop() ?? ''
+          const cleaned = file.replace(/^"(.*)"$/, '$1')
+          if (!cleaned) continue
+          if (!fileMembers.has(cleaned)) fileMembers.set(cleaned, new Set())
+          fileMembers.get(cleaned)!.add(m.name)
+        }
+      } catch {
+        // worktree 가 사라지거나 git 명령 실패 — 그 멤버 skip
+      }
+    }
+
+    const conflicts: Array<{ file: string; members: string[] }> = []
+    for (const [file, members] of fileMembers) {
+      if (members.size > 1) {
+        conflicts.push({ file, members: Array.from(members) })
+      }
+    }
+    return conflicts
   }
 
   /** Read a member's inbox messages (newest first). */

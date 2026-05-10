@@ -417,6 +417,9 @@ const api = {
     /** 멤버의 inbox 모든 메시지 read 플래그 갱신. */
     markInboxRead: (opts: { teamId: string; agentName: string }): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('teams:markInboxRead', opts),
+    /** 같은 파일 수정 중인 멤버 감지 — 머지 충돌 사전 경고. */
+    detectConflicts: (opts: { teamId: string }): Promise<Array<{ file: string; members: string[] }>> =>
+      ipcRenderer.invoke('teams:detectConflicts', opts),
   },
 
   // ─── Team Activity ───────────────────────────────────────────────

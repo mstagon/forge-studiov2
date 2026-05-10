@@ -24,6 +24,7 @@ import { MergeConflictView, type ConflictItem } from './MergeConflictView'
 import { LiveTerminalGrid } from './LiveTerminalGrid'
 import { useLiveTerminalsStore } from '@/stores/liveTerminals'
 import { InboxPanel } from './InboxPanel'
+import { DiscussionView } from './DiscussionView'
 import {
   useTeamActivityStore,
   type ActivityEntry as RealActivityEntry,
@@ -77,6 +78,7 @@ export function RunLiveView({
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [feedOpen, setFeedOpen] = useState(true)
   const [inboxAgent, setInboxAgent] = useState<string | null>(null)
+  const [feedTab, setFeedTab] = useState<'activity' | 'discussion'>('activity')
   // Local paused fallback for the design demo (when no real backend status).
   const [localPaused, setLocalPaused] = useState(false)
   const paused = team.status === 'paused' || localPaused
@@ -437,30 +439,69 @@ export function RunLiveView({
               flexDirection: 'column',
             }}
           >
-            <SectionHead
-              title="활동"
-              sub="실시간"
-              right={
-                <button
-                  onClick={() => setFeedOpen(false)}
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 4,
-                    background: 'transparent',
-                    border: '1px solid transparent',
-                    color: 'var(--text-3)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Icon.X size={12} />
-                </button>
-              }
-            />
-            <ActivityFeed tick={tick} paused={paused} items={feedItems} />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '8px 10px',
+                borderBottom: '1px solid var(--line-1)',
+                gap: 4,
+              }}
+            >
+              <button
+                onClick={() => setFeedTab('activity')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: feedTab === 'activity' ? 'var(--bg-3)' : 'transparent',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 4,
+                  color: feedTab === 'activity' ? 'var(--text-1)' : 'var(--text-3)',
+                  cursor: 'pointer',
+                }}
+              >
+                활동
+              </button>
+              <button
+                onClick={() => setFeedTab('discussion')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: feedTab === 'discussion' ? 'var(--bg-3)' : 'transparent',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 4,
+                  color: feedTab === 'discussion' ? 'var(--text-1)' : 'var(--text-3)',
+                  cursor: 'pointer',
+                }}
+              >
+                협의
+              </button>
+              <span style={{ flex: 1 }} />
+              <button
+                onClick={() => setFeedOpen(false)}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 4,
+                  background: 'transparent',
+                  border: '1px solid transparent',
+                  color: 'var(--text-3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <Icon.X size={12} />
+              </button>
+            </div>
+            {feedTab === 'activity' ? (
+              <ActivityFeed tick={tick} paused={paused} items={feedItems} />
+            ) : (
+              <DiscussionView teamId={team.id} members={team.members} />
+            )}
           </div>
         )}
       </div>

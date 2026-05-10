@@ -387,6 +387,7 @@ export default function App() {
         })),
         worktreeStrategy: result.worktree,
         mergeStrategy: result.merge,
+        council: result.council,
       })
       // When W1's create() returns enriched stats (worktreesCreated /
       // tmuxSessionsStarted > 0), append them to the toast name so the
