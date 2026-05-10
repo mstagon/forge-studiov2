@@ -133,6 +133,25 @@ export class PathManager {
     tryAdd('cr-graph-venv/bin')
     tryAdd('python/bin')
 
+    // forge-team CLI — packaged 환경에서 bundled-tools 의 sibling 경로
+    // (Resources/forge-cli/bin). 메인 세션이 shell 에서 forge-team 호출
+    // 가능하려면 이 경로가 PATH 에 들어가야 함. v0.9.2 fix — 이전엔
+    // PATH 에 없어서 "command not found" 으로 핵심 시나리오가 막혔음.
+    try {
+      const cliBin = path.resolve(root, '..', 'forge-cli', 'bin')
+      if (fs.existsSync(cliBin)) prepend.push(cliBin)
+    } catch {
+      // ignore — dev 환경 등에서는 root 가 없거나 layout 다름
+    }
+
+    // dev 환경 (npm run dev / electron:dev) 의 forge-cli/bin — 레포의 bin/
+    try {
+      const repoBin = path.resolve(__dirname, '..', '..', 'bin')
+      if (fs.existsSync(path.join(repoBin, 'forge-team'))) prepend.push(repoBin)
+    } catch {
+      // ignore
+    }
+
     if (prepend.length === 0) return env
 
     const basePath = env.PATH || process.env.PATH || ''
