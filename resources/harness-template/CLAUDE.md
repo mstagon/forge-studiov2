@@ -52,6 +52,125 @@
 
 ---
 
+# 큰 피처 기획 강제 워크플로 (MANDATORY)
+
+큰 작업 ("앱 만들어줘", "기능 추가해줘") 받으면 **반드시 다음 0~5 단계
+순서대로**. 이전 단계 결과 없이 다음 단계 못 간다.
+
+## Phase 0 — 외부 인프라 사전 확인 (코드 작성 전 필수)
+
+스토리지 / 외부 API / 인증 provider / 푸시 알림 등 **외부 의존이 있는
+피처** 는 코드 작성 전에 인프라 확정. 멤버가 placeholder 코드 쌓고
+막히는 걸 방지. 다음 중 해당하는 것 모두 사용자에게 직접 질문 (선택지로):
+
+| 피처 | 결정 항목 |
+|---|---|
+| 이미지/파일 업로드 | Supabase Storage / S3 presigned / 서버 로컬 디스크 |
+| 푸시 알림 | FCM / OneSignal / APNs 직접 / 안 함 |
+| 인증 | 이메일+JWT / OAuth (Google/Kakao) / Magic Link |
+| 결제 | Stripe / Toss / 안 함 |
+| 실시간 통신 | Socket.IO / WebSocket native / SSE / Long polling |
+| DB | PostgreSQL (local Docker) / Supabase / Neon / 다른 |
+| 배포 | Vercel + Railway / 자체 서버 / 안 함 |
+| AI/LLM | Anthropic / OpenAI / 다른 / 안 함 |
+
+**결정 안 받고 Phase 1 진행 금지**. 사용자가 "알아서 해" 라고 하면 합리적
+default (각 항목의 첫 옵션 = Recommended) 선택 후 명시.
+
+## Phase 1 — Plan 작성 (forge-team plan 또는 수동 plan.json)
+
+다음 schema 로 phases.json 출력. 자유 텍스트로 설명 금지 — JSON 표준.
+
+```json
+{
+  "goal": "<사용자 요청 한 줄>",
+  "infrastructure": {
+    "storage": "<Phase 0 결정>",
+    "push": "<...>",
+    "auth": "<...>",
+    "realtime": "<...>",
+    "db": "<...>",
+    "deploy": "<...>"
+  },
+  "phases": [
+    {
+      "phase": 1,
+      "description": "<한 줄>",
+      "parallel": true | false,
+      "dependsOn": [],
+      "members": [
+        {
+          "agentId": "<Team Routing 표 참조>",
+          "task": "<멤버 task — 동사 시작, 한 문장. 콤마 X (CLI 파싱).>",
+          "expectedFiles": ["client/lib/auth/login_screen.dart", "..."],
+          "model": "claude-opus-4-7" | "gpt-5.5" | ...
+        }
+      ]
+    }
+  ]
+}
+```
+
+핵심 룰:
+- **`expectedFiles`** — 멤버가 건드릴 파일 path. 같은 파일이 여러 멤버에
+  있으면 자동 sequential 변환 (parallel:false). 충돌 회피.
+- **`dependsOn`** — 다른 phase 들의 인덱스. 의존 phase 머지 후만 spawn.
+- **`task`** — 콤마 / 줄바꿈 / 따옴표 X. CLI `--members` 파싱 안전.
+- **`model`** — Settings 의 modelPolicy 가 default. 명시 override 가능.
+
+## Phase 2 — TDD 선행 (test-writer 먼저)
+
+각 phase 의 첫 멤버는 **반드시 `test-writer`**. 실패하는 테스트 먼저 작성
+(Red). 그 다음 phase 의 다른 멤버들이 테스트 통과 코드 작성 (Green).
+
+플랜에 test-writer 빠뜨리면 안 됨. Phase 1 의 members 첫 entry 가
+`{ "agentId": "test-writer", "task": "<phase 의 expected behavior 의 실패 테스트 작성>", ... }`.
+
+## Phase 3 — Spawn (forge-team create)
+
+Plan 의 phase 별로 sequential. 각 phase 안의 members 는 parallel:true 면
+한 번에 spawn, false 면 한 명씩.
+
+```bash
+forge-team create \
+  --workspace <ws> \
+  --name "<goal>-phase<n>" \
+  --goal "<phase description>" \
+  --members "<agentId1:task1,agentId2:task2,...>" \
+  --worktree-strategy isolated \
+  --merge-strategy squash \
+  --auto-start
+```
+
+**`worktreesCreated: 0` 이 나오면 즉시 중단**. shared mode fallback 은
+멤버끼리 git race 발생 → 사용자에게 보고하고 재시도. v0.9.5 부터 빈 repo
+자동 처리되지만 다른 결함이면 stderr 로 표시됨.
+
+## Phase 4 — 머지 + 검증 (per phase)
+
+phase 의 모든 멤버 완료 (멤버 inbox 또는 GUI 의 "팀 시작됨 N/M 완료") → 머지
++ 자동 파이프라인:
+
+```bash
+forge-team merge --workspace <ws> --team-id <id> --merge-strategy squash
+```
+
+머지 후 자동:
+1. `/verify` (build + test + lint)
+2. `/test-coverage` (80%+ 검증)
+3. `/api-sync` (DTO 동기화)
+4. 모두 통과 → 다음 phase
+5. 하나라도 실패 → loop-operator 멤버 추가 spawn 으로 자동 fix (5회까지)
+
+## Phase 5 — 최종 리뷰 + 문서
+
+마지막 phase 완료 + 머지 후:
+- 리뷰 3종 동시 spawn (`code-reviewer` + `security-auditor` + `spec-verifier`)
+- 모두 통과 → `/update-docs` + `/checkpoint save`
+- 사용자에게 "커밋할까요?" 묻기
+
+---
+
 # Project: Fullstack Dev Harness
 
 **Flutter 앱 + NestJS 백엔드 + Prisma ORM + Next.js CMS** 를 찍어내기 위한
