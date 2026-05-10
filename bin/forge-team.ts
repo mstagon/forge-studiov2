@@ -86,9 +86,16 @@ function parseMembers(raw: string): TeamCreateMember[] {
     try {
       const arr = JSON.parse(trimmed)
       if (!Array.isArray(arr)) throw new Error('expected JSON array')
-      return arr.map((m: { agentId: string; task?: string }) => ({
+      // v0.9.9 — model / role / expectedFiles 도 보존. 옛 코드는 agentId/task
+      // 만 보존해서 boundary guard + ProviderRouter 분기가 무력화됐음 (Codex
+      // 검수에서 발견). TeamOperations.create() 가 이미 이 필드들을 RawMember
+      // 에 propagate + autoStart prompt 에 inject 한다.
+      return arr.map((m: TeamCreateMember) => ({
         agentId: String(m.agentId),
         task: m.task ? String(m.task) : undefined,
+        model: m.model ? String(m.model) : undefined,
+        role: m.role ? String(m.role) : undefined,
+        expectedFiles: Array.isArray(m.expectedFiles) ? m.expectedFiles.map(String) : undefined,
       }))
     } catch (err) {
       fail(`--members JSON parse failed: ${(err as Error).message}`)
