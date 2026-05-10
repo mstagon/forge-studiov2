@@ -602,12 +602,12 @@ export function SettingsHarness({ workspace }: SettingsHarnessProps = {}) {
       <SettingsCard title="Repository policies">
         <Row
           label="Block force pushes"
-          sub="모든 agent가 --force 푸시 차단 (실제 강제는 v0.6.0 — 현재는 의도 기록)"
+          sub="모든 agent가 --force 푸시 차단. 하네스 settings.json 의 PreToolUse 훅이 이미 차단 중 — 이 토글은 표시 동기화 (v0.9.1+ 에서 GUI ↔ hook 양방향 sync)"
           right={<Toggle value={blockForcePush} onChange={setBlockForcePush} />}
         />
         <Row
           label="Require reviewer"
-          sub="머지 게이트에 reviewer agent 의무 통과 (실제 강제는 v0.6.0 — 현재는 의도 기록)"
+          sub="머지 게이트에 reviewer agent 의무 통과 (forge-team merge 의 검증 추가는 v0.9.1+)"
           right={<Toggle value={requireReviewer} onChange={setRequireReviewer} />}
         />
         <Row
@@ -736,6 +736,78 @@ interface McpServerItem {
 }
 
 export function SettingsIntegrations() {
+  // 워크스페이스의 .env 토큰 r/w — Integrations 별 envKey 매핑
+  const wsPath = useWorkspaceStore((s) => s.activeWorkspace?.path) ?? null
+  const envTokens: Array<{ key: string; label: string; help: string }> = [
+    { key: 'GITHUB_TOKEN', label: 'GitHub', help: 'PR 자동 생성, 코멘트 동기화. github.com/settings/tokens 에서 발급' },
+    { key: 'LINEAR_API_KEY', label: 'Linear', help: 'Run ↔ 이슈 양방향 동기화. linear.app/settings/api 에서 발급' },
+    { key: 'SLACK_WEBHOOK_URL', label: 'Slack', help: 'Run 완료/머지/실패 알림. api.slack.com/apps 에서 webhook 생성' },
+    { key: 'FIGMA_ACCESS_TOKEN', label: 'Figma', help: '디자인 토큰 동기화. figma.com/developers/api 에서 발급' },
+    { key: 'SENTRY_AUTH_TOKEN', label: 'Sentry', help: '프로덕션 에러 → Run 컨텍스트. sentry.io/settings/auth-tokens 에서 발급' },
+    { key: 'VERCEL_TOKEN', label: 'Vercel', help: '프리뷰 배포 URL. vercel.com/account/tokens 에서 발급' },
+  ]
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<{ key: string; ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    if (!wsPath) return
+    void (async () => {
+      try {
+        const keys = (await window.api?.settings?.readEnvKeys?.({ workspacePath: wsPath })) as string[] | undefined
+        setSavedKeys(new Set(keys ?? []))
+      } catch {
+        // 무시 — 첫 .env 없으면 빈 set
+      }
+    })()
+  }, [wsPath])
+
+  async function saveToken(key: string) {
+    if (!wsPath) return
+    const value = (drafts[key] ?? '').trim()
+    if (!value) return
+    setBusy(key)
+    setFeedback(null)
+    try {
+      const result = await window.api?.settings?.saveEnvVar?.({ workspacePath: wsPath, key, value })
+      if (result?.ok) {
+        setSavedKeys((prev) => new Set(prev).add(key))
+        setDrafts((prev) => ({ ...prev, [key]: '' }))
+        setFeedback({ key, ok: true, msg: '저장됨 — .env 파일에 추가됨' })
+      } else {
+        setFeedback({ key, ok: false, msg: result?.error ?? '저장 실패' })
+      }
+    } catch (err) {
+      setFeedback({ key, ok: false, msg: (err as Error).message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function removeToken(key: string) {
+    if (!wsPath) return
+    setBusy(key)
+    setFeedback(null)
+    try {
+      const result = await window.api?.settings?.removeEnvVar?.({ workspacePath: wsPath, key })
+      if (result?.ok) {
+        setSavedKeys((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+        setFeedback({ key, ok: true, msg: '제거됨' })
+      } else {
+        setFeedback({ key, ok: false, msg: result?.error ?? '제거 실패' })
+      }
+    } catch (err) {
+      setFeedback({ key, ok: false, msg: (err as Error).message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const integrations: IntegrationItem[] = [
     {
       id: 'github',
@@ -778,6 +850,106 @@ export function SettingsIntegrations() {
       <SectionHeader title={t('settings.integrations')} sub={t('settings.integrationsSub')} />
 
       <SettingsCard
+        title="환경 토큰"
+        right={
+          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            {wsPath ? `<workspace>/.env` : '워크스페이스 없음'}
+          </span>
+        }
+      >
+        {!wsPath && (
+          <div style={{ padding: 14, fontSize: 11.5, color: 'var(--text-3)' }}>
+            워크스페이스를 먼저 활성화하세요 — 토큰은 그 워크스페이스의 .env 파일에 저장됩니다.
+          </div>
+        )}
+        {wsPath && envTokens.map((t, i) => {
+          const saved = savedKeys.has(t.key)
+          const draft = drafts[t.key] ?? ''
+          const isBusy = busy === t.key
+          const fb = feedback?.key === t.key ? feedback : null
+          return (
+            <div
+              key={t.key}
+              style={{
+                padding: '12px 16px',
+                borderBottom: i < envTokens.length - 1 ? '1px solid var(--line-1)' : 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)' }}>{t.label}</span>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>{t.key}</span>
+                <span style={{ flex: 1 }} />
+                {saved && (
+                  <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--success)', color: 'var(--bg-1)', borderRadius: 3, fontWeight: 600 }}>
+                    저장됨
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t.help}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="password"
+                  value={draft}
+                  onChange={(e) => setDrafts((prev) => ({ ...prev, [t.key]: e.target.value }))}
+                  placeholder={saved ? '저장된 값 (수정하려면 새로 입력)' : '토큰 붙여넣기'}
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-1)',
+                    color: 'var(--text-1)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 4,
+                    padding: '6px 8px',
+                    fontSize: 11.5,
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                />
+                <button
+                  disabled={!draft.trim() || isBusy}
+                  onClick={() => void saveToken(t.key)}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 11,
+                    background: draft.trim() ? 'var(--accent)' : 'var(--bg-3)',
+                    color: 'var(--text-1)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 4,
+                    cursor: draft.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  저장
+                </button>
+                {saved && (
+                  <button
+                    disabled={isBusy}
+                    onClick={() => void removeToken(t.key)}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 11,
+                      background: 'transparent',
+                      color: 'var(--danger)',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              {fb && (
+                <div style={{ fontSize: 10.5, color: fb.ok ? 'var(--success)' : 'var(--danger)' }}>
+                  {fb.msg}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </SettingsCard>
+
+      <SettingsCard
         title="Connections"
         right={
           <Btn
@@ -791,7 +963,7 @@ export function SettingsIntegrations() {
                 'https://github.com/anthropics/forge-studio#integrations',
               )
             }}
-            title="새 통합 요청 — GitHub 이슈로 이동 (자체 추가는 v0.7.0)"
+            title="새 통합 요청 — GitHub 이슈로 이동 (자체 추가는 v0.9.1+)"
           >
             Add
           </Btn>
@@ -870,7 +1042,7 @@ export function SettingsIntegrations() {
               <Btn
                 variant="ghost"
                 onClick={() => {
-                  // Per-integration config UI is v0.6.0+. Until then point at
+                  // Per-integration config UI is v0.9.1++. Until then point at
                   // the integration's own settings page where the user manages
                   // tokens / org connections.
                   const urls: Record<string, string> = {
@@ -881,7 +1053,7 @@ export function SettingsIntegrations() {
                   const url = urls[it.id] ?? `https://${it.id}.com`
                   void window.api?.system?.openExternal(url)
                 }}
-                title={`${it.name} 외부 설정 페이지 열기 (in-app 설정은 v0.6.0)`}
+                title={`${it.name} 외부 설정 페이지 열기 (in-app 설정은 v0.9.1+)`}
               >
                 Configure
               </Btn>
@@ -898,7 +1070,7 @@ export function SettingsIntegrations() {
                   const url = urls[it.id] ?? `https://${it.id}.com`
                   void window.api?.system?.openExternal(url)
                 }}
-                title={`${it.name} 토큰 발급 페이지 — 발급 후 .env에 추가하세요 (in-app 연결은 v0.6.0)`}
+                title={`${it.name} 토큰 발급 페이지 — 발급 후 .env에 추가하세요 (in-app 연결은 v0.9.1+)`}
               >
                 Connect
               </Btn>
@@ -1062,13 +1234,13 @@ export function SettingsAccount() {
             onClick={() => {
               // Forge doesn't yet host its own API key issuance — direct the
               // user to the Anthropic console where the upstream key is
-              // created. Local CI keys will be issued in v0.6.0 once the
+              // created. Local CI keys will be issued in v0.9.1+ once the
               // backend service is online.
               void window.api?.system?.openExternal(
                 'https://console.anthropic.com/settings/keys',
               )
             }}
-            title="Anthropic 콘솔에서 API 키 발급 (Forge CI 키는 v0.6.0)"
+            title="Anthropic 콘솔에서 API 키 발급 (Forge CI 키는 v0.9.1+)"
           >
             Generate
           </Btn>

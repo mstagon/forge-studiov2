@@ -1253,6 +1253,99 @@ ipcMain.handle('teams:detectConflicts', async (_event, opts: { teamId: string })
   return agentTeamWatcher.detectMemberConflicts(ws?.path ?? null, opts.teamId)
 })
 
+// ─── IPC Handlers: Integrations / .env tokens ───────────────────────
+//
+// 워크스페이스의 .env 파일에 토큰 KEY=VALUE upsert. Integrations
+// (GitHub/Linear/Sentry) 토큰을 GUI 에서 입력 → forge-team CLI 가 spawn 하는
+// 멤버 process 의 env 에 자동 propagate. Forge 자체는 토큰 안 봄 — 멤버
+// claude/codex 가 .env 읽고 사용.
+//
+// 보안:
+//   - .env 가 .gitignore 에 있는지 확인 후 없으면 추가 (실수 commit 방지)
+//   - 값 자체는 disk 에 plain text — macOS keychain 은 v0.9.1+ (별도 backend)
+
+ipcMain.handle('settings:saveEnvVar', async (_event, opts: { workspacePath: string; key: string; value: string }) => {
+  if (!opts.workspacePath || !opts.key) {
+    return { ok: false, error: 'workspacePath + key required' }
+  }
+  // 보안 — KEY 형식 검증 (영숫자 + _, 사용자 입력으로 path traversal 못 하게)
+  if (!/^[A-Z][A-Z0-9_]*$/.test(opts.key)) {
+    return { ok: false, error: 'KEY must be UPPERCASE_SNAKE_CASE' }
+  }
+  try {
+    const fsPromises = await import('fs/promises')
+    const envPath = path.join(opts.workspacePath, '.env')
+    let existing = ''
+    try {
+      existing = await fsPromises.readFile(envPath, 'utf-8')
+    } catch {
+      // 첫 작성 — 빈 .env
+    }
+    const lines = existing.split('\n')
+    const keyPrefix = `${opts.key}=`
+    const idx = lines.findIndex((l) => l.startsWith(keyPrefix))
+    const newLine = `${opts.key}=${opts.value}`
+    if (idx >= 0) {
+      lines[idx] = newLine
+    } else {
+      // 끝에 빈 줄 있으면 그 자리에, 없으면 append + newline
+      while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
+      lines.push(newLine, '')
+    }
+    await fsPromises.writeFile(envPath, lines.join('\n'), 'utf-8')
+
+    // .gitignore 에 .env 등록 보장 (없으면 append)
+    const gitignorePath = path.join(opts.workspacePath, '.gitignore')
+    let gitignore = ''
+    try {
+      gitignore = await fsPromises.readFile(gitignorePath, 'utf-8')
+    } catch {
+      // 없으면 새로
+    }
+    if (!gitignore.split('\n').some((l) => l.trim() === '.env' || l.trim() === '.env.*' || l.trim() === '.env*')) {
+      const sep = gitignore.length > 0 && !gitignore.endsWith('\n') ? '\n' : ''
+      await fsPromises.writeFile(gitignorePath, `${gitignore}${sep}.env\n`, 'utf-8')
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('settings:readEnvKeys', async (_event, opts: { workspacePath: string }) => {
+  if (!opts.workspacePath) return [] as string[]
+  try {
+    const fsPromises = await import('fs/promises')
+    const buf = await fsPromises.readFile(path.join(opts.workspacePath, '.env'), 'utf-8')
+    return buf
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#') && l.includes('='))
+      .map((l) => l.split('=')[0])
+  } catch {
+    return [] as string[]
+  }
+})
+
+ipcMain.handle('settings:removeEnvVar', async (_event, opts: { workspacePath: string; key: string }) => {
+  if (!opts.workspacePath || !opts.key) return { ok: false, error: 'workspacePath + key required' }
+  try {
+    const fsPromises = await import('fs/promises')
+    const envPath = path.join(opts.workspacePath, '.env')
+    let existing = ''
+    try {
+      existing = await fsPromises.readFile(envPath, 'utf-8')
+    } catch {
+      return { ok: true } // 파일 없으면 이미 삭제 상태
+    }
+    const lines = existing.split('\n').filter((l) => !l.startsWith(`${opts.key}=`))
+    await fsPromises.writeFile(envPath, lines.join('\n'), 'utf-8')
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+})
+
 // ─── IPC Handlers: Team Activity ────────────────────────────────────
 
 ipcMain.handle('team-activity:list', async (_event, teamId: string, limit?: number) => {

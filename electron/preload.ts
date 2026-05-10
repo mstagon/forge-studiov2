@@ -613,6 +613,20 @@ const api = {
     }) => ipcRenderer.send('error-log:report', payload),
   },
 
+  // ─── Settings (Integrations / .env tokens) ───────────────────────
+  //
+  // Integrations 토큰을 워크스페이스의 .env 파일에 저장. .gitignore 자동
+  // 등록. 멤버 spawn 시 child env 로 propagate. 값 자체는 Forge 가
+  // 안 보고 .env 에 plain text — keychain 저장은 v0.9.1+.
+  settings: {
+    saveEnvVar: (opts: { workspacePath: string; key: string; value: string }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('settings:saveEnvVar', opts),
+    readEnvKeys: (opts: { workspacePath: string }): Promise<string[]> =>
+      ipcRenderer.invoke('settings:readEnvKeys', opts),
+    removeEnvVar: (opts: { workspacePath: string; key: string }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('settings:removeEnvVar', opts),
+  },
+
   // ─── System ──────────────────────────────────────────────────────
   system: {
     openExternal: (url: string) =>

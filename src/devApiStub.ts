@@ -166,6 +166,11 @@ export function installDevApiStub(): void {
       openExternal: (() => Promise.resolve()) as AnyFn,
       showItemInFolder: (() => Promise.resolve()) as AnyFn,
     }),
+    settings: loggingProxy('settings', {
+      saveEnvVar: resolveOk as AnyFn,
+      readEnvKeys: resolveEmptyArr as AnyFn,
+      removeEnvVar: resolveOk as AnyFn,
+    }),
     crGraph: loggingProxy('crGraph', {
       build: resolveOk as AnyFn,
       query: resolveEmptyArr as AnyFn,
