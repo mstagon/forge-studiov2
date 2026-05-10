@@ -320,11 +320,9 @@ export function TopBar({
         display: 'flex', alignItems: 'center', gap: 8, paddingRight: 10,
       }}>
         <button
-          title="모델 선택은 v0.6.0에서 활성화됩니다 — 현재는 sonnet-4.5 고정"
+          title="현재 'Other' 역할의 default 모델. 클릭해서 Settings → Agents 에서 역할별 + 에이전트별 모델 변경"
           onClick={() => {
-            // Model picker UI ships in v0.6.0 — for now route the user to
-            // Settings → Agents → "Models per role" where the per-role model
-            // dropdowns already render (read-only).
+            // Settings → Agents 의 Models per role / 에이전트 override 로 이동
             window.dispatchEvent(
               new CustomEvent('forge:nav-settings', {
                 detail: { section: 'agents' },
