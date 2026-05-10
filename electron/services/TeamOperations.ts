@@ -85,6 +85,14 @@ export interface TeamCreateResult {
   configPath: string
   worktreesCreated: number
   tmuxSessionsStarted: number
+  /** True iff team was created with `council: true` and at least one
+   *  inbox seed message was attempted. */
+  council?: boolean
+  /** Number of council inbox seed messages successfully written
+   *  (== members.length on full success). 0 when council disabled. */
+  councilSeeded?: number
+  /** Per-member inbox failures during council seeding. Empty on success. */
+  councilSeedErrors?: Array<{ member: string; error: string }>
 }
 
 export interface TeamMergeConflict {
@@ -141,6 +149,9 @@ export interface RawConfig {
   members: RawMember[]
   status?: TeamStatus
   baseBranch?: string
+  /** Council 모드로 생성된 팀. Sprint/Discussion 뷰가 round-robin 진행
+   *  표시 + Stop hook 이 다음 round 자동 진행 시 참조. */
+  council?: boolean
 }
 
 export interface TeamSummary {
@@ -153,6 +164,7 @@ export interface TeamSummary {
   status?: TeamStatus
   createdAt: number
   leadAgentId: string
+  council?: boolean
   members: Array<{
     agentId: string
     name: string
@@ -347,6 +359,7 @@ export class TeamOperations {
         status: cfg.status,
         createdAt: cfg.createdAt,
         leadAgentId: cfg.leadAgentId,
+        council: cfg.council === true,
         members: cfg.members.map((m) => ({
           agentId: m.agentId,
           name: m.name,
@@ -403,6 +416,7 @@ export class TeamOperations {
     let worktreesCreated = 0
     let tmuxSessionsStarted = 0
     const autoStart = opts.autoStartClaude !== false
+    const councilEnabled = opts.council === true && opts.members.length > 1
 
     const rawMembers: RawMember[] = []
     for (let idx = 0; idx < opts.members.length; idx++) {
@@ -560,6 +574,20 @@ export class TeamOperations {
                 lines.push(`- 자기 task 외엔 손대지 말 것. 추가 작업 필요하면 메인 세션에게 inbox 로 의견 요청.`)
                 lines.push(`- 막히면 inbox 의 다른 멤버 또는 메인에게 메시지: \`forge-team-cli send-message --team-id ${teamId} --from ${member.name} --to <상대> --text "..."\``)
                 lines.push(`- 충돌/혼란 시 사용자 결정 받기보다 우선 inbox 협의.`)
+                if (councilEnabled) {
+                  const otherNames = rawMembers
+                    .filter((o) => o.name !== member.name)
+                    .map((o) => o.name)
+                  lines.push('')
+                  lines.push(`### ⚠️ 협의(Council) 모드 — round-robin 토론`)
+                  lines.push(`이 팀은 협의 모드. 코드 바로 작성 X — 먼저 토론 → 합의안 후 구현.`)
+                  lines.push(`  Round 1 (proposal): 자기 제안 작성 → 다른 멤버 inbox 로 전송`)
+                  lines.push(`  Round 2 (critique): 다른 멤버 inbox 읽고 비판/보완 → 답신`)
+                  lines.push(`  Round 3 (consensus): 합의안 도출 또는 dissent 명시`)
+                  lines.push(`자세한 진행 안내는 자기 inbox 에 별도 메시지로 도착해 있음 (\`협의 모드 안내\`).`)
+                  lines.push(`먼저 inbox 읽고 시작: 다른 멤버 = ${otherNames.join(', ')}.`)
+                  lines.push(`Round 종료마다 forge-council-stop.sh hook 이 다음 round 안내 자동 inject.`)
+                }
                 lines.push('')
                 lines.push(`이제 자율적으로 task 진행하세요.`)
 
@@ -605,13 +633,16 @@ export class TeamOperations {
       members: rawMembers,
       status: 'active',
       baseBranch: teamBaseBranch,
+      council: councilEnabled,
     }
     const configPath = path.join(teamRoot, 'config.json')
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
 
     // Council 모드: 각 멤버 inbox 에 협의 지시 첫 메시지 자동 작성.
     // 멤버 claude/codex 가 spawn 직후 자기 inbox 보고 따르도록 prompt engineering.
-    if (opts.council && rawMembers.length > 1) {
+    let councilSeeded = 0
+    const councilSeedErrors: Array<{ member: string; error: string }> = []
+    if (councilEnabled) {
       const teamGoal = opts.goal ?? opts.name
       const memberList = rawMembers.map((m) => m.name).join(', ')
       for (const m of rawMembers) {
@@ -633,11 +664,31 @@ export class TeamOperations {
           ``,
           `참고: 모든 ${memberList} 가 같은 메시지를 받았음. 각자 1번부터 진행.`,
         ].join('\n')
-        await this.sendInboxMessage(opts.workspacePath, teamId, 'forge-team', m.name, text, '협의 모드 안내')
+        const res = await this.sendInboxMessage(
+          opts.workspacePath,
+          teamId,
+          'forge-team',
+          m.name,
+          text,
+          '협의 모드 안내'
+        )
+        if (res.ok) {
+          councilSeeded++
+        } else {
+          councilSeedErrors.push({ member: m.name, error: res.error ?? 'unknown' })
+        }
       }
     }
 
-    return { teamId, configPath, worktreesCreated, tmuxSessionsStarted }
+    return {
+      teamId,
+      configPath,
+      worktreesCreated,
+      tmuxSessionsStarted,
+      council: councilEnabled || undefined,
+      councilSeeded: councilEnabled ? councilSeeded : undefined,
+      councilSeedErrors: councilSeedErrors.length > 0 ? councilSeedErrors : undefined,
+    }
   }
 
   // ── Read / Write config ──────────────────────────────────────────────

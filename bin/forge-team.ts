@@ -147,6 +147,7 @@ async function cmdCreate(flags: Map<string, string>): Promise<void> {
   // session is the orchestrator and probably wants to wire the prompt itself.
   // Pass --auto-start to opt in.
   const autoStartClaude = flags.get('auto-start') === 'true'
+  const council = flags.get('council') === 'true'
 
   const result = await ops.create({
     workspaceId,
@@ -157,6 +158,7 @@ async function cmdCreate(flags: Map<string, string>): Promise<void> {
     worktreeStrategy,
     mergeStrategy,
     autoStartClaude,
+    council,
   })
   emit(result)
 }
@@ -339,6 +341,7 @@ async function cmdExecute(flags: Map<string, string>): Promise<void> {
     worktreeStrategy: (flags.get('worktree-strategy') as WorktreeStrategy | undefined) ?? 'isolated',
     mergeStrategy: (flags.get('merge-strategy') as MergeStrategy | undefined) ?? 'squash',
     autoStartClaude: flags.get('no-auto-start') !== 'true',
+    council: phase.council === true,
   })
   emit({ phase: phaseNum, ...result, instructions: `완료 후 \`forge-team execute --plan ${planFile} --phase ${phaseNum} --team-id ${result.teamId} --merge\`` })
 }
@@ -383,6 +386,7 @@ function printHelp(): void {
       '  --merge-strategy            squash (default) | sequential',
       '  --workspace-id <id>         Override workspace id (default: dir name)',
       '  --auto-start                Auto-run `claude` inside each tmux pane',
+      '  --council                   협의 모드 (멤버끼리 inbox 로 round-robin 토론)',
       '',
       'merge flags:',
       '  --merge-strategy            squash | sequential (overrides team default)',
