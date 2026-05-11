@@ -21,7 +21,9 @@
         "--from", "git+https://github.com/oraios/serena",
         "serena", "start-mcp-server",
         "--context", "claude-code",
-        "--project", "."
+        "--project", ".",
+        "--enable-web-dashboard", "False",
+        "--enable-gui-log-window", "False"
       ],
       "type": "stdio"
     },
