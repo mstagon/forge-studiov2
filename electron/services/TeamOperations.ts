@@ -774,9 +774,30 @@ export class TeamOperations {
 
         const taskPrompt = lines.join('\n')
 
+        // 핵심 fix: 멀티라인 텍스트를 tmux send-keys 로 보내면 \n 마다 Enter 로
+        // 해석돼서 claude/codex 가 각 줄을 별도 prompt 로 submit. 결과: 빈
+        // prompt 만 반복 submit → 화면이 비어보임. 해결: brief 를 파일로 쓰고
+        // 한 줄 prompt 로 "이 파일 읽고 시작" 전달. 멀티라인은 파일에 안전.
+        const memberCwd = member.worktreePath ?? member.cwd ?? wsPath
+        const taskFile = path.join(memberCwd, '.claude', 'forge-task.md')
         try {
-          await new Promise<void>((resolve) => setTimeout(resolve, 1500))
-          await execFileAsync(tmux, ['send-keys', '-t', session, taskPrompt, 'Enter'], {
+          await fs.mkdir(path.dirname(taskFile), { recursive: true })
+          await fs.writeFile(taskFile, taskPrompt, 'utf-8')
+        } catch (err) {
+          process.stderr.write(
+            `[forge-team] task brief 파일 쓰기 실패 (${member.name}): ${(err as Error).message}\n`,
+          )
+          continue
+        }
+
+        // claude/codex 가 부팅 + (codex 의 경우) auto-update 끝날 때까지 충분히
+        // 기다림. v0.10.0 의 1.5s 는 codex auto-update (11s+) 못 버팀.
+        // 4s 면 claude 는 충분, codex 는 update 중이면 prompt 무시되지만 사용자가
+        // 재시작 후 task 파일 직접 읽으라는 안내가 inbox 에도 있음.
+        const oneLinePrompt = `먼저 .claude/forge-task.md 를 Read 해서 자기 task / 책임 영역 / 다른 멤버 / 진행 룰 모두 확인. 그 다음 자율적으로 진행.`
+        try {
+          await new Promise<void>((resolve) => setTimeout(resolve, 4000))
+          await execFileAsync(tmux, ['send-keys', '-t', session, oneLinePrompt, 'Enter'], {
             timeout: 4000,
             env,
           })
