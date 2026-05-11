@@ -45,32 +45,17 @@ export function WorkspaceV2({
     ? selectedFilePath.split('/').filter(Boolean).pop() ?? null
     : null
 
-  // If a run is selected, the entire workspace becomes the live view.
-  if (activeRunId) {
-    const team = runs.find((r) => r.id === activeRunId)
-    if (team) {
-      return (
-        <div
-          data-screen-label="Workspace · Run"
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            background: 'var(--bg-1)',
-          }}
-        >
-          <RunBackBar team={team} onClose={onCloseRun} />
-          <RunLiveView team={team} onClose={onCloseRun} density={density} />
-          {showResourceBar && <ResourceBar runs={runs} />}
-        </div>
-      )
-    }
-  }
+  // Run live view 전환을 early return 으로 처리하면 TerminalAreaV2 가
+  // unmount → 메인 claude PTY 연결이 끊겨서 사용자가 "팀 들어갔다 나오면
+  // 메인 세션 날아감" 으로 체감. WorkspaceV2 자체는 App.tsx 가 mount 유지
+  // 하지만 그 안의 home/run 전환은 별개. 두 트리 모두 mount 유지 + display
+  // 토글로 메인 터미널과 멤버 터미널 양쪽 모두 살림.
+  const activeTeam = activeRunId ? runs.find((r) => r.id === activeRunId) : null
+  const showRun = !!activeTeam
 
   return (
     <div
-      data-screen-label="Workspace"
+      data-screen-label={showRun ? 'Workspace · Run' : 'Workspace'}
       style={{
         flex: 1,
         display: 'flex',
@@ -79,25 +64,51 @@ export function WorkspaceV2({
         background: 'var(--bg-1)',
       }}
     >
-      <WorkspaceHeaderV2 workspace={workspace} harnessUpdate={harnessUpdate} />
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        <WorkspaceLeftRail
-          workspacePath={workspace.path}
-          runs={runs}
-          onOpenRun={onOpenRun}
-          onNewRun={onNewRun}
-        />
-        {selectedFileName ? (
-          <FilePreview
-            filename={selectedFileName}
-            content={selectedFileContent ?? undefined}
-            truncated={selectedFileTruncated}
-            onClose={clearSelection}
+      {/* Workspace home — 항상 mount, run 진입 시 display:none */}
+      <div
+        style={{
+          flex: showRun ? 0 : 1,
+          display: showRun ? 'none' : 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}
+      >
+        <WorkspaceHeaderV2 workspace={workspace} harnessUpdate={harnessUpdate} />
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+          <WorkspaceLeftRail
+            workspacePath={workspace.path}
+            runs={runs}
+            onOpenRun={onOpenRun}
+            onNewRun={onNewRun}
           />
-        ) : (
-          <TerminalAreaV2 workspace={workspace} />
-        )}
+          {selectedFileName ? (
+            <FilePreview
+              filename={selectedFileName}
+              content={selectedFileContent ?? undefined}
+              truncated={selectedFileTruncated}
+              onClose={clearSelection}
+            />
+          ) : (
+            <TerminalAreaV2 workspace={workspace} />
+          )}
+        </div>
       </div>
+
+      {/* Run live view — 팀 선택됐을 때만 mount, home 으로 돌아가면 display:none */}
+      {activeTeam && (
+        <div
+          style={{
+            flex: showRun ? 1 : 0,
+            display: showRun ? 'flex' : 'none',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
+          <RunBackBar team={activeTeam} onClose={onCloseRun} />
+          <RunLiveView team={activeTeam} onClose={onCloseRun} density={density} />
+        </div>
+      )}
+
       {showResourceBar && <ResourceBar runs={runs} />}
     </div>
   )
