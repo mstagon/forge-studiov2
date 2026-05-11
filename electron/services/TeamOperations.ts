@@ -215,11 +215,94 @@ export class TeamOperations {
   private readonly tmuxBin: () => string
   private readonly tmuxEnv: () => NodeJS.ProcessEnv
   private readonly teamsDirFor: (workspacePath: string | null) => string
+  /**
+   * In-process serialization for inbox read-modify-write.
+   * 같은 inbox 파일에 대한 동시 쓰기를 직렬화. 같은 프로세스 안의 동시
+   * sendInboxMessage / markInboxRead 가 서로의 변경 덮어쓰는 걸 방지.
+   * Cross-process 안전은 별도의 파일 락 (O_CREAT|O_EXCL) 으로 처리.
+   */
+  private inboxWriteQueue = new Map<string, Promise<unknown>>()
 
   constructor(deps: TeamOperationsDeps) {
     this.tmuxBin = deps.tmuxBin
     this.tmuxEnv = deps.tmuxEnv
     this.teamsDirFor = deps.teamsDirFor ?? defaultTeamsDirFor
+  }
+
+  /**
+   * 같은 inbox 파일 RMW 를 in-process 직렬화 + cross-process O_EXCL 락으로
+   * 보호. 두 send 가 같은 old array 를 읽고 나중 write 가 먼저 write 를
+   * 덮어쓰는 협의 모드 데이터 손실 시나리오 방지.
+   */
+  private async withInboxLock<T>(inboxPath: string, work: () => Promise<T>): Promise<T> {
+    // Step 1: in-process queue — 같은 프로세스의 다른 awaiter 들과 줄세움.
+    const prior = this.inboxWriteQueue.get(inboxPath) ?? Promise.resolve()
+    let releaseLocal!: () => void
+    const localTicket = new Promise<void>((resolve) => {
+      releaseLocal = resolve
+    })
+    const chained = prior.then(() => localTicket)
+    this.inboxWriteQueue.set(inboxPath, chained)
+    await prior
+
+    // Step 2: cross-process lock — sibling .lock 파일을 O_CREAT|O_EXCL 로
+    // 잡음. 다른 프로세스 (forge-team CLI 등) 가 들고 있으면 stale 검사 후
+    // 짧은 backoff 로 재시도.
+    const lockPath = `${inboxPath}.lock`
+    const acquireDeadline = Date.now() + 5000
+    const staleThresholdMs = 30_000
+    let releasedLock = false
+    const releaseLock = async () => {
+      if (releasedLock) return
+      releasedLock = true
+      try {
+        await fs.unlink(lockPath)
+      } catch {
+        // 락 이미 사라짐 (다른 프로세스가 stale 로 회수했을 수 있음)
+      }
+    }
+
+    try {
+      while (true) {
+        try {
+          const handle = await fs.open(lockPath, 'wx')
+          try {
+            await handle.write(`${process.pid}\n`)
+          } finally {
+            await handle.close()
+          }
+          break
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+          // 락이 너무 오래된 (stale) 거면 회수
+          try {
+            const stat = await fs.stat(lockPath)
+            if (Date.now() - stat.mtimeMs > staleThresholdMs) {
+              await fs.unlink(lockPath).catch(() => {})
+              continue
+            }
+          } catch {
+            // 락 파일 사라짐 — 즉시 retry
+            continue
+          }
+          if (Date.now() > acquireDeadline) {
+            throw new Error(`inbox lock timeout on ${inboxPath}`)
+          }
+          await new Promise((r) => setTimeout(r, 50 + Math.random() * 50))
+        }
+      }
+
+      // Step 3: critical section — 락 잡힌 상태에서 RMW 수행
+      const result = await work()
+      return result
+    } finally {
+      await releaseLock()
+      releaseLocal()
+      // 큐 head 가 우리면 정리 (다음 호출이 새로 시작하도록)
+      if (this.inboxWriteQueue.get(inboxPath) === chained) {
+        this.inboxWriteQueue.delete(inboxPath)
+      }
+    }
   }
 
   // ── External tool gating ─────────────────────────────────────────────
@@ -521,84 +604,12 @@ export class TeamOperations {
                 timeout: 4000,
                 env,
               })
-
-              // v0.9.5 — task 자동 주입. claude/codex 부팅 1.5s 후 prompt send.
-              // v0.9.7 — 멤버 별 역할 + 자기 책임 영역 + 다른 멤버 영역 + 충돌
-              // 회피 지시 자동 포함. 사용자 요구: "메인 세션이 팀원 역할 + 계획
-              // 명확히 주입해야 동일 폴더에서도 충돌 안 남".
-              if (member.task) {
-                const others = rawMembers.filter((o) => o.name !== member.name)
-                const otherRoles = others
-                  .map((o) => {
-                    const roleLabel = o.role ? `${o.role} (${o.name})` : o.name
-                    const files = o.expectedFiles?.length
-                      ? ` — 영역: ${o.expectedFiles.join(', ')}`
-                      : ''
-                    return `  - ${roleLabel}${files}`
-                  })
-                  .join('\n')
-
-                const lines: string[] = []
-                lines.push(`[Forge Team 자동 안내] 당신은 팀 "${opts.name}" 의 멤버 "${member.name}".`)
-                if (member.role) lines.push(`역할: ${member.role}`)
-                lines.push(`팀 목표: ${opts.goal ?? opts.name}`)
-                lines.push('')
-                lines.push(`### 당신의 task`)
-                lines.push(member.task)
-                if (member.expectedFiles?.length) {
-                  lines.push('')
-                  lines.push(`### 당신의 책임 영역 (only these files)`)
-                  lines.push(member.expectedFiles.map((f) => `  - ${f}`).join('\n'))
-                  lines.push(`이 영역 외의 파일은 수정하지 마세요. 다른 멤버 영역 침범 금지.`)
-                }
-                if (others.length > 0) {
-                  lines.push('')
-                  lines.push(`### 같은 팀의 다른 멤버 (절대 그들 영역 건드리지 마세요)`)
-                  lines.push(otherRoles)
-                  lines.push(`다른 멤버 영역에 변경 필요하면 inbox 로 협의 요청 (forge-team-cli send-message).`)
-                }
-                lines.push('')
-                lines.push(`### 작업 환경`)
-                if (member.worktreePath && member.worktreePath !== wsPath) {
-                  lines.push(`- 자기 worktree: ${member.worktreePath} (격리됨, 다른 멤버와 별도)`)
-                  lines.push(`- 자기 브랜치: ${member.branch} — 작업 중 자유롭게 commit`)
-                  lines.push(`- 메인 세션이 추후 forge-team merge 로 통합`)
-                } else {
-                  lines.push(`- 메인 디렉토리 공유 (shared mode — worktree 격리 X)`)
-                  lines.push(`- 자기 sub-directory / 영역만 수정. git add/commit 은 메인 세션 일괄 처리.`)
-                  lines.push(`- 다른 멤버와 git race 가능 — 자기 영역 외엔 절대 건드리지 말 것.`)
-                }
-                lines.push('')
-                lines.push(`### 진행 룰`)
-                lines.push(`- TDD 우선: 실패 테스트 먼저 → 통과 코드. 멤버에 test-writer 가 있으면 그 결과 활용.`)
-                lines.push(`- 자기 task 외엔 손대지 말 것. 추가 작업 필요하면 메인 세션에게 inbox 로 의견 요청.`)
-                lines.push(`- 막히면 inbox 의 다른 멤버 또는 메인에게 메시지: \`forge-team-cli send-message --team-id ${teamId} --from ${member.name} --to <상대> --text "..."\``)
-                lines.push(`- 충돌/혼란 시 사용자 결정 받기보다 우선 inbox 협의.`)
-                if (councilEnabled) {
-                  const otherNames = rawMembers
-                    .filter((o) => o.name !== member.name)
-                    .map((o) => o.name)
-                  lines.push('')
-                  lines.push(`### ⚠️ 협의(Council) 모드 — round-robin 토론`)
-                  lines.push(`이 팀은 협의 모드. 코드 바로 작성 X — 먼저 토론 → 합의안 후 구현.`)
-                  lines.push(`  Round 1 (proposal): 자기 제안 작성 → 다른 멤버 inbox 로 전송`)
-                  lines.push(`  Round 2 (critique): 다른 멤버 inbox 읽고 비판/보완 → 답신`)
-                  lines.push(`  Round 3 (consensus): 합의안 도출 또는 dissent 명시`)
-                  lines.push(`자세한 진행 안내는 자기 inbox 에 별도 메시지로 도착해 있음 (\`협의 모드 안내\`).`)
-                  lines.push(`먼저 inbox 읽고 시작: 다른 멤버 = ${otherNames.join(', ')}.`)
-                  lines.push(`Round 종료마다 forge-council-stop.sh hook 이 다음 round 안내 자동 inject.`)
-                }
-                lines.push('')
-                lines.push(`이제 자율적으로 task 진행하세요.`)
-
-                const taskPrompt = lines.join('\n')
-
-                await new Promise<void>((resolve) => setTimeout(resolve, 1500))
-                await execFileAsync(tmux, ['send-keys', '-t', session, taskPrompt, 'Enter'], {
-                  timeout: 4000,
-                  env,
-                })
-              }
+              // NOTE: task prompt 주입은 의도적으로 여기서 안 함. config.json
+              // + council seed inbox 가 디스크에 완전히 들어간 다음 단일 별도
+              // 패스에서 처리 (아래). 이렇게 해야:
+              //   - peer list (다른 멤버) 가 완전 — 첫 멤버도 모든 멤버 명단 받음
+              //   - council 멤버가 prompt 받기 전에 자기 inbox 의 seed 메시지가
+              //     이미 거기 있음 (empty inbox 보고 혼란 X)
             } catch {
               // ignore — autoStart 실패는 non-fatal (사용자가 수동 send-keys 가능)
             }
@@ -647,6 +658,7 @@ export class TeamOperations {
       const memberList = rawMembers.map((m) => m.name).join(', ')
       for (const m of rawMembers) {
         const others = rawMembers.filter((o) => o.name !== m.name).map((o) => o.name)
+        const wsArg = opts.workspacePath ? ` --workspace "${opts.workspacePath}"` : ''
         const text = [
           `[협의 모드 자동 안내]`,
           ``,
@@ -655,9 +667,10 @@ export class TeamOperations {
           ``,
           `협의 라운드:`,
           `  1. 자기 제안 작성 → 다른 멤버 inbox 에 전달`,
-          `     (${others.map((o) => `\`forge-team-cli send-message --team-id ${teamId} --from ${m.name} --to ${o} --text "..."\``).join(' / ')})`,
+          `     (${others.map((o) => `\`forge-team send-message${wsArg} --team-id ${teamId} --from ${m.name} --to ${o} --text "..."\``).join(' / ')})`,
           `  2. 다른 멤버의 inbox 메시지 읽고 critique + 본인 제안 보완`,
-          `  3. 합의안 도출 → 모든 멤버에게 동일 메시지로 final 합의안 brodcast`,
+          `     (\`forge-team read-inbox${wsArg} --team-id ${teamId} --agent ${m.name}\`)`,
+          `  3. 합의안 도출 → 모든 멤버에게 동일 메시지로 final 합의안 broadcast`,
           ``,
           `자기 worktree: ${m.worktreePath ?? '(공유)'}`,
           `자기 브랜치: ${m.branch ?? '(unset)'}`,
@@ -676,6 +689,99 @@ export class TeamOperations {
           councilSeeded++
         } else {
           councilSeedErrors.push({ member: m.name, error: res.error ?? 'unknown' })
+        }
+      }
+    }
+
+    // ── Pass 2: task prompt 주입 ──────────────────────────────────────
+    // config.json + council seed inbox 둘 다 disk 에 안전히 들어간 후에만
+    // 멤버에게 task prompt 전달. otherNames 도 완전한 rawMembers 기준.
+    if (autoStart && tmuxOk) {
+      const tmux = this.tmuxBin()
+      for (const member of rawMembers) {
+        if (!member.tmuxPaneId || !member.task) continue
+        const session = teamSessionName(teamId, member.agentId)
+        const env = {
+          ...this.tmuxEnv(),
+          FORGE_TEAM_ID: teamId,
+          FORGE_MEMBER_NAME: member.name,
+          FORGE_TEAM_NAME: opts.name,
+        }
+        const others = rawMembers.filter((o) => o.name !== member.name)
+        const otherRoles = others
+          .map((o) => {
+            const roleLabel = o.role ? `${o.role} (${o.name})` : o.name
+            const files = o.expectedFiles?.length
+              ? ` — 영역: ${o.expectedFiles.join(', ')}`
+              : ''
+            return `  - ${roleLabel}${files}`
+          })
+          .join('\n')
+
+        const wsArg = opts.workspacePath ? ` --workspace "${opts.workspacePath}"` : ''
+        const lines: string[] = []
+        lines.push(`[Forge Team 자동 안내] 당신은 팀 "${opts.name}" 의 멤버 "${member.name}".`)
+        if (member.role) lines.push(`역할: ${member.role}`)
+        lines.push(`팀 목표: ${opts.goal ?? opts.name}`)
+        lines.push('')
+        lines.push(`### 당신의 task`)
+        lines.push(member.task)
+        if (member.expectedFiles?.length) {
+          lines.push('')
+          lines.push(`### 당신의 책임 영역 (only these files)`)
+          lines.push(member.expectedFiles.map((f) => `  - ${f}`).join('\n'))
+          lines.push(`이 영역 외의 파일은 수정하지 마세요. 다른 멤버 영역 침범 금지.`)
+        }
+        if (others.length > 0) {
+          lines.push('')
+          lines.push(`### 같은 팀의 다른 멤버 (절대 그들 영역 건드리지 마세요)`)
+          lines.push(otherRoles)
+          lines.push(`다른 멤버 영역에 변경 필요하면 inbox 로 협의 요청:`)
+          lines.push(`  \`forge-team send-message${wsArg} --team-id ${teamId} --from ${member.name} --to <상대> --text "..."\``)
+        }
+        lines.push('')
+        lines.push(`### 작업 환경`)
+        if (member.worktreePath && member.worktreePath !== wsPath) {
+          lines.push(`- 자기 worktree: ${member.worktreePath} (격리됨, 다른 멤버와 별도)`)
+          lines.push(`- 자기 브랜치: ${member.branch} — 작업 중 자유롭게 commit`)
+          lines.push(`- 메인 세션이 추후 forge-team merge 로 통합`)
+        } else {
+          lines.push(`- 메인 디렉토리 공유 (shared mode — worktree 격리 X)`)
+          lines.push(`- 자기 sub-directory / 영역만 수정. git add/commit 은 메인 세션 일괄 처리.`)
+          lines.push(`- 다른 멤버와 git race 가능 — 자기 영역 외엔 절대 건드리지 말 것.`)
+        }
+        lines.push('')
+        lines.push(`### 진행 룰`)
+        lines.push(`- TDD 우선: 실패 테스트 먼저 → 통과 코드. 멤버에 test-writer 가 있으면 그 결과 활용.`)
+        lines.push(`- 자기 task 외엔 손대지 말 것. 추가 작업 필요하면 메인 세션에게 inbox 로 의견 요청.`)
+        lines.push(`- 막히면 inbox 로 메시지: \`forge-team send-message${wsArg} --team-id ${teamId} --from ${member.name} --to <상대> --text "..."\``)
+        lines.push(`- 자기 inbox 확인: \`forge-team read-inbox${wsArg} --team-id ${teamId} --agent ${member.name}\``)
+        lines.push(`- 충돌/혼란 시 사용자 결정 받기보다 우선 inbox 협의.`)
+        if (councilEnabled) {
+          const otherNames = others.map((o) => o.name)
+          lines.push('')
+          lines.push(`### ⚠️ 협의(Council) 모드 — round-robin 토론`)
+          lines.push(`이 팀은 협의 모드. 코드 바로 작성 X — 먼저 토론 → 합의안 후 구현.`)
+          lines.push(`  Round 1 (proposal): 자기 제안 작성 → 다른 멤버 inbox 로 전송`)
+          lines.push(`  Round 2 (critique): 다른 멤버 inbox 읽고 비판/보완 → 답신`)
+          lines.push(`  Round 3 (consensus): 합의안 도출 또는 dissent 명시`)
+          lines.push(`자기 inbox 에 협의 진행 안내 메시지가 이미 도착해 있음. 먼저 그것부터 읽어보세요.`)
+          lines.push(`다른 멤버: ${otherNames.join(', ')}.`)
+          lines.push(`Round 종료마다 forge-council-stop.sh hook 이 다음 round 안내 자동 inject.`)
+        }
+        lines.push('')
+        lines.push(`이제 자율적으로 task 진행하세요.`)
+
+        const taskPrompt = lines.join('\n')
+
+        try {
+          await new Promise<void>((resolve) => setTimeout(resolve, 1500))
+          await execFileAsync(tmux, ['send-keys', '-t', session, taskPrompt, 'Enter'], {
+            timeout: 4000,
+            env,
+          })
+        } catch {
+          // ignore — task prompt 주입 실패는 non-fatal (사용자가 수동 send-keys 가능)
         }
       }
     }
@@ -872,23 +978,29 @@ export class TeamOperations {
     const inboxPath = path.join(inboxDir, `${toAgent}.json`)
     try {
       await fs.mkdir(inboxDir, { recursive: true })
-      let existing: unknown[] = []
-      try {
-        const buf = await fs.readFile(inboxPath, 'utf-8')
-        const parsed = JSON.parse(buf)
-        if (Array.isArray(parsed)) existing = parsed
-      } catch {
-        // first message in this inbox — leave existing as []
-      }
-      existing.push({
-        from: fromAgent,
-        text,
-        summary: summary ?? text.slice(0, 120),
-        timestamp: new Date().toISOString(),
-        read: false,
+      return await this.withInboxLock(inboxPath, async () => {
+        let existing: unknown[] = []
+        try {
+          const buf = await fs.readFile(inboxPath, 'utf-8')
+          const parsed = JSON.parse(buf)
+          if (Array.isArray(parsed)) existing = parsed
+        } catch {
+          // first message in this inbox — leave existing as []
+        }
+        existing.push({
+          from: fromAgent,
+          text,
+          summary: summary ?? text.slice(0, 120),
+          timestamp: new Date().toISOString(),
+          read: false,
+        })
+        // Atomic write: temp file + rename, so 다른 reader 가 half-written
+        // JSON 을 보지 않게. 같은 inboxPath 의 RMW pair 는 락이 보호함.
+        const tmpPath = `${inboxPath}.tmp-${process.pid}-${Date.now()}`
+        await fs.writeFile(tmpPath, JSON.stringify(existing, null, 2), 'utf-8')
+        await fs.rename(tmpPath, inboxPath)
+        return { ok: true }
       })
-      await fs.writeFile(inboxPath, JSON.stringify(existing, null, 2), 'utf-8')
-      return { ok: true }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }
@@ -906,15 +1018,24 @@ export class TeamOperations {
     const teamsDir = this.teamsDirFor(workspacePath)
     const inboxPath = path.join(teamsDir, teamId, 'inboxes', `${agentName}.json`)
     try {
-      const buf = await fs.readFile(inboxPath, 'utf-8')
-      const parsed = JSON.parse(buf)
-      if (!Array.isArray(parsed)) return { ok: true }
-      const updated = parsed.map((m: { read?: boolean }) => ({ ...m, read: true }))
-      await fs.writeFile(inboxPath, JSON.stringify(updated, null, 2), 'utf-8')
-      return { ok: true }
+      return await this.withInboxLock(inboxPath, async () => {
+        let parsed: unknown
+        try {
+          const buf = await fs.readFile(inboxPath, 'utf-8')
+          parsed = JSON.parse(buf)
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ok: true }
+          throw err
+        }
+        if (!Array.isArray(parsed)) return { ok: true }
+        const updated = parsed.map((m: { read?: boolean }) => ({ ...m, read: true }))
+        const tmpPath = `${inboxPath}.tmp-${process.pid}-${Date.now()}`
+        await fs.writeFile(tmpPath, JSON.stringify(updated, null, 2), 'utf-8')
+        await fs.rename(tmpPath, inboxPath)
+        return { ok: true }
+      })
     } catch (err) {
-      const msg = (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : (err as Error).message
-      return msg ? { ok: false, error: msg } : { ok: true }
+      return { ok: false, error: (err as Error).message }
     }
   }
 
