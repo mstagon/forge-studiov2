@@ -797,7 +797,17 @@ export class TeamOperations {
         const oneLinePrompt = `먼저 .claude/forge-task.md 를 Read 해서 자기 task / 책임 영역 / 다른 멤버 / 진행 룰 모두 확인. 그 다음 자율적으로 진행.`
         try {
           await new Promise<void>((resolve) => setTimeout(resolve, 4000))
-          await execFileAsync(tmux, ['send-keys', '-t', session, oneLinePrompt, 'Enter'], {
+          // 텍스트와 Enter 를 분리해서 send. claude code TUI 가 bracketed
+          // paste 모드라 text + Enter 한 번에 보내면 Enter 가 paste 의 일부로
+          // 흡수돼 submit 안 됨. `-l` (literal) 로 텍스트 먼저, 200ms 지연 후
+          // 별도 send-keys 로 Enter — claude 가 paste 종료 후 Enter 를 진짜
+          // submit 키로 받음. 사용자 보고: "프롬프트만 입력되고 엔터 안 눌림".
+          await execFileAsync(tmux, ['send-keys', '-l', '-t', session, oneLinePrompt], {
+            timeout: 4000,
+            env,
+          })
+          await new Promise<void>((resolve) => setTimeout(resolve, 250))
+          await execFileAsync(tmux, ['send-keys', '-t', session, 'Enter'], {
             timeout: 4000,
             env,
           })
