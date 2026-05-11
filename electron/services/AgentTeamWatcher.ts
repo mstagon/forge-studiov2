@@ -75,6 +75,9 @@ export interface Team {
   description?: string
   goal?: string
   workspaceId?: string
+  /** Absolute workspace path. App.tsx 가 path 매칭으로 워크스페이스 scoping
+   *  — forge-team CLI 가 UUID 모르고 basename 만 알기 때문. */
+  workspacePath?: string
   worktreeStrategy?: WorktreeStrategy
   mergeStrategy?: MergeStrategy
   createdAt: number
@@ -237,6 +240,7 @@ export class AgentTeamWatcher extends EventEmitter {
       description: config.description,
       goal: config.goal,
       workspaceId: config.workspaceId,
+      workspacePath: config.workspacePath,
       worktreeStrategy: config.worktreeStrategy,
       mergeStrategy: config.mergeStrategy,
       createdAt: config.createdAt,

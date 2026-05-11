@@ -193,8 +193,13 @@ export interface Team {
   name: string
   description?: string
   goal?: string
-  /** Workspace this team belongs to (only set for workspace-scoped teams). */
+  /** Workspace this team belongs to (only set for workspace-scoped teams).
+   *  Note: forge-team CLI 에서 만든 팀은 workspaceId 가 path basename 일
+   *  수도 있다 (UUID 아님) — 매칭은 workspacePath 기준이 안전. */
   workspaceId?: string
+  /** Absolute workspace path. forge-team CLI 가 항상 채워서 path 매칭으로
+   *  정확한 워크스페이스 scoping 가능. UUID 모르는 외부 호출자도 정확. */
+  workspacePath?: string
   worktreeStrategy?: WorktreeStrategy
   mergeStrategy?: MergeStrategy
   createdAt: number

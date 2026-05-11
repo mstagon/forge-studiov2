@@ -417,8 +417,24 @@ export default function App() {
   // tripping "Rendered more hooks than during the previous render".
   const realTeams = useAgentTeamStore((s) => s.teams)
   const runs = useMemo<V2Team[]>(() => {
+    // 매칭 룰 (path > id > name 우선):
+    // 1. workspacePath 가 있으면 활성 워크스페이스 path 와 일치
+    // 2. 아니면 workspaceId 가 활성 워크스페이스 id 와 일치
+    // 3. 아니면 workspaceId 가 활성 워크스페이스 name 과 일치 (forge-team CLI
+    //    default — basename 사용)
+    // 4. workspaceId 도 없으면 (legacy / global) 무조건 표시
+    // path 우선 이유: forge-team CLI 는 UUID 모름, basename 만 안다. Path 는
+    // 둘 다 알아서 정확. 사용자가 "팀 안 뜬다" 라고 한 결함의 근본 원인.
     return realTeams
-      .filter((t) => !t.workspaceId || t.workspaceId === activeWorkspace?.id)
+      .filter((t) => {
+        if (!activeWorkspace) return !t.workspaceId
+        if (t.workspacePath) return t.workspacePath === activeWorkspace.path
+        if (t.workspaceId) {
+          return t.workspaceId === activeWorkspace.id ||
+            t.workspaceId === activeWorkspace.name
+        }
+        return true
+      })
       .map(toV2Team)
   }, [realTeams, activeWorkspace])
 
