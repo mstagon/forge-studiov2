@@ -356,6 +356,39 @@ async function cmdResume(flags: Map<string, string>): Promise<void> {
   emit(result)
 }
 
+// ────────────────────────────────────────────────────────────────────
+// inbox — 멤버 ↔ 멤버 ↔ 메인 메시지 (협의 모드 round-robin 의 채널)
+// ────────────────────────────────────────────────────────────────────
+
+async function cmdSendMessage(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const from = requireFlag(flags, 'from')
+  const to = requireFlag(flags, 'to')
+  const text = requireFlag(flags, 'text')
+  const summary = flags.get('summary')
+  const result = await ops.sendInboxMessage(workspacePath, teamId, from, to, text, summary)
+  emit(result)
+  if (!result.ok) process.exit(2)
+}
+
+async function cmdReadInbox(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const agent = requireFlag(flags, 'agent')
+  const messages = await ops.readInbox(workspacePath, teamId, agent)
+  emit({ agent, count: messages.length, messages })
+}
+
+async function cmdMarkInboxRead(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const agent = requireFlag(flags, 'agent')
+  const result = await ops.markInboxRead(workspacePath, teamId, agent)
+  emit(result)
+  if (!result.ok) process.exit(2)
+}
+
 function printHelp(): void {
   process.stdout.write(
     [
@@ -373,6 +406,9 @@ function printHelp(): void {
       '  resume   Resume an entire team or a single member (--agent-id)',
       '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
       '  execute  plan.json 의 단일 phase 실행 (--phase n) 또는 머지 (--merge)',
+      '  send-message       inbox 로 메시지 전달 (협의 모드 멤버끼리 통신)',
+      '  read-inbox         자기 inbox 의 메시지 읽기 (newest first)',
+      '  mark-inbox-read    자기 inbox 의 모든 메시지를 read=true 로',
       '',
       'Common flags:',
       '  --workspace <path>          Workspace root (required)',
@@ -394,11 +430,18 @@ function printHelp(): void {
       'pause/resume flags:',
       '  --agent-id <id>             Pause/resume just this member',
       '',
+      'inbox flags:',
+      '  send-message:  --from <agent> --to <agent> --text "..." [--summary "..."]',
+      '  read-inbox / mark-inbox-read:  --agent <agentName>',
+      '',
       'Examples:',
       '  forge-team create --workspace . --name auth --goal "OAuth" \\',
       '    --members "nestjs-backend:auth API,flutter-ui:로그인 화면"',
       '  forge-team list --workspace .',
       '  forge-team merge --workspace . --team-id team-1234',
+      '  forge-team send-message --workspace . --team-id team-1234 \\',
+      '    --from flutter-ui --to nestjs-backend --text "DTO 추가 요청"',
+      '  forge-team read-inbox --workspace . --team-id team-1234 --agent flutter-ui',
       '  forge-team remove --workspace . --team-id team-1234',
       '',
     ].join('\n')
@@ -440,6 +483,15 @@ async function main(): Promise<void> {
       case 'execute':
       case 'run':
         await cmdExecute(flags)
+        break
+      case 'send-message':
+        await cmdSendMessage(flags)
+        break
+      case 'read-inbox':
+        await cmdReadInbox(flags)
+        break
+      case 'mark-inbox-read':
+        await cmdMarkInboxRead(flags)
         break
       default:
         fail(`unknown command: ${command} (try \`forge-team help\`)`)
