@@ -1070,9 +1070,10 @@ export class TeamOperations {
     const teamDir = path.join(teamsDir, teamId)
     const inboxDir = path.join(teamDir, 'inboxes')
     const inboxPath = path.join(inboxDir, `${toAgent}.json`)
+    let writeResult: { ok: boolean; error?: string }
     try {
       await fs.mkdir(inboxDir, { recursive: true })
-      return await this.withInboxLock(inboxPath, async () => {
+      writeResult = await this.withInboxLock(inboxPath, async () => {
         let existing: unknown[] = []
         try {
           const buf = await fs.readFile(inboxPath, 'utf-8')
@@ -1097,6 +1098,70 @@ export class TeamOperations {
       })
     } catch (err) {
       return { ok: false, error: (err as Error).message }
+    }
+
+    // 실시간 push — 쓰기 성공 후 수신자 tmux pane 에 한 줄 알림 inject.
+    // 사용자 요구: "inbox 도 좀 바로바로 알아듣게 못하나". send-keys 가
+    // claude 의 input buffer 에 들어가서 현재 turn 끝나면 자동 submit →
+    // 다음 turn 에서 claude 가 inbox 확인. 시스템 seed 메시지
+    // (from='forge-team') 는 어차피 첫 turn 에서 task prompt 에 안내된
+    // 대로 읽으므로 알림 스킵 (중복 노이즈).
+    if (writeResult.ok && fromAgent !== 'forge-team' && fromAgent !== toAgent) {
+      void this.notifyRecipientPane(
+        workspacePath,
+        teamId,
+        toAgent,
+        fromAgent,
+        summary ?? text.slice(0, 80),
+      ).catch(() => {
+        // best-effort — pane 없거나 tmux 없어도 inbox 자체는 정상 쓰임
+      })
+    }
+    return writeResult
+  }
+
+  /**
+   * 수신자 멤버의 tmux pane 에 inbox 도착 알림을 한 줄 prompt 로 inject.
+   * claude code TUI 가 bracketed paste 에 Enter 흡수하는 거 회피 위해
+   * text + Enter 두 단계로 send-keys (Pass 2 task prompt 와 같은 패턴).
+   */
+  private async notifyRecipientPane(
+    workspacePath: string | null,
+    teamId: string,
+    toAgent: string,
+    fromAgent: string,
+    summary: string,
+  ): Promise<void> {
+    if (!(await this.hasTmux())) return
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return
+    const member = found.config.members.find(
+      (m) => m.name === toAgent || m.agentId === toAgent,
+    )
+    if (!member?.tmuxPaneId || !isTmuxPaneId(member.tmuxPaneId)) return
+
+    const wsArg = workspacePath ? ` --workspace "${workspacePath}"` : ''
+    const cleanSummary = summary.replace(/[\r\n]/g, ' ').slice(0, 100)
+    const notification = `📬 [inbox] ${fromAgent} → ${toAgent}: "${cleanSummary}" — \`forge-team read-inbox${wsArg} --team-id ${teamId} --agent ${toAgent}\` 로 즉시 확인하고 응답.`
+
+    const tmux = this.tmuxBin()
+    const env = {
+      ...this.tmuxEnv(),
+      FORGE_TEAM_ID: teamId,
+      FORGE_MEMBER_NAME: toAgent,
+    }
+    try {
+      await execFileAsync(tmux, ['send-keys', '-l', '-t', member.tmuxPaneId, notification], {
+        timeout: 3000,
+        env,
+      })
+      await new Promise<void>((resolve) => setTimeout(resolve, 200))
+      await execFileAsync(tmux, ['send-keys', '-t', member.tmuxPaneId, 'Enter'], {
+        timeout: 3000,
+        env,
+      })
+    } catch {
+      // pane 못 찾음 등 — silent
     }
   }
 
