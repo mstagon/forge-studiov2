@@ -50,6 +50,9 @@ export interface Team {
   tokens: number
   durationMin: number
   members: TeamMember[]
+  /** 협의 (Council) 모드 — Round 1 제안 → Round 2 critique → Round 3 합의
+   *  의 round-robin 토론. true 면 RunLiveView 에 "협의" 탭 추가. */
+  council?: boolean
 }
 
 export type ActivityKind =
