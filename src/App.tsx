@@ -423,15 +423,21 @@ export default function App() {
     // 3. 아니면 workspaceId 가 활성 워크스페이스 name 과 일치 (forge-team CLI
     //    default — basename 사용)
     // 4. workspaceId 도 없으면 (legacy / global) 무조건 표시
-    // path 우선 이유: forge-team CLI 는 UUID 모름, basename 만 안다. Path 는
-    // 둘 다 알아서 정확. 사용자가 "팀 안 뜬다" 라고 한 결함의 근본 원인.
+    //
+    // NFC 정규화: macOS APFS path API 는 NFD (분해형 자모) 반환 — electron
+    // showOpenDialog 도 NFD 저장. 반면 forge-team CLI 가 받는 workspacePath
+    // 는 NFC (완성형) 가능. 같은 `/Users/macms/마블워크-mvpv1` 디렉토리지만
+    // 문자열 인코딩이 달라 === 실패 → 사용자 "팀 안 뜬다" 결함의 진짜 원인.
+    const normalize = (s: string | undefined): string => (s ? s.normalize('NFC') : '')
+    const wsPath = normalize(activeWorkspace?.path)
+    const wsId = activeWorkspace?.id
+    const wsName = activeWorkspace?.name
     return realTeams
       .filter((t) => {
         if (!activeWorkspace) return !t.workspaceId
-        if (t.workspacePath) return t.workspacePath === activeWorkspace.path
+        if (t.workspacePath) return normalize(t.workspacePath) === wsPath
         if (t.workspaceId) {
-          return t.workspaceId === activeWorkspace.id ||
-            t.workspaceId === activeWorkspace.name
+          return t.workspaceId === wsId || t.workspaceId === wsName
         }
         return true
       })
