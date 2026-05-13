@@ -65,6 +65,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     void window.api.teams.setWorkspace(workspace.path).catch((err) => {
       console.error('[workspace] teams.setWorkspace failed:', err)
     })
+    // workspace.open() 호출로 lastOpened 디스크에 갱신. 안 하면 다음 부팅 시
+    // App.tsx 의 most-recent 자동 선택이 옛 lastOpened 만 보고 엉뚱한 워크스페이스
+    // 활성화 → 사용자가 다른 워크스페이스에서 만든 팀이 좌측에 안 보이는 결함
+    // 발생 (사용자 보고: "마블워크 작업중인데 좌측에 팀이 안 떠"). Fire-and-forget
+    // 으로 부작용만 트리거하고 결과는 다음 loadWorkspaces 가 흡수.
+    void window.api.workspace.open(workspace.path).catch((err) => {
+      console.error('[workspace] workspace.open (lastOpened bump) failed:', err)
+    })
     get().scanHarness()
     get().scanMcp()
     get().refreshHarnessVersion()
