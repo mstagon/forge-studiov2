@@ -645,6 +645,25 @@ export class TeamOperations {
             ['new-session', '-d', '-s', session, '-c', memberCwd],
             { timeout: 8000, env }
           )
+          // tmux mouse 모드 + copy-mode wheel binding 활성화 — 사용자가 팀
+          // 멤버 터미널에서 휠 스크롤 가능. claude TUI 가 alt-screen buffer
+          // 쓰지만 tmux 가 자기 pane history 를 따로 유지하므로 wheel 이
+          // 자동으로 copy-mode 진입 → 자유 스크롤. 사용자 보고: "team 터미널
+          // 그냥 스크롤 안 됨" 의 fix.
+          await execFileAsync(
+            tmux,
+            ['set-option', '-t', session, '-g', 'mouse', 'on'],
+            { timeout: 3000, env },
+          ).catch(() => {
+            // 옛 tmux 또는 옵션 거부 — 스크롤만 제한, 팀 작동엔 영향 없음
+          })
+          await execFileAsync(
+            tmux,
+            ['set-option', '-t', session, '-g', 'history-limit', '50000'],
+            { timeout: 3000, env },
+          ).catch(() => {
+            // default 2000 도 작동 — 단지 스크롤백 짧음
+          })
           let realPaneId: string | null = null
           try {
             const { stdout } = await execFileAsync(

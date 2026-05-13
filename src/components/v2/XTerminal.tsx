@@ -193,12 +193,21 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, 
         onTitleChangeRef.current?.(title)
       })
 
-      // Auto-fit on resize
+      // Auto-fit on resize.
+      // 두 단계 RAF + scrollToBottom: 첫 RAF 에서 layout 안정 안 됐을 수 있음
+      // (특히 window resize 시 flex 컨테이너 height 다음 frame 에 확정).
+      // resize 직후 cursor 아래로 자동 따라가게 scrollToBottom — claude TUI 의
+      // alt-screen buffer 에선 viewport 가 새 rows 에 맞춰지지만 사용자가 스크롤
+      // 위로 올라간 상태였다면 그대로라서 "스크롤 안 되는 듯한 인상" 의 원인.
       resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => {
-          if (!disposed) {
+          if (disposed || !terminal) return
+          try { fitAddon.fit() } catch { /* noop */ }
+          requestAnimationFrame(() => {
+            if (disposed || !terminal) return
             try { fitAddon.fit() } catch { /* noop */ }
-          }
+            try { terminal.scrollToBottom() } catch { /* noop */ }
+          })
         })
       })
       resizeObserver.observe(container)
@@ -206,20 +215,41 @@ export function XTerminal({ tabId, paneId, cwd, isActive, searchVisible, agent, 
       // Explicit wheel fallback. WebGL canvas on macOS sometimes fails to
       // forward wheel events to xterm's internal handler (especially with
       // trackpad momentum scroll), so the viewport silently doesn't move.
-      // Translate pixel deltas into line scrolls and feed terminal.scrollLines
-      // directly. preventDefault to avoid the page also scrolling.
+      //
+      // 두 모드:
+      //   1. normal buffer — xterm.js 의 scrollback 으로 line scroll
+      //   2. alt-screen buffer (claude TUI / tmux 등) — PTY 로 mouse wheel
+      //      escape sequence 전달. tmux 가 mouse on 이면 자동으로 copy-mode
+      //      진입 + 스크롤. claude code 단독 (no tmux) 면 TUI 가 해석 못 하지만
+      //      적어도 wheel 이 무의미하게 사라지진 않음.
       const onWheel = (e: WheelEvent) => {
         if (!terminal) return
         e.preventDefault()
+        const inAltBuffer = terminal.buffer.active.type === 'alternate'
         // deltaMode 0 = pixels, 1 = lines, 2 = pages — normalise to lines.
         const lineHeightPx = 14 * 1.35
         let lines: number
         if (e.deltaMode === 1) lines = e.deltaY
         else if (e.deltaMode === 2) lines = e.deltaY * terminal.rows
         else lines = e.deltaY / lineHeightPx
-        // Speed up when shift is held (xterm's "fast scroll" convention).
         if (e.shiftKey) lines *= 5
-        if (lines !== 0) terminal.scrollLines(Math.trunc(lines) || (lines > 0 ? 1 : -1))
+        if (lines === 0) return
+        const truncLines = Math.trunc(lines) || (lines > 0 ? 1 : -1)
+        if (inAltBuffer) {
+          // SGR mouse mode (1006) wheel up = button 64, down = 65.
+          // Format: \x1b[<button;col;rowM (press) — tmux/claude 가 처리.
+          const button = truncLines > 0 ? 65 : 64
+          const count = Math.abs(truncLines)
+          const target = e.target as HTMLElement
+          const rect = target.getBoundingClientRect()
+          const col = Math.max(1, Math.min(terminal.cols, Math.floor((e.clientX - rect.left) / 8) + 1))
+          const row = Math.max(1, Math.min(terminal.rows, Math.floor((e.clientY - rect.top) / lineHeightPx) + 1))
+          const seq = `\x1b[<${button};${col};${row}M`.repeat(count)
+          const pid = ptyIdRef.current
+          if (pid) window.api.pty.write(pid, seq)
+        } else {
+          terminal.scrollLines(truncLines)
+        }
       }
       container.addEventListener('wheel', onWheel, { passive: false })
       const detachWheel = () => container.removeEventListener('wheel', onWheel)
