@@ -29,7 +29,7 @@ const execFileAsync = promisify(execFile)
  */
 
 export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
-export type TeamStatus = 'active' | 'paused'
+export type TeamStatus = 'active' | 'paused' | 'done'
 export type WorktreeStrategy = 'isolated' | 'shared'
 export type MergeStrategy = 'squash' | 'sequential'
 
@@ -1263,6 +1263,91 @@ export class TeamOperations {
     } catch {
       return []
     }
+  }
+
+  /**
+   * 팀 완료 표시. config.status = 'done' 으로 set + main inbox 에 완료 메시지
+   * push. AgentTeamWatcher (chokidar) 가 변경 감지 → electron main 이
+   * 사용자에게 macOS 알림 발사. \`forge-team wait\` 가 폴링 중이면 즉시 exit 0.
+   *
+   * 호출 패턴:
+   *   - 멤버가 자기 task 끝낸 후 task prompt 안내에 따라 호출
+   *   - 메인 세션이 모든 멤버 결과 확인 후 명시적 호출
+   *   - GUI 의 "Close team" 버튼 클릭 시
+   */
+  async completeTeam(
+    workspacePath: string | null,
+    teamId: string,
+    message?: string,
+  ): Promise<{ ok: boolean; teamId?: string; doneAt?: string; error?: string }> {
+    if (!teamId) return { ok: false, error: 'teamId required' }
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return { ok: false, error: 'team not found' }
+    const doneAt = new Date().toISOString()
+    found.config.status = 'done'
+    await this.writeConfig(found.configPath, found.config)
+    // main inbox 에 완료 알림 push (wait CLI 가 폴링)
+    const teamDir = path.dirname(found.configPath)
+    const mainInboxPath = path.join(teamDir, 'inboxes', 'main.json')
+    try {
+      await fs.mkdir(path.dirname(mainInboxPath), { recursive: true })
+      await this.withInboxLock(mainInboxPath, async () => {
+        let existing: unknown[] = []
+        try {
+          const buf = await fs.readFile(mainInboxPath, 'utf-8')
+          const parsed = JSON.parse(buf)
+          if (Array.isArray(parsed)) existing = parsed
+        } catch {
+          // 첫 메시지
+        }
+        existing.push({
+          from: 'forge-team',
+          text: message ?? '팀 작업 완료',
+          summary: 'team:done',
+          timestamp: doneAt,
+          read: false,
+          kind: 'team:done',
+        })
+        const tmp = `${mainInboxPath}.tmp-${process.pid}-${Date.now()}`
+        await fs.writeFile(tmp, JSON.stringify(existing, null, 2), 'utf-8')
+        await fs.rename(tmp, mainInboxPath)
+        return undefined
+      })
+    } catch {
+      // main inbox 쓰기 실패해도 config status 는 done — wait 가 그걸로도 감지
+    }
+    return { ok: true, teamId, doneAt }
+  }
+
+  /**
+   * 팀이 완료됐는지 확인. forge-team wait 가 폴링용으로 호출.
+   * done 판정:
+   *   - config.status === 'done' (가장 안전한 명시적 신호)
+   *   - 또는 main.json inbox 에 kind === 'team:done' 메시지 존재
+   */
+  async isTeamDone(
+    workspacePath: string | null,
+    teamId: string,
+  ): Promise<{ done: boolean; doneAt?: string; reason?: string }> {
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return { done: false, reason: 'team not found' }
+    if (found.config.status === 'done') {
+      return { done: true, reason: 'config.status' }
+    }
+    // main inbox 확인
+    const teamDir = path.dirname(found.configPath)
+    const mainInboxPath = path.join(teamDir, 'inboxes', 'main.json')
+    try {
+      const buf = await fs.readFile(mainInboxPath, 'utf-8')
+      const parsed = JSON.parse(buf) as Array<{ kind?: string; timestamp?: string }>
+      if (Array.isArray(parsed)) {
+        const doneMsg = parsed.find((m) => m.kind === 'team:done')
+        if (doneMsg) return { done: true, doneAt: doneMsg.timestamp, reason: 'main inbox' }
+      }
+    } catch {
+      // main inbox 없음 — 미완료
+    }
+    return { done: false }
   }
 
   async merge(

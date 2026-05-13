@@ -389,6 +389,39 @@ async function cmdMarkInboxRead(flags: Map<string, string>): Promise<void> {
   if (!result.ok) process.exit(2)
 }
 
+// ────────────────────────────────────────────────────────────────────
+// complete / wait — 팀 완료 시그널링 + 메인 세션 대기
+// ────────────────────────────────────────────────────────────────────
+
+async function cmdComplete(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const message = flags.get('message') ?? '팀 작업 완료'
+  const result = await ops.completeTeam(workspacePath, teamId, message)
+  emit(result)
+  if (!result.ok) process.exit(2)
+}
+
+async function cmdWait(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const intervalMs = parseInt(flags.get('interval') ?? '3000', 10)
+  const timeoutMs = parseInt(flags.get('timeout') ?? '0', 10) // 0 = 무제한
+  const start = Date.now()
+  while (true) {
+    const done = await ops.isTeamDone(workspacePath, teamId)
+    if (done.done) {
+      emit({ ok: true, teamId, doneAt: done.doneAt, reason: done.reason })
+      return
+    }
+    if (timeoutMs > 0 && Date.now() - start > timeoutMs) {
+      emit({ ok: false, teamId, error: 'timeout', elapsedMs: Date.now() - start })
+      process.exit(3)
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
 function printHelp(): void {
   process.stdout.write(
     [
@@ -409,6 +442,8 @@ function printHelp(): void {
       '  send-message       inbox 로 메시지 전달 (협의 모드 멤버끼리 통신)',
       '  read-inbox         자기 inbox 의 메시지 읽기 (newest first)',
       '  mark-inbox-read    자기 inbox 의 모든 메시지를 read=true 로',
+      '  complete           팀 작업 완료 표시 (status=done) — macOS 알림 + 메인 inbox push',
+      '  wait               팀 완료까지 폴링 대기 (main 세션이 호출, exit 0 = done)',
       '',
       'Common flags:',
       '  --workspace <path>          Workspace root (required)',
@@ -492,6 +527,13 @@ async function main(): Promise<void> {
         break
       case 'mark-inbox-read':
         await cmdMarkInboxRead(flags)
+        break
+      case 'complete':
+      case 'done':
+        await cmdComplete(flags)
+        break
+      case 'wait':
+        await cmdWait(flags)
         break
       default:
         fail(`unknown command: ${command} (try \`forge-team help\`)`)

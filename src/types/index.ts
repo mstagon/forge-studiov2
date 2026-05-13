@@ -110,7 +110,7 @@ export interface GitBranch {
 }
 
 export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
-export type TeamStatus = 'active' | 'paused'
+export type TeamStatus = 'active' | 'paused' | 'done'
 export type WorktreeStrategy = 'isolated' | 'shared'
 export type MergeStrategy = 'squash' | 'sequential'
 

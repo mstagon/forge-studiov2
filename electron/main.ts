@@ -1439,6 +1439,25 @@ if (!gotTheLock) {
         console.warn('[teamActivityTracker] reconcile failed (non-fatal):', err)
       })
     })
+    // 팀 완료 (config.status === 'done' 전환) → macOS 알림 + renderer 통보.
+    // 사용자 요구: GUI 사용자에게 즉시 보여줌. 메인 세션은 forge-team wait
+    // CLI 가 main.json inbox 폴링해서 별도 감지.
+    agentTeamWatcher.on('team:done', (team: { id: string; name: string; goal?: string }) => {
+      mainWindow?.webContents.send('teams:done', team)
+      try {
+        const title = `팀 완료 — ${team.name}`
+        const body = team.goal ? team.goal.slice(0, 120) : `forge-team ${team.id} 작업 완료`
+        // macOS osascript 로 시스템 알림. \\, ", 줄바꿈 회피 위해 안전 escape.
+        const safeTitle = title.replace(/["\\\n\r]/g, ' ')
+        const safeBody = body.replace(/["\\\n\r]/g, ' ')
+        const script = `display notification "${safeBody}" with title "${safeTitle}" sound name "Glass"`
+        execFile('osascript', ['-e', script], { timeout: 5000 }, () => {
+          // best-effort — 알림 실패해도 renderer 통보 + main inbox 는 이미 됐음
+        })
+      } catch {
+        // platform 이 macOS 아니거나 osascript 없음
+      }
+    })
 
     // Forward every activity event to the renderer. The renderer subscribes
     // via `team-activity:event` (single channel for all teams) and filters by

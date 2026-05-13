@@ -28,7 +28,7 @@ function tmuxEnv(): NodeJS.ProcessEnv {
 }
 
 export type AgentStatus = 'running' | 'idle' | 'shutdown' | 'paused' | 'active'
-export type TeamStatus = 'active' | 'paused'
+export type TeamStatus = 'active' | 'paused' | 'done'
 export type WorktreeStrategy = 'isolated' | 'shared'
 export type MergeStrategy = 'squash' | 'sequential'
 
@@ -113,6 +113,9 @@ export class AgentTeamWatcher extends EventEmitter {
   private watcher: chokidar.FSWatcher | null = null
   private cache: Map<string, Team> = new Map()
   private refreshTimer: NodeJS.Timeout | null = null
+  /** team:done 이벤트 중복 발사 방지. 같은 팀이 done 으로 한 번 알림 가면
+   *  같은 사이클 안에서 다시 안 보냄. setWorkspace 로 워크스페이스 바뀌면 clear. */
+  private notifiedDone: Set<string> = new Set()
   private readonly ops = new TeamOperations({
     tmuxBin,
     tmuxEnv,
@@ -141,6 +144,7 @@ export class AgentTeamWatcher extends EventEmitter {
       this.watcher = null
     }
     this.cache = new Map()
+    this.notifiedDone.clear()
     await this.start()
     // Notify listeners so the renderer drops stale teams from the previous ws.
     this.emit('teams', this.list())
@@ -191,6 +195,23 @@ export class AgentTeamWatcher extends EventEmitter {
       for (const dir of dirs) {
         const team = await this.loadTeam(dir).catch(() => null)
         if (team) next.set(dir, team)
+      }
+      // status: active → done 전환 감지 → team:done 이벤트 발사 (사용자에게
+      // macOS 알림 + main session 의 forge-team wait CLI 가 알아챌 수 있도록)
+      for (const [id, team] of next) {
+        const prev = this.cache.get(id)
+        if (
+          team.status === 'done' &&
+          (!prev || prev.status !== 'done') &&
+          !this.notifiedDone.has(id)
+        ) {
+          this.notifiedDone.add(id)
+          this.emit('team:done', team)
+        }
+      }
+      // 사라진 팀은 알림 set 에서도 제거 (memory leak 방지)
+      for (const id of this.notifiedDone) {
+        if (!next.has(id)) this.notifiedDone.delete(id)
       }
       this.cache = next
     } catch {
