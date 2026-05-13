@@ -107,6 +107,7 @@ function toV2Team(team: StoreTeam): V2Team {
     tokens: 0,
     durationMin: Math.max(0, Math.round((Date.now() - team.createdAt) / 60_000)),
     members,
+    council: (team as StoreTeam & { council?: boolean }).council === true,
   }
 }
 
@@ -675,6 +676,14 @@ export default function App() {
         onOpenSettings={() => setView('settings')}
         onAddWorkspace={() => setNewWorkspaceDialog(true)}
         topBar={{ model: model.label }}
+        status={{
+          // 활성 멤버 합산 — runs (필터 통과 + V2 변환된 팀) 의 active 상태 member 수
+          agents: runs.reduce(
+            (acc, r) => acc + r.members.filter((m) => m.state === 'active').length,
+            0,
+          ),
+          tabsLabel: runs.length > 0 ? `${runs.length} run${runs.length > 1 ? 's' : ''}` : undefined,
+        }}
         harnessBanner={
           harnessUpdateAvailable
             ? {
