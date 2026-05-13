@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons'
 import { AgentBadge, Dot, STATE_COLOR, STATE_LABEL } from './primitives'
-import { AGENT_BY_ID } from './data'
+import { getAgent } from './data'
 import { useTerminalsRegistry, type LiveTerminalsRegistry } from './LiveTerminalsRoot'
 import type { TeamMember, TerminalLine } from './types'
 
@@ -63,7 +63,7 @@ function PaneShell({
   fullscreen,
   children,
 }: PaneShellProps) {
-  const a = AGENT_BY_ID[member.agentId]
+  const a = getAgent(member.agentId)
   const stateC = STATE_COLOR[member.state]
   const isActive = member.state === 'active'
 

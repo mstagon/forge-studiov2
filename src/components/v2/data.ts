@@ -40,6 +40,44 @@ export const AGENT_BY_ID: Record<string, Agent> = Object.fromEntries(
   AGENTS.map((a) => [a.id, a]),
 )
 
+/**
+ * Resolve an agent id to its v2 UI shape, **never returning null**.
+ *
+ * Pre-existing bug: AGENT_BY_ID 는 seed prototype 시절의 hardcoded id 만
+ * 가짐 (architect, flutter-state, test-unit 등). 실제 하네스의 agentId
+ * (tech-architect, planner, riverpod-logic, test-writer, prisma-data 등)
+ * 는 매칭 안 됨 → AgentCard 의 `if (!a) return null` 으로 멤버 카드 silent
+ * 미렌더. 사용자: "좌측 멤버 2 패널 비어있음".
+ *
+ * 이 함수는 알려진 id 면 그 entry, 미지의 id 면 generic fallback (id 기준
+ * 이니셜 + 회색 컬러) 반환. RunLiveView / LiveTerminalGrid / AgentBadge
+ * 모두 이 함수를 통과시키면 silent null 사라짐.
+ */
+export function getAgent(id: string): Agent {
+  const hit = AGENT_BY_ID[id]
+  if (hit) return hit
+  // Heuristic: agentId 패턴 → 적당한 role 컬러 추측 (없으면 generic gray)
+  const lower = id.toLowerCase()
+  let color = 'var(--role-arch)'
+  if (lower.includes('flutter') || lower.includes('riverpod') || lower.includes('ui') || lower.includes('view')) color = 'var(--role-fe)'
+  else if (lower.includes('nest') || lower.includes('api') || lower.includes('backend') || lower.includes('auth')) color = 'var(--role-be)'
+  else if (lower.includes('prisma') || lower.includes('schema') || lower.includes('migrat') || lower.includes('data')) color = 'var(--role-db)'
+  else if (lower.includes('test') || lower.includes('e2e') || lower.includes('verif')) color = 'var(--role-test)'
+  else if (lower.includes('review') || lower.includes('audit') || lower.includes('security')) color = 'var(--role-review)'
+  else if (lower.includes('cms') || lower.includes('next')) color = 'var(--role-fe)'
+  else if (lower.includes('plan') || lower.includes('architect')) color = 'var(--role-arch)'
+  else if (lower.includes('doc')) color = 'var(--role-doc)'
+  else if (lower.includes('infra') || lower.includes('docker') || lower.includes('k8s')) color = 'var(--role-infra)'
+  return {
+    id,
+    name: id,
+    role: id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    color,
+    icon: id.charAt(0).toUpperCase(),
+    desc: '',
+  }
+}
+
 export const TEAMS: Team[] = [
   {
     id: 't-signup',

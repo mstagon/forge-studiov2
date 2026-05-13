@@ -18,13 +18,14 @@ import {
   STATE_COLOR,
   STATE_LABEL,
 } from './primitives'
-import { AGENT_BY_ID, TERMINAL_LINES } from './data'
+import { getAgent, TERMINAL_LINES } from './data'
 import type { Team, TeamMember, ActivityItem, MemberState, TerminalLine } from './types'
 import { MergeConflictView, type ConflictItem } from './MergeConflictView'
 import { LiveTerminalGrid } from './LiveTerminalGrid'
 import { useLiveTerminalsStore } from '@/stores/liveTerminals'
 import { InboxPanel } from './InboxPanel'
 import { DiscussionView } from './DiscussionView'
+import { CouncilView } from './CouncilView'
 import {
   useTeamActivityStore,
   type ActivityEntry as RealActivityEntry,
@@ -78,7 +79,10 @@ export function RunLiveView({
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [feedOpen, setFeedOpen] = useState(true)
   const [inboxAgent, setInboxAgent] = useState<string | null>(null)
-  const [feedTab, setFeedTab] = useState<'activity' | 'discussion'>('activity')
+  // 'activity' = 시스템 활동 로그 (state 전환 등)
+  // 'discussion' = 협의 (inbox 메시지, 멤버끼리 통신, 모든 팀) — 항상
+  // 'council' = 토론 (Round 1 제안 → Round 2 critique → Round 3 합의) — council:true 팀만
+  const [feedTab, setFeedTab] = useState<'activity' | 'discussion' | 'council'>('activity')
   // Local paused fallback for the design demo (when no real backend status).
   const [localPaused, setLocalPaused] = useState(false)
   const paused = team.status === 'paused' || localPaused
@@ -478,6 +482,23 @@ export function RunLiveView({
               >
                 협의
               </button>
+              {team.council && (
+                <button
+                  onClick={() => setFeedTab('council')}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: feedTab === 'council' ? 'var(--bg-3)' : 'transparent',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 4,
+                    color: feedTab === 'council' ? 'var(--text-1)' : 'var(--text-3)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  토론
+                </button>
+              )}
               <span style={{ flex: 1 }} />
               <button
                 onClick={() => setFeedOpen(false)}
@@ -499,6 +520,8 @@ export function RunLiveView({
             </div>
             {feedTab === 'activity' ? (
               <ActivityFeed tick={tick} paused={paused} items={feedItems} />
+            ) : feedTab === 'council' ? (
+              <CouncilView teamId={team.id} members={team.members} />
             ) : (
               <DiscussionView teamId={team.id} members={team.members} />
             )}
@@ -628,9 +651,8 @@ function AgentCard({
   onOpenInbox,
   unreadCount = 0,
 }: AgentCardProps) {
-  const a = AGENT_BY_ID[member.agentId]
+  const a = getAgent(member.agentId)
   const stateC = STATE_COLOR[member.state]
-  if (!a) return null
   const blocked = member.state === 'blocked'
   const isPaused = member.state === 'paused'
   return (
@@ -983,7 +1005,7 @@ function ActivityFeed({ tick, paused, items }: ActivityFeedProps) {
   return (
     <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
       {items.map((it, i) => {
-        const a = AGENT_BY_ID[it.agent]
+        const a = getAgent(it.agent)
         const isNew = !paused && i === tick % 3 && i < 3
         const kindColor = KIND_COLOR[it.kind] ?? 'var(--text-2)'
         const kindLabel = KIND_LABEL[it.kind]
@@ -1013,7 +1035,7 @@ function ActivityFeed({ tick, paused, items }: ActivityFeedProps) {
                   className="mono"
                   style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 600 }}
                 >
-                  {a?.name ?? it.agent}
+                  {a.name}
                 </span>
                 <span
                   className="mono"
