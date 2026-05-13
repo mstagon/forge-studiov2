@@ -82,6 +82,9 @@ interface TeamWatcher {
   configWatcher: chokidar.FSWatcher | null
   configPath: string
   lastMemberStates: Map<string, string>
+  /** 직전 emit 된 state-change event 의 agentId → {ts, to}. 5초 안에 round-trip
+   *  (예: active→idle 직후 idle→active) 발생하면 flap 으로 판단하고 둘 다 suppress. */
+  recentStateChanges: Map<string, { ts: number; to: string }>
   headPollTimer: NodeJS.Timeout | null
   jsonlStream: WriteStream | null
   jsonlPath: string
@@ -189,6 +192,7 @@ export class TeamActivityTracker extends EventEmitter {
       configWatcher,
       configPath: configPath ?? '',
       lastMemberStates: lastStates,
+      recentStateChanges: new Map(),
       headPollTimer: null,
       jsonlStream,
       jsonlPath,
@@ -367,19 +371,31 @@ export class TeamActivityTracker extends EventEmitter {
     for (const m of parsed.members ?? []) {
       newStates.set(m.agentId, m.state ?? 'active')
     }
+    const now = Date.now()
     for (const [agentId, next] of newStates) {
       const prev = t.lastMemberStates.get(agentId)
-      if (prev !== undefined && prev !== next) {
-        const event: ActivityEvent = {
-          ts: Date.now(),
-          teamId,
-          agent: agentId,
-          kind: 'state-change',
-          from: prev,
-          to: next,
-        }
-        this.emitEvent(teamId, event)
+      if (prev === undefined || prev === next) continue
+      // Flap suppression: chokidar 의 awaitWriteFinish 가 잡지 못한 짧은
+      // round-trip (active → idle → active 가 5 초 안에 같은 멤버에
+      // 발생) 은 진짜 토글이 아닌 config 재기록 noise 로 간주. 사용자가
+      // 보고한 "활동 패널 idle↔active 무의미한 flap" 결함의 근본 fix.
+      const recent = t.recentStateChanges.get(agentId)
+      if (recent && recent.to === prev && now - recent.ts < 5000) {
+        // 직전 transition 의 to 가 지금 prev 와 같음 = round-trip 의 두 번째 leg.
+        // 첫 leg 도 함께 무시 (recentStateChanges 에서 제거 + 이번 emit 도 skip).
+        t.recentStateChanges.delete(agentId)
+        continue
       }
+      const event: ActivityEvent = {
+        ts: now,
+        teamId,
+        agent: agentId,
+        kind: 'state-change',
+        from: prev,
+        to: next,
+      }
+      this.emitEvent(teamId, event)
+      t.recentStateChanges.set(agentId, { ts: now, to: next })
     }
     t.lastMemberStates = newStates
   }
