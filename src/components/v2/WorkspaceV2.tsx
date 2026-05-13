@@ -94,7 +94,10 @@ export function WorkspaceV2({
         </div>
       </div>
 
-      {/* Run live view — 팀 선택됐을 때만 mount, home 으로 돌아가면 display:none */}
+      {/* Run live view — 팀 선택됐을 때만 mount, home 으로 돌아가면 display:none.
+         RunLiveView 가 자체 inline 헤더 (Back / team name / LIVE / branch /
+         tokens / actions) 를 가지므로 별도 RunBackBar 안 그림 (옛 duplicate
+         breadcrumb 결함). */}
       {activeTeam && (
         <div
           style={{
@@ -104,7 +107,6 @@ export function WorkspaceV2({
             minHeight: 0,
           }}
         >
-          <RunBackBar team={activeTeam} onClose={onCloseRun} />
           <RunLiveView team={activeTeam} onClose={onCloseRun} density={density} />
         </div>
       )}
