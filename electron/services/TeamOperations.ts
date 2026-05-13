@@ -326,6 +326,59 @@ export class TeamOperations {
   }
 
   /**
+   * worktree 의 `.claude/scripts/` 가 main workspace 의 같은 디렉토리에
+   * 있는데 worktree 에 없는 (= 보통 untracked, gitignored) 파일을 symlink
+   * 해서 채움.
+   *
+   * 배경: `git worktree add` 는 git 추적 파일만 worktree 로 가져오는데,
+   * `.claude/scripts/forge-council-stop.sh` 같은 hook 스크립트는 untracked
+   * 인 경우가 많음 (배포로 들어가거나 로컬 설치). 멤버 claude 가 Stop
+   * hook 실행하려고 `$CLAUDE_PROJECT_DIR/.claude/scripts/X.sh` 호출 →
+   * not-found. non-blocking 이지만 매 Stop 마다 stderr 로그 + 실제로 hook
+   * 안 돈다.
+   *
+   * 전략: main 의 .claude/scripts/* 를 looping, worktree 에 같은 이름의
+   * 파일/링크가 없으면 main 파일로 symlink. 이미 있는 (git 추적된) 스크립트는
+   * 그대로 두니 worktree 가 자기 branch 에서 수정해도 안전.
+   */
+  private async linkMissingClaudeScripts(
+    workspacePath: string,
+    worktreePath: string,
+  ): Promise<void> {
+    const mainScriptsDir = path.join(workspacePath, '.claude', 'scripts')
+    const wtScriptsDir = path.join(worktreePath, '.claude', 'scripts')
+    let entries: import('fs').Dirent[]
+    try {
+      entries = await fs.readdir(mainScriptsDir, { withFileTypes: true })
+    } catch {
+      return // main 에 scripts 자체가 없으면 link 할 게 없음
+    }
+    await fs.mkdir(wtScriptsDir, { recursive: true })
+    for (const e of entries) {
+      if (!e.isFile() && !e.isSymbolicLink()) continue
+      const targetPath = path.join(mainScriptsDir, e.name)
+      const linkPath = path.join(wtScriptsDir, e.name)
+      // 이미 있으면 (git 추적 또는 직전 spawn 의 symlink) skip
+      try {
+        await fs.access(linkPath)
+        continue
+      } catch {
+        // 없음 → 만들기
+      }
+      try {
+        await fs.symlink(targetPath, linkPath)
+      } catch {
+        // symlink 실패 (권한 등) → copy fallback
+        try {
+          await fs.copyFile(targetPath, linkPath)
+        } catch {
+          // 복사도 실패 — 이 파일만 skip
+        }
+      }
+    }
+  }
+
+  /**
    * 빈 repo (initial commit 없음) 시 자동 initial commit 만들어 base 를 확보.
    * 워크스페이스가 `git init` 만 한 상태이거나 빈 디렉토리들만 있으면 branch
    * 자체가 못 만들어져 worktree 생성 실패 → silent fallback to shared 가
@@ -543,6 +596,16 @@ export class TeamOperations {
             member.branch = memberBranch
             memberCwd = worktreePath
             worktreesCreated++
+            // worktree 가 git 추적 파일만 가져오므로 .claude/scripts/ 의 untracked
+            // hook 스크립트 (forge-boundary-guard.sh, forge-council-stop.sh,
+            // learn.sh 등) 가 누락 → Stop hook 마다 not-found 에러. main
+            // workspace 의 .claude/scripts 의 missing 파일들을 worktree 로
+            // symlink 해서 hook 들이 정상 실행.
+            await this.linkMissingClaudeScripts(wsPath, worktreePath).catch((err) => {
+              process.stderr.write(
+                `[forge-team] .claude/scripts symlink 일부 실패 (${m.agentId}): ${(err as Error).message}\n`,
+              )
+            })
           } catch (err) {
             // v0.9.5 — silent fallback 대신 stderr 노출로 사용자가 진단 가능.
             // 흔한 원인: 워크스페이스에 commit 0 (ensureInitialCommit 가 fix
