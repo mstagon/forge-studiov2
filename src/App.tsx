@@ -80,20 +80,34 @@ function toV2Team(team: StoreTeam): V2Team {
       model: m.model,
     }
   })
-  // Aggregate run status: paused (team) > blocked > active > paused (members)
-  // > idle > done. Team-level pause beats individual member states; otherwise
-  // pause is reported only when EVERY non-done member is paused.
-  const runStatus: V2Team['status'] = teamPaused
-    ? 'paused'
-    : members.some((m) => m.state === 'blocked')
-      ? 'blocked'
-      : members.some((m) => m.state === 'active')
-        ? 'active'
-        : members.every((m) => m.state === 'done')
-          ? 'done'
-          : members.length > 0 && members.every((m) => m.state === 'paused' || m.state === 'done')
-            ? 'paused'
-            : 'idle'
+  // Aggregate run status: team.status === 'done' > paused (team) > blocked >
+  // active > paused (members) > idle > done.
+  //
+  // Codex 적대 검수 (medium #5) fix: 신규 team-level 'done' (forge-team
+  // complete / 모든 멤버 complete-member 후 자동 transition) 이 멤버 state
+  // 와 무관하게 최상위로 반영돼야 함. 이전 버전은 'paused' 만 team-level 로
+  // 처리하고 'done' 은 무시 → 완료된 팀이 UI 에서 계속 active 로 표시.
+  const teamDone = team.status === 'done'
+  const runStatus: V2Team['status'] = teamDone
+    ? 'done'
+    : teamPaused
+      ? 'paused'
+      : members.some((m) => m.state === 'blocked')
+        ? 'blocked'
+        : members.some((m) => m.state === 'active')
+          ? 'active'
+          : members.every((m) => m.state === 'done')
+            ? 'done'
+            : members.length > 0 && members.every((m) => m.state === 'paused' || m.state === 'done')
+              ? 'paused'
+              : 'idle'
+  // 완료된 팀이면 멤버 상태도 시각적으로 done 으로 통일 (status bar 의
+  // active agents 집계에서 active 로 세지 않게).
+  if (teamDone) {
+    for (const m of members) {
+      if (m.state !== 'paused') m.state = 'done'
+    }
+  }
   return {
     id: team.id,
     name: team.name,

@@ -85,6 +85,8 @@ export interface Team {
   leadSessionId?: string
   members: TeamMember[]
   status?: TeamStatus
+  /** Council 모드 (round-robin 토론) — RunLiveView 의 토론 탭 표시 조건. */
+  council?: boolean
 }
 
 interface InboxMessage {
@@ -269,6 +271,10 @@ export class AgentTeamWatcher extends EventEmitter {
       leadSessionId: config.leadSessionId,
       members,
       status: config.status,
+      // Codex 적대 검수 (medium #6) fix: config.council 이 watcher Team
+      // 으로 안 옮겨져서 renderer 가 항상 council=false 로 받음 → council
+      // 팀 만들어도 토론 탭 안 뜸. 명시적 copy.
+      council: config.council === true,
     }
   }
 

@@ -129,6 +129,11 @@ export interface RawMember {
   worktreePath?: string
   branch?: string
   state?: 'active' | 'idle'
+  /** 멤버 단위 완료 시각 (ISO). `forge-team complete-member` 호출 시 set.
+   *  team-level done 은 모든 멤버 completedAt 채워질 때만 transition. */
+  completedAt?: string
+  /** 멤버 완료 시 함께 기록되는 한 줄 산출물 요약 (UI 표시). */
+  completionMessage?: string
   /** 자기 책임 영역 — autoStart prompt + Discussion/충돌 감지에 활용. */
   expectedFiles?: string[]
   /** 멤버 역할 (Frontend/Backend/Database 등). */
@@ -843,12 +848,15 @@ export class TeamOperations {
         lines.push(`### ⚠️ 작업 완료 시 (CRITICAL — 빠뜨리면 메인 세션이 영원히 대기)`)
         lines.push(`task 진짜로 끝났다고 판단되면 반드시 아래 명령 한 번 호출. 자기 pane`)
         lines.push(`에 "완료" 만 적어두면 메인은 모름. 이걸 호출해야:`)
-        lines.push(`  1. config.json 의 status='done' 으로 영속`)
-        lines.push(`  2. 메인 inbox 에 완료 메시지 자동 push`)
-        lines.push(`  3. macOS 알림 발사 (사용자가 즉시 인지)`)
-        lines.push(`  4. \`forge-team wait\` 폴링 중인 메인 세션이 exit 0 받고 merge 단계 진입`)
+        lines.push(`  1. config.json 의 자기 멤버에 completedAt 영속`)
+        lines.push(`  2. 모든 멤버 완료되면 자동으로 team-level status='done' transition`)
+        lines.push(`  3. 그 시점에 메인 inbox push + macOS 알림 + \`forge-team wait\` 폴링 메인이 exit 0`)
         lines.push('')
-        lines.push(`  \`forge-team complete${wsArg} --team-id ${teamId} --message "산출물 한 줄 요약"\``)
+        lines.push(`  \`forge-team complete-member${wsArg} --team-id ${teamId} --agent ${member.name} --message "산출물 한 줄 요약"\``)
+        lines.push('')
+        lines.push(`주의: 자기 멤버만 완료 처리. 팀 전체 done 으로 강제 transition 하는 명령`)
+        lines.push(`(\`forge-team complete --team-id ...\`) 은 호출 X — 그건 orchestrator/메인 전용.`)
+        lines.push(`다른 멤버 작업 중인데 강제 호출하면 미완성 결과 merge 위험.`)
         lines.push('')
         lines.push(`불완전/blocked 면 호출 X — 그 경우 inbox 로 사유 보고하고 사용자 개입 기다림.`)
         if (councilEnabled) {
@@ -872,8 +880,15 @@ export class TeamOperations {
         // 해석돼서 claude/codex 가 각 줄을 별도 prompt 로 submit. 결과: 빈
         // prompt 만 반복 submit → 화면이 비어보임. 해결: brief 를 파일로 쓰고
         // 한 줄 prompt 로 "이 파일 읽고 시작" 전달. 멀티라인은 파일에 안전.
+        //
+        // 파일명에 agentId 포함 (forge-task-<agentId>.md): shared 모드는 모든
+        // 멤버 worktree 가 같은 workspace 경로라서 단일 forge-task.md 쓰면
+        // 마지막 멤버 내용이 다른 멤버 prompt 도 덮어씀 → 멤버들이 남의 task
+        // 읽고 잘못된 파일 수정. 멤버별 고유 파일명으로 격리.
         const memberCwd = member.worktreePath ?? member.cwd ?? wsPath
-        const taskFile = path.join(memberCwd, '.claude', 'forge-task.md')
+        const safeAgentIdForFile = member.agentId.replace(/[^A-Za-z0-9_-]/g, '_')
+        const taskFileName = `forge-task-${safeAgentIdForFile}.md`
+        const taskFile = path.join(memberCwd, '.claude', taskFileName)
         try {
           await fs.mkdir(path.dirname(taskFile), { recursive: true })
           await fs.writeFile(taskFile, taskPrompt, 'utf-8')
@@ -888,7 +903,7 @@ export class TeamOperations {
         // 기다림. v0.10.0 의 1.5s 는 codex auto-update (11s+) 못 버팀.
         // 4s 면 claude 는 충분, codex 는 update 중이면 prompt 무시되지만 사용자가
         // 재시작 후 task 파일 직접 읽으라는 안내가 inbox 에도 있음.
-        const oneLinePrompt = `먼저 .claude/forge-task.md 를 Read 해서 자기 task / 책임 영역 / 다른 멤버 / 진행 룰 모두 확인. 그 다음 자율적으로 진행.`
+        const oneLinePrompt = `먼저 .claude/${taskFileName} 를 Read 해서 자기 task / 책임 영역 / 다른 멤버 / 진행 룰 모두 확인. 그 다음 자율적으로 진행.`
         try {
           await new Promise<void>((resolve) => setTimeout(resolve, 4000))
           // 텍스트와 Enter 를 분리해서 send. claude code TUI 가 bracketed
@@ -1097,10 +1112,46 @@ export class TeamOperations {
     if (!teamId || !fromAgent || !toAgent || !text) {
       return { ok: false, error: 'teamId, fromAgent, toAgent, text are required' }
     }
+    // 입력 검증 (Codex 적대 검수 high #3 fix): toAgent / fromAgent / teamId 를
+    // path 에 그대로 끼우면 `../config` 같은 traversal 로 config.json 덮어쓰기
+    // 가능. config 객체는 Array 가 아니므로 빈 inbox 로 취급되고 atomic rename
+    // 으로 설정 파일이 메시지 배열로 교체 → 팀 파괴. 차단:
+    //   1. teamId / agent 이름에 path 구분자 / `..` / null 금지
+    //   2. teamId 가 실제 존재하는 team 디렉토리인지 확인
+    //   3. fromAgent / toAgent 가 그 팀의 member list 또는 시스템 이름
+    //      ('main', 'forge-team') 과 정확히 일치
+    //   4. resolved inboxPath 가 inboxDir 안인지 containment 확인
+    const SAFE = /^[A-Za-z0-9._-]+$/
+    if (!SAFE.test(teamId)) {
+      return { ok: false, error: `invalid teamId: ${teamId}` }
+    }
+    if (!SAFE.test(fromAgent) || !SAFE.test(toAgent)) {
+      return { ok: false, error: 'invalid agent name (allowed: A-Z a-z 0-9 . _ -)' }
+    }
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return { ok: false, error: `team not found: ${teamId}` }
+    const memberNames = new Set<string>([
+      ...found.config.members.map((m) => m.name),
+      ...found.config.members.map((m) => m.agentId),
+    ])
+    const SYSTEM_NAMES = new Set(['main', 'forge-team'])
+    const isValidSender = SYSTEM_NAMES.has(fromAgent) || memberNames.has(fromAgent)
+    const isValidRecipient = SYSTEM_NAMES.has(toAgent) || memberNames.has(toAgent)
+    if (!isValidSender) {
+      return { ok: false, error: `unknown sender: ${fromAgent}` }
+    }
+    if (!isValidRecipient) {
+      return { ok: false, error: `unknown recipient: ${toAgent}` }
+    }
     const teamsDir = this.teamsDirFor(workspacePath)
     const teamDir = path.join(teamsDir, teamId)
     const inboxDir = path.join(teamDir, 'inboxes')
-    const inboxPath = path.join(inboxDir, `${toAgent}.json`)
+    const inboxPath = path.resolve(inboxDir, `${toAgent}.json`)
+    // 최종 containment check (defense in depth — SAFE regex 가 ../ 차단하지만
+    // OS-level symlink 경유 우회 시도 등 추가 보호)
+    if (!inboxPath.startsWith(inboxDir + path.sep) && inboxPath !== path.join(inboxDir, `${toAgent}.json`)) {
+      return { ok: false, error: 'resolved path outside inbox directory' }
+    }
     let writeResult: { ok: boolean; error?: string }
     try {
       await fs.mkdir(inboxDir, { recursive: true })
@@ -1131,20 +1182,14 @@ export class TeamOperations {
       return { ok: false, error: (err as Error).message }
     }
 
-    // 실시간 push — 쓰기 성공 후 수신자 tmux pane 에 한 줄 알림 inject.
+    // 실시간 push — 쓰기 성공 후 수신자 tmux pane 에 고정 알림 inject.
     // 사용자 요구: "inbox 도 좀 바로바로 알아듣게 못하나". send-keys 가
     // claude 의 input buffer 에 들어가서 현재 turn 끝나면 자동 submit →
-    // 다음 turn 에서 claude 가 inbox 확인. 시스템 seed 메시지
-    // (from='forge-team') 는 어차피 첫 turn 에서 task prompt 에 안내된
-    // 대로 읽으므로 알림 스킵 (중복 노이즈).
+    // 다음 turn 에서 claude 가 read-inbox 호출 → trusted file 에서 내용 읽음.
+    // 시스템 seed 메시지 (from='forge-team') 는 어차피 첫 turn 에서 task
+    // prompt 에 안내된 대로 읽으므로 알림 스킵 (중복 노이즈).
     if (writeResult.ok && fromAgent !== 'forge-team' && fromAgent !== toAgent) {
-      void this.notifyRecipientPane(
-        workspacePath,
-        teamId,
-        toAgent,
-        fromAgent,
-        summary ?? text.slice(0, 80),
-      ).catch(() => {
+      void this.notifyRecipientPane(workspacePath, teamId, toAgent, fromAgent).catch(() => {
         // best-effort — pane 없거나 tmux 없어도 inbox 자체는 정상 쓰임
       })
     }
@@ -1152,16 +1197,23 @@ export class TeamOperations {
   }
 
   /**
-   * 수신자 멤버의 tmux pane 에 inbox 도착 알림을 한 줄 prompt 로 inject.
-   * claude code TUI 가 bracketed paste 에 Enter 흡수하는 거 회피 위해
-   * text + Enter 두 단계로 send-keys (Pass 2 task prompt 와 같은 패턴).
+   * 수신자 멤버의 tmux pane 에 inbox 도착 알림을 고정 prompt 로 inject.
+   *
+   * Codex 적대 검수 (high #4) fix: 이전 버전은 발신자 제공 summary/text 를
+   * 수신자 LLM 터미널 입력에 그대로 넣고 Enter 까지 보냄 → 한 멤버가 다른
+   * 멤버에게 "기존 역할 무시하고 X 해라" 같은 prompt 를 강제 실행시키는
+   * cross-agent prompt injection 경로. 발신자 제어 텍스트 제거하고 고정된
+   * "inbox 확인" 명령만 inject — 실제 메시지 본문은 claude 가 trusted
+   * file (.claude/teams/.../inboxes/<recipient>.json) 에서 직접 read.
+   *
+   * fromAgent 는 호출자가 알려준 메타 정보로만 사용 (이미 sendInboxMessage
+   * 진입에서 SAFE regex + member 명부 검증 통과). 텍스트는 unchanged.
    */
   private async notifyRecipientPane(
     workspacePath: string | null,
     teamId: string,
     toAgent: string,
     fromAgent: string,
-    summary: string,
   ): Promise<void> {
     if (!(await this.hasTmux())) return
     const found = await this.readConfig(workspacePath, teamId)
@@ -1171,9 +1223,11 @@ export class TeamOperations {
     )
     if (!member?.tmuxPaneId || !isTmuxPaneId(member.tmuxPaneId)) return
 
+    // 고정 알림 — 발신자 제어 본문 0. fromAgent 만 메타로 표시 (이미 검증된
+    // 멤버 명부 매칭 값이라 safe). 실제 내용은 claude 가 read-inbox 로 자체
+    // 호출해서 trusted 파일에서 읽음.
     const wsArg = workspacePath ? ` --workspace "${workspacePath}"` : ''
-    const cleanSummary = summary.replace(/[\r\n]/g, ' ').slice(0, 100)
-    const notification = `📬 [inbox] ${fromAgent} → ${toAgent}: "${cleanSummary}" — \`forge-team read-inbox${wsArg} --team-id ${teamId} --agent ${toAgent}\` 로 즉시 확인하고 응답.`
+    const notification = `📬 [inbox] ${fromAgent} 가 새 메시지 보냄 — \`forge-team read-inbox${wsArg} --team-id ${teamId} --agent ${toAgent}\` 로 자율 확인.`
 
     const tmux = this.tmuxBin()
     const env = {
@@ -1205,6 +1259,11 @@ export class TeamOperations {
     teamId: string,
     agentName: string
   ): Promise<{ ok: boolean; error?: string }> {
+    // Path traversal 방어 (sendInboxMessage 와 동일)
+    const SAFE = /^[A-Za-z0-9._-]+$/
+    if (!SAFE.test(teamId) || !SAFE.test(agentName)) {
+      return { ok: false, error: 'invalid teamId or agentName' }
+    }
     const teamsDir = this.teamsDirFor(workspacePath)
     const inboxPath = path.join(teamsDir, teamId, 'inboxes', `${agentName}.json`)
     try {
@@ -1284,6 +1343,11 @@ export class TeamOperations {
     teamId: string,
     agentName: string
   ): Promise<Array<{ from: string; text: string; summary?: string; timestamp: string; read?: boolean }>> {
+    // Path traversal 방어 (sendInboxMessage 와 동일)
+    const SAFE = /^[A-Za-z0-9._-]+$/
+    if (!SAFE.test(teamId) || !SAFE.test(agentName)) {
+      return []
+    }
     const teamsDir = this.teamsDirFor(workspacePath)
     const inboxPath = path.join(teamsDir, teamId, 'inboxes', `${agentName}.json`)
     try {
@@ -1297,14 +1361,84 @@ export class TeamOperations {
   }
 
   /**
-   * 팀 완료 표시. config.status = 'done' 으로 set + main inbox 에 완료 메시지
-   * push. AgentTeamWatcher (chokidar) 가 변경 감지 → electron main 이
-   * 사용자에게 macOS 알림 발사. \`forge-team wait\` 가 폴링 중이면 즉시 exit 0.
+   * 개별 멤버 완료 신호. 멤버 단독 호출하는 명령.
+   * config 의 해당 멤버에 completedAt 만 set. 팀 전체 status 는 안 건드림.
+   * **모든 멤버가 completedAt 채워지면 자동으로 team-level done 으로 transition.**
+   * 단일 멤버가 빨리 호출해도 다른 멤버 작업 중이면 wait 가 안 끝남.
+   *
+   * Codex 적대 검수 (high #1): 기존 completeTeam 이 단일 멤버 호출만으로 즉시
+   * team done 처리 → 다른 멤버 commit 전인데 main 이 merge 진행 → 데이터 손실
+   * 위험. 멤버 / 팀 신호 분리로 fix.
+   */
+  async completeMember(
+    workspacePath: string | null,
+    teamId: string,
+    memberName: string,
+    message?: string,
+  ): Promise<{ ok: boolean; teamId?: string; member?: string; completedAt?: string; teamDone?: boolean; error?: string }> {
+    if (!teamId) return { ok: false, error: 'teamId required' }
+    if (!memberName) return { ok: false, error: 'memberName required' }
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return { ok: false, error: 'team not found' }
+    const member = found.config.members.find(
+      (m) => m.name === memberName || m.agentId === memberName,
+    )
+    if (!member) return { ok: false, error: `member not found: ${memberName}` }
+    const completedAt = new Date().toISOString()
+    member.completedAt = completedAt
+    if (message) member.completionMessage = message.slice(0, 200)
+
+    // 모든 멤버 완료됐는지 — 그러면 team-level done 으로 자동 transition
+    const allDone = found.config.members.every((m) => !!m.completedAt)
+    if (allDone) {
+      found.config.status = 'done'
+    }
+    await this.writeConfig(found.configPath, found.config)
+
+    if (allDone) {
+      // main inbox 에 team:done push (wait CLI 폴링용)
+      const teamDir = path.dirname(found.configPath)
+      const mainInboxPath = path.join(teamDir, 'inboxes', 'main.json')
+      try {
+        await fs.mkdir(path.dirname(mainInboxPath), { recursive: true })
+        await this.withInboxLock(mainInboxPath, async () => {
+          let existing: unknown[] = []
+          try {
+            const buf = await fs.readFile(mainInboxPath, 'utf-8')
+            const parsed = JSON.parse(buf)
+            if (Array.isArray(parsed)) existing = parsed
+          } catch {
+            // 첫 메시지
+          }
+          existing.push({
+            from: 'forge-team',
+            text: `모든 멤버 (${found.config.members.length}) 완료`,
+            summary: 'team:done',
+            timestamp: completedAt,
+            read: false,
+            kind: 'team:done',
+          })
+          const tmp = `${mainInboxPath}.tmp-${process.pid}-${Date.now()}`
+          await fs.writeFile(tmp, JSON.stringify(existing, null, 2), 'utf-8')
+          await fs.rename(tmp, mainInboxPath)
+          return undefined
+        })
+      } catch {
+        // best-effort
+      }
+    }
+    return { ok: true, teamId, member: member.name, completedAt, teamDone: allDone }
+  }
+
+  /**
+   * 팀 전체 강제 완료 표시 (orchestrator / GUI Close team 전용).
+   * 멤버 status 무시하고 config.status = 'done' 강제. 일반 멤버는 호출하지 않음.
+   * **사용자 결정 또는 모든 멤버 결과 검증 후에만 호출**.
    *
    * 호출 패턴:
-   *   - 멤버가 자기 task 끝낸 후 task prompt 안내에 따라 호출
    *   - 메인 세션이 모든 멤버 결과 확인 후 명시적 호출
    *   - GUI 의 "Close team" 버튼 클릭 시
+   *   - 외부 자동화 (CI 등)
    */
   async completeTeam(
     workspacePath: string | null,

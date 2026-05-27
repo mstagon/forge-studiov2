@@ -82,9 +82,10 @@ interface TeamWatcher {
   configWatcher: chokidar.FSWatcher | null
   configPath: string
   lastMemberStates: Map<string, string>
-  /** 직전 emit 된 state-change event 의 agentId → {ts, to}. 5초 안에 round-trip
-   *  (예: active→idle 직후 idle→active) 발생하면 flap 으로 판단하고 둘 다 suppress. */
-  recentStateChanges: Map<string, { ts: number; to: string }>
+  /** Debounce buffer — 상태 전환을 즉시 emit 하지 않고 5초 동안 보류.
+   *  보류 중 round-trip (active→idle 직후 idle→active) 발생하면 둘 다 drop;
+   *  다른 방향 전환이면 보류 중인 첫 leg 를 즉시 emit 후 새 leg 도 buffer. */
+  pendingTransitions: Map<string, { event: ActivityEvent; timer: NodeJS.Timeout }>
   headPollTimer: NodeJS.Timeout | null
   jsonlStream: WriteStream | null
   jsonlPath: string
@@ -192,7 +193,7 @@ export class TeamActivityTracker extends EventEmitter {
       configWatcher,
       configPath: configPath ?? '',
       lastMemberStates: lastStates,
-      recentStateChanges: new Map(),
+      pendingTransitions: new Map(),
       headPollTimer: null,
       jsonlStream,
       jsonlPath,
@@ -372,19 +373,31 @@ export class TeamActivityTracker extends EventEmitter {
       newStates.set(m.agentId, m.state ?? 'active')
     }
     const now = Date.now()
+    const FLAP_WINDOW_MS = 5000
     for (const [agentId, next] of newStates) {
       const prev = t.lastMemberStates.get(agentId)
       if (prev === undefined || prev === next) continue
-      // Flap suppression: chokidar 의 awaitWriteFinish 가 잡지 못한 짧은
-      // round-trip (active → idle → active 가 5 초 안에 같은 멤버에
-      // 발생) 은 진짜 토글이 아닌 config 재기록 noise 로 간주. 사용자가
-      // 보고한 "활동 패널 idle↔active 무의미한 flap" 결함의 근본 fix.
-      const recent = t.recentStateChanges.get(agentId)
-      if (recent && recent.to === prev && now - recent.ts < 5000) {
-        // 직전 transition 의 to 가 지금 prev 와 같음 = round-trip 의 두 번째 leg.
-        // 첫 leg 도 함께 무시 (recentStateChanges 에서 제거 + 이번 emit 도 skip).
-        t.recentStateChanges.delete(agentId)
+
+      // Debounce-style flap suppression (Codex 적대 검수 medium #7 fix):
+      // 이전 구현은 첫 leg (active→idle) 를 즉시 emit 한 후, 5초 안에 복귀
+      // leg 가 오면 그것만 skip. 결과: UI 가 멤버를 영원히 idle 로 표시.
+      // 신규 구현은 모든 전환을 buffer 에 5초 보류 후 emit. 보류 중 round-trip
+      // (active→idle→active) 도착하면 buffer 의 첫 leg 취소 + 두 번째 leg
+      // 도 emit X → 진짜 flap 은 양쪽 leg 모두 사라짐. 다른 방향 전환은
+      // 보류 중 첫 leg 를 즉시 발행한 뒤 새 leg 도 buffer.
+      const pending = t.pendingTransitions.get(agentId)
+      if (pending && pending.event.from === next) {
+        // Round-trip: 보류 중인 첫 leg 가 to=prev 였고 지금 next=원래 from.
+        // 둘 다 drop.
+        clearTimeout(pending.timer)
+        t.pendingTransitions.delete(agentId)
         continue
+      }
+      if (pending) {
+        // 다른 방향 (예: active → idle → blocked) — 첫 leg 부터 발행.
+        clearTimeout(pending.timer)
+        this.emitEvent(teamId, pending.event)
+        t.pendingTransitions.delete(agentId)
       }
       const event: ActivityEvent = {
         ts: now,
@@ -394,8 +407,11 @@ export class TeamActivityTracker extends EventEmitter {
         from: prev,
         to: next,
       }
-      this.emitEvent(teamId, event)
-      t.recentStateChanges.set(agentId, { ts: now, to: next })
+      const timer = setTimeout(() => {
+        this.emitEvent(teamId, event)
+        t.pendingTransitions.delete(agentId)
+      }, FLAP_WINDOW_MS)
+      t.pendingTransitions.set(agentId, { event, timer })
     }
     t.lastMemberStates = newStates
   }
@@ -445,6 +461,11 @@ export class TeamActivityTracker extends EventEmitter {
       clearInterval(t.headPollTimer)
       t.headPollTimer = null
     }
+    // 보류 중인 transition timer 정리 (debounce flap suppress 가 남긴 거)
+    for (const pending of t.pendingTransitions.values()) {
+      clearTimeout(pending.timer)
+    }
+    t.pendingTransitions.clear()
     for (const mw of t.members.values()) {
       try {
         await mw.fsWatcher.close()

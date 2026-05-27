@@ -402,6 +402,16 @@ async function cmdComplete(flags: Map<string, string>): Promise<void> {
   if (!result.ok) process.exit(2)
 }
 
+async function cmdCompleteMember(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const agent = requireFlag(flags, 'agent')
+  const message = flags.get('message')
+  const result = await ops.completeMember(workspacePath, teamId, agent, message)
+  emit(result)
+  if (!result.ok) process.exit(2)
+}
+
 async function cmdWait(flags: Map<string, string>): Promise<void> {
   const workspacePath = resolveWorkspace(flags)
   const teamId = requireFlag(flags, 'team-id')
@@ -531,6 +541,10 @@ async function main(): Promise<void> {
       case 'complete':
       case 'done':
         await cmdComplete(flags)
+        break
+      case 'complete-member':
+      case 'member-done':
+        await cmdCompleteMember(flags)
         break
       case 'wait':
         await cmdWait(flags)
