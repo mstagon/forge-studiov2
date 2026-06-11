@@ -15,5 +15,17 @@
     "skills/riverpod-patterns",
     "agents/nextjs-cms.md",
     "skills/nextjs-patterns"
+  ],
+  "optionalMcp": [
+    {
+      "id": "supabase",
+      "label": "Supabase MCP",
+      "hint": "관리형 Postgres 로 쓸 때. SUPABASE_ACCESS_TOKEN 필요"
+    },
+    {
+      "id": "railway",
+      "label": "Railway MCP",
+      "hint": "서버 배포/로그/환경변수 관리"
+    }
   ]
 }

@@ -16,5 +16,22 @@
     "agents/nestjs-backend.md",
     "skills/nestjs-auth",
     "skills/nestjs-module"
+  ],
+  "optionalMcp": [
+    {
+      "id": "supabase",
+      "label": "Supabase MCP",
+      "hint": "DB/인증을 Supabase 로 쓸 때. SUPABASE_ACCESS_TOKEN 필요"
+    },
+    {
+      "id": "vercel",
+      "label": "Vercel MCP",
+      "hint": "배포/프리뷰/로그 관리 (remote MCP — 브라우저 인증)"
+    },
+    {
+      "id": "playwright",
+      "label": "Playwright MCP",
+      "hint": "E2E 테스트 / 브라우저 자동화"
+    }
   ]
 }

@@ -1,0 +1,31 @@
+{
+  "_comment": "프리셋 합성 시 생성. 옵트인 MCP 는 New Workspace 에서 체크한 것만 mcpServers 로 승격됨.",
+  "_optional_recipes": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest"
+      ],
+      "type": "stdio"
+    },
+    "railway": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@railway/mcp-server"
+      ],
+      "type": "stdio"
+    }
+  },
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "type": "stdio"
+    }
+  }
+}
