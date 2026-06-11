@@ -78,7 +78,8 @@ forge-team complete --team-id <id>                     # 팀 강제 완료 (orch
 - `--members` 는 JSON 배열 권장 — `role` + `expectedFiles` 가 멤버 prompt 에 자동 주입되어
   영역 침범을 사전 차단한다. task 에 콤마 필요하면 JSON 형식 필수.
 - `--council` — 멤버끼리 inbox round-robin 토론 후 구현 (큰 설계 결정에 사용).
-- agentId 는 `.claude/agents/` 의 정의를 따른다. 멤버는 같은 `.claude/` 룰/스킬을 본다.
+- agentId 의 `.claude/agents/<id>.md` 정의는 spawn 시 **실제 주입**된다 (claude 는
+  `--append-system-prompt`, codex 는 task brief 상단). 멤버는 같은 `.claude/` 룰/스킬을 본다.
 
 ---
 

@@ -401,6 +401,43 @@ export class TeamOperations {
     }
   }
 
+  /** Claude Code agent 정의 (.md) 의 YAML frontmatter 제거 — system prompt 본문만. */
+  private stripFrontmatter(md: string): string {
+    if (!md.startsWith('---')) return md
+    const end = md.indexOf('\n---', 3)
+    if (end < 0) return md
+    return md.slice(end + 4).replace(/^\s*\n/, '')
+  }
+
+  /**
+   * agent 정의 실주입 (v0.15) — `.claude/agents/<agentId>.md` 의 본문을
+   * teamRoot/agents/ 에 sanitize 해서 복사. spawn 시:
+   *   - claude 멤버: `--append-system-prompt "$(cat <path>)"` 로 system prompt 주입
+   *   - codex 멤버: task brief 상단에 prepend (동등 플래그 없음)
+   * 기존엔 정의가 spawn 에 전혀 안 쓰여 "전문 에이전트" 가 task prompt 텍스트
+   * 한 장이었음 (감사 문서 참조). 정의 파일 없으면 null — 기존 동작 유지.
+   */
+  private async prepareAgentDef(
+    wsPath: string,
+    teamRoot: string,
+    agentId: string,
+    safeAgentId: string,
+  ): Promise<{ path: string; body: string } | null> {
+    const src = path.join(wsPath, '.claude', 'agents', `${agentId}.md`)
+    try {
+      const raw = await fs.readFile(src, 'utf-8')
+      const body = this.stripFrontmatter(raw).trim()
+      if (!body) return null
+      const dir = path.join(teamRoot, 'agents')
+      await fs.mkdir(dir, { recursive: true })
+      const dest = path.join(dir, `${safeAgentId}.md`)
+      await fs.writeFile(dest, body + '\n', 'utf-8')
+      return { path: dest, body }
+    } catch {
+      return null
+    }
+  }
+
   /**
    * 빈 repo (initial commit 없음) 시 자동 initial commit 만들어 base 를 확보.
    * 워크스페이스가 `git init` 만 한 상태이거나 빈 디렉토리들만 있으면 branch
@@ -582,9 +619,15 @@ export class TeamOperations {
     const forgeCfg = loadForgeConfig()
 
     const rawMembers: RawMember[] = []
+    // agentId → sanitize 된 agent 정의 (spawn 주입용). 정의 없으면 미등록.
+    const agentDefs = new Map<string, { path: string; body: string }>()
     for (let idx = 0; idx < opts.members.length; idx++) {
       const m = opts.members[idx]
       const safeAgentId = m.agentId.replace(/[^A-Za-z0-9_-]/g, '_')
+      if (!agentDefs.has(m.agentId)) {
+        const def = await this.prepareAgentDef(wsPath, teamRoot, m.agentId, safeAgentId)
+        if (def) agentDefs.set(m.agentId, def)
+      }
       const member: RawMember = {
         agentId: m.agentId,
         name: m.agentId,
@@ -708,7 +751,14 @@ export class TeamOperations {
               // bypass-permissions: 멤버는 자율 실행이 정책. 모델별 적절한
               // bypass flag 로 spawn. 격리 worktree + isolated tmux session 이라
               // blast radius 는 멤버 본인 worktree 로 한정됨.
-              const launchCmd = modelLaunchCommand(member.model)
+              let launchCmd = modelLaunchCommand(member.model)
+              // v0.15 — agent 정의 system prompt 주입 (claude 만; codex 는
+              // task brief 상단에 prepend). $(cat) 은 멤버 shell 이 치환.
+              const def = agentDefs.get(member.agentId)
+              if (def && resolveProvider(member.model).provider === 'claude') {
+                const quoted = def.path.replace(/'/g, `'\\''`)
+                launchCmd += ` --append-system-prompt "$(cat '${quoted}')"`
+              }
               await execFileAsync(tmux, ['send-keys', '-t', session, launchCmd, 'Enter'], {
                 timeout: 4000,
                 env,
@@ -898,6 +948,15 @@ export class TeamOperations {
         }
         lines.push('')
         lines.push(`이제 자율적으로 task 진행하세요.`)
+
+        // codex 멤버: --append-system-prompt 동등 옵션이 없어 agent 정의를
+        // task brief 상단에 prepend (claude 는 pass 1 에서 system prompt 주입).
+        const memberDef = agentDefs.get(member.agentId)
+        if (memberDef && resolveProvider(member.model).provider === 'codex') {
+          lines.unshift('')
+          lines.unshift(memberDef.body)
+          lines.unshift('### 에이전트 정의 (당신의 역할 — system prompt 로 간주)')
+        }
 
         const taskPrompt = lines.join('\n')
 
