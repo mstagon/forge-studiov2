@@ -34,6 +34,9 @@ export interface PresetManifest {
   extends?: 'default'
   /** .claude/ 기준 상대 경로 패턴 — 합성 시 제거할 항목들. */
   exclude?: string[]
+  /** 프리셋 선택 시 사용자에게 옵트인으로 묻는 MCP 목록 (v0.18).
+   *  id 는 overlay mcp.json 의 _optional_recipes 키와 일치해야 한다. */
+  optionalMcp?: Array<{ id: string; label: string; hint?: string }>
 }
 
 export async function readPresetManifest(presetDir: string): Promise<PresetManifest | null> {
@@ -81,6 +84,7 @@ export async function composePreset(
   baseRootDir: string,
   presetDir: string,
   manifest: PresetManifest,
+  opts: { mcpChoices?: string[] } = {},
 ): Promise<ComposedPreset> {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forge-preset-'))
 
@@ -125,6 +129,27 @@ export async function composePreset(
   const overlayContracts = path.join(presetDir, 'contracts')
   if (await fs.pathExists(overlayContracts)) {
     await fs.copy(overlayContracts, path.join(rootDir, 'contracts'), { overwrite: true })
+  }
+
+  // 4. 사용자가 옵트인한 MCP — _optional_recipes → mcpServers 승격 (v0.18)
+  if (opts.mcpChoices && opts.mcpChoices.length > 0) {
+    const mcpPath = path.join(claudeDir, 'mcp.json')
+    try {
+      const mcp = JSON.parse(await fs.readFile(mcpPath, 'utf-8')) as {
+        mcpServers?: Record<string, unknown>
+        _optional_recipes?: Record<string, unknown>
+      }
+      const recipes = mcp._optional_recipes ?? {}
+      mcp.mcpServers = mcp.mcpServers ?? {}
+      for (const id of opts.mcpChoices) {
+        if (recipes[id] && !mcp.mcpServers[id]) {
+          mcp.mcpServers[id] = recipes[id]
+        }
+      }
+      await fs.writeFile(mcpPath, JSON.stringify(mcp, null, 2) + '\n', 'utf-8')
+    } catch {
+      // mcp.json 없음/깨짐 — 옵트인 무시 (non-fatal)
+    }
   }
 
   const claudeMd = path.join(rootDir, 'CLAUDE.md')

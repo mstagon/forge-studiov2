@@ -42,6 +42,8 @@ export interface PresetInfo {
   extendsDefault?: boolean
   /** 프리셋 루트 디렉토리 (manifest/overlay 위치). */
   presetDir: string
+  /** 프리셋 선택 시 옵트인으로 묻는 MCP 목록 (v0.18). */
+  optionalMcp?: Array<{ id: string; label: string; hint?: string }>
 }
 
 interface PresetManifest {
@@ -49,6 +51,7 @@ interface PresetManifest {
   description?: string
   extends?: 'default'
   exclude?: string[]
+  optionalMcp?: Array<{ id: string; label: string; hint?: string }>
 }
 
 export class PresetManager {
@@ -78,7 +81,10 @@ export class PresetManager {
    * 상속 프리셋이면 base + 델타를 tmp 에 합성해서 반환 — 호출자는 복사가
    * 끝나면 cleanup() 호출. 정적 프리셋이면 그대로 + no-op cleanup.
    */
-  async resolveTemplatePaths(presetId: string): Promise<{
+  async resolveTemplatePaths(
+    presetId: string,
+    opts: { mcpChoices?: string[] } = {},
+  ): Promise<{
     templatePath: string
     claudeMdPath?: string
     cleanup: () => Promise<void>
@@ -87,7 +93,7 @@ export class PresetManager {
     if (!preset) return null
     if (preset.extendsDefault) {
       const manifest = (await readComposeManifest(preset.presetDir)) ?? ({} as ComposeManifest)
-      const composed = await composePreset(this.baseTemplateRoot(), preset.presetDir, manifest)
+      const composed = await composePreset(this.baseTemplateRoot(), preset.presetDir, manifest, opts)
       return {
         templatePath: composed.templatePath,
         claudeMdPath: composed.claudeMdPath,
@@ -145,6 +151,7 @@ export class PresetManager {
         claudeMdPath: (await fs.pathExists(claudeMdPath)) ? claudeMdPath : undefined,
         extendsDefault,
         presetDir,
+        optionalMcp: Array.isArray(manifest?.optionalMcp) ? manifest?.optionalMcp : undefined,
       })
     }
     return out

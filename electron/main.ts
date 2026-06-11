@@ -344,6 +344,8 @@ ipcMain.handle(
        * paths so the renderer can stay loose.
        */
       preset?: string
+      /** 프리셋의 optionalMcp 중 사용자가 체크한 id 들 (v0.18). */
+      mcpChoices?: string[]
       splitRepos?: {
         enabled: boolean
         baseName: string
@@ -360,7 +362,9 @@ ipcMain.handle(
       let presetCleanup: (() => Promise<void>) | null = null
       if (options.preset) {
         // v0.17 — 상속 프리셋은 base + 델타를 tmp 에 합성해서 templatePath 로 사용
-        const resolved = await presetManager.resolveTemplatePaths(options.preset)
+        const resolved = await presetManager.resolveTemplatePaths(options.preset, {
+          mcpChoices: Array.isArray(options.mcpChoices) ? options.mcpChoices : undefined,
+        })
         if (resolved) {
           templatePath = resolved.templatePath
           claudeMdPath = resolved.claudeMdPath ?? claudeMdPath

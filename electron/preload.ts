@@ -41,6 +41,7 @@ const api = {
       templatePath?: string
       claudeMdPath?: string
       preset?: string
+      mcpChoices?: string[]
       splitRepos?: {
         enabled: boolean
         baseName: string
