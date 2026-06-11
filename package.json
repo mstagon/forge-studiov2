@@ -117,7 +117,8 @@
         "to": "forge-cli/electron/services",
         "filter": [
           "TeamOperations.ts",
-          "ProviderRouter.ts"
+          "ProviderRouter.ts",
+          "ForgeConfig.ts"
         ]
       }
     ],
