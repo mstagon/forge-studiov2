@@ -34,6 +34,17 @@ to [Semantic Versioning](https://semver.org/).
   3개 이상 경고.
 - **GUI**: archive 된 팀은 활성 목록에서 제외 (Active/Done 분리).
 
+### Changed — UI 단순화 + 설정화
+
+- **Library (⌘4) / 계획 (⌘5) 뷰 제거** (~3900줄): mock 수준 데드 UI.
+  실제 워크플로는 메인 세션의 forge-team CLI 가 담당 — GUI 중복 제거.
+  네비게이션 workspace / git / dashboard / settings 4개로 단순화.
+- **ForgeConfig** (`~/.forge-studio/config.json`): 하드코딩이던 팀 동작 값
+  전부 설정화 — 기본 멤버 모델 · 부팅 대기(ms) · tmux 스크롤백 · 완료 후
+  tmux 정리 지연(초) · 1인팀 가드 on/off · 활성 팀 경고 임계치 · merge
+  자동 archive. GUI Settings → Agents 의 "팀 동작" 카드에서 편집,
+  forge-team CLI 와 같은 파일 공유라 즉시 반영.
+
 ### Fixed
 
 - `.gitignore` 의 `.claude/` 가 harness-template 의 신규 스크립트를 삼켜
