@@ -8,6 +8,7 @@ import { promisify } from 'util'
 // extension 을 안 채워주므로 명시 필요 (v0.9.4 fix). bin/forge-team.ts
 // 도 같은 패턴으로 './TeamOperations.ts' 명시 중.
 import { resolveProvider } from './ProviderRouter.ts'
+import { loadForgeConfig } from './ForgeConfig.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -577,6 +578,8 @@ export class TeamOperations {
     let tmuxSessionsStarted = 0
     const autoStart = opts.autoStartClaude !== false
     const councilEnabled = opts.council === true && opts.members.length > 1
+    // 팀 동작 설정 — 하드코딩 대신 ~/.forge-studio/config.json (v0.13.0)
+    const forgeCfg = loadForgeConfig()
 
     const rawMembers: RawMember[] = []
     for (let idx = 0; idx < opts.members.length; idx++) {
@@ -586,10 +589,10 @@ export class TeamOperations {
         agentId: m.agentId,
         name: m.agentId,
         agentType: m.agentId,
-        // Honor the caller's model override; default to claude opus for new
-        // members. The autoStart spawner reads this to pick the right CLI
-        // (claude vs codex) with the matching bypass flag.
-        model: m.model ?? 'claude-opus-4-8',
+        // Honor the caller's model override; default 은 ForgeConfig 의
+        // defaultMemberModel. The autoStart spawner reads this to pick the
+        // right CLI (claude vs codex) with the matching bypass flag.
+        model: m.model ?? forgeCfg.defaultMemberModel,
         joinedAt: now + idx,
         task: m.task,
         state: 'active',
@@ -683,7 +686,7 @@ export class TeamOperations {
           })
           await execFileAsync(
             tmux,
-            ['set-option', '-t', session, '-g', 'history-limit', '50000'],
+            ['set-option', '-t', session, '-g', 'history-limit', String(forgeCfg.tmuxHistoryLimit)],
             { timeout: 3000, env },
           ).catch(() => {
             // default 2000 도 작동 — 단지 스크롤백 짧음
@@ -923,11 +926,11 @@ export class TeamOperations {
 
         // claude/codex 가 부팅 + (codex 의 경우) auto-update 끝날 때까지 충분히
         // 기다림. v0.10.0 의 1.5s 는 codex auto-update (11s+) 못 버팀.
-        // 4s 면 claude 는 충분, codex 는 update 중이면 prompt 무시되지만 사용자가
-        // 재시작 후 task 파일 직접 읽으라는 안내가 inbox 에도 있음.
+        // 대기 시간은 ForgeConfig.memberBootWaitMs (기본 4s) — 느린 머신이면
+        // Settings 에서 늘릴 수 있음.
         const oneLinePrompt = `먼저 .claude/${taskFileName} 를 Read 해서 자기 task / 책임 영역 / 다른 멤버 / 진행 룰 모두 확인. 그 다음 자율적으로 진행.`
         try {
-          await new Promise<void>((resolve) => setTimeout(resolve, 4000))
+          await new Promise<void>((resolve) => setTimeout(resolve, forgeCfg.memberBootWaitMs))
           // 텍스트와 Enter 를 분리해서 send. claude code TUI 가 bracketed
           // paste 모드라 text + Enter 한 번에 보내면 Enter 가 paste 의 일부로
           // 흡수돼 submit 안 됨. `-l` (literal) 로 텍스트 먼저, 200ms 지연 후
@@ -1693,8 +1696,9 @@ export class TeamOperations {
 
     // merge 성공 = 멤버 작업물이 전부 통합됨 → 잔재 (worktree/tmux/브랜치)
     // 자동 정리. 사용자 보고 결함 fix: "팀 작업 끝나도 바로 안 없어짐".
+    // 기본값은 ForgeConfig.autoArchiveOnMerge — 호출자가 명시하면 그게 우선.
     let archived = false
-    if (opts.autoArchive !== false) {
+    if (opts.autoArchive ?? loadForgeConfig().autoArchiveOnMerge) {
       const archiveRes = await this.archiveTeam(workspacePath, teamId, { force: true })
       archived = archiveRes.ok
     }
@@ -1929,13 +1933,14 @@ export class TeamOperations {
    * turn 을 못 끝냄 — detached 프로세스가 delaySec 뒤에 kill (CLI 프로세스
    * 종료 후에도 살아남음). worktree/브랜치는 merge → archive 가 처리.
    */
-  private scheduleTmuxCleanup(teamId: string, members: RawMember[], delaySec = 90): void {
+  private scheduleTmuxCleanup(teamId: string, members: RawMember[], delaySec?: number): void {
+    const delay = delaySec ?? loadForgeConfig().tmuxCleanupDelaySec
     const sessions = members.map((m) => teamSessionName(teamId, m.agentId))
     if (sessions.length === 0) return
     const tmux = this.tmuxBin()
     const cmds = sessions.map((s) => `"${tmux}" kill-session -t "${s}" 2>/dev/null`).join('; ')
     try {
-      const child = spawn('/bin/sh', ['-c', `sleep ${delaySec}; ${cmds}; exit 0`], {
+      const child = spawn('/bin/sh', ['-c', `sleep ${delay}; ${cmds}; exit 0`], {
         detached: true,
         stdio: 'ignore',
         env: this.tmuxEnv(),

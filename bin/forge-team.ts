@@ -19,6 +19,7 @@
 
 import path from 'path'
 import { TeamOperations } from '../electron/services/TeamOperations.ts'
+import { loadForgeConfig } from '../electron/services/ForgeConfig.ts'
 import type {
   TeamCreateMember,
   WorktreeStrategy,
@@ -143,8 +144,9 @@ async function cmdCreate(flags: Map<string, string>): Promise<void> {
 
   // v0.13.0 — 1인팀 가드. 메인 세션이 phase 마다 단일 멤버 팀을 연속 생성해
   // worktree/tmux 가 누적되는 패턴 차단 (사용자 보고 결함). 정말 단일 멤버가
-  // 필요하면 --solo 명시.
-  if (members.length === 1 && flags.get('solo') !== 'true') {
+  // 필요하면 --solo 명시. ForgeConfig.soloTeamGuard=false 로 가드 끌 수 있음.
+  const forgeCfg = loadForgeConfig()
+  if (members.length === 1 && forgeCfg.soloTeamGuard && flags.get('solo') !== 'true') {
     fail(
       '1인팀 거부: 단일 멤버 팀의 연속 생성은 worktree/tmux 누적 낭비. ' +
         '대기 중인 다른 작업과 묶어 멀티 멤버 한 팀으로 만들거나, ' +
@@ -157,7 +159,7 @@ async function cmdCreate(flags: Map<string, string>): Promise<void> {
   try {
     const existing = await ops.list(workspacePath)
     const active = existing.filter((t) => t.status !== 'done' && !t.archivedAt)
-    if (active.length >= 3) {
+    if (active.length >= forgeCfg.activeTeamWarnThreshold) {
       process.stderr.write(
         `forge-team: ⚠️ 활성 팀이 이미 ${active.length}개 (${active
           .map((t) => t.id)
