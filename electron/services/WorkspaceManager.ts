@@ -246,6 +246,17 @@ export class WorkspaceManager {
     await fs.ensureDir(path.join(projectPath, 'cms'))
     await fs.ensureDir(path.join(projectPath, 'docs'))
 
+    // contracts/ — contract-first API 계약 디렉토리 (v0.14.0). 템플릿의
+    // 컨벤션 문서 (README) 를 함께 시드. templatePath 는 harness-template/.claude
+    // 를 가리키므로 contracts 는 그 sibling.
+    await fs.ensureDir(path.join(projectPath, 'contracts'))
+    if (options.templatePath) {
+      const contractsSrc = path.join(options.templatePath, '..', 'contracts')
+      if (await fs.pathExists(contractsSrc)) {
+        await fs.copy(contractsSrc, path.join(projectPath, 'contracts'), { overwrite: false })
+      }
+    }
+
     // Initialize git
     try {
       execFileSync('git', ['init'], { cwd: projectPath, stdio: 'ignore' })
@@ -511,6 +522,13 @@ export class WorkspaceManager {
     // Update CLAUDE.md
     if (claudeMdPath && (await fs.pathExists(claudeMdPath))) {
       await fs.copy(claudeMdPath, path.join(workspacePath, 'CLAUDE.md'), { overwrite: true })
+    }
+
+    // contracts/ 컨벤션 문서 시드 — 기존 계약 파일은 절대 덮어쓰지 않음
+    const contractsSrc = path.join(templatePath, '..', 'contracts')
+    if (await fs.pathExists(contractsSrc)) {
+      await fs.ensureDir(path.join(workspacePath, 'contracts'))
+      await fs.copy(contractsSrc, path.join(workspacePath, 'contracts'), { overwrite: false })
     }
 
     // Write version marker
