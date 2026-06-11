@@ -1,6 +1,10 @@
 #!/bin/bash
 # Cost Tracker: 세션별 토큰/비용 추적
 # Stop hook에서 호출 — 세션 종료 시 비용 기록
+# ultracode / minimal 프로파일에서는 우회 (hook-profiles.sh 가 판정)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/hook-profiles.sh" should-stop-telemetry || exit 0
 
 METRICS_DIR="$HOME/.claude/metrics"
 COSTS_FILE="$METRICS_DIR/costs.jsonl"

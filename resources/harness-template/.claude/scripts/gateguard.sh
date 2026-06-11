@@ -2,6 +2,10 @@
 # GateGuard: 첫 편집 전 조사 강제
 # 파일당 한 번만 작동 (30분 TTL)
 # PreToolUse Write|Edit 에서 호출
+# minimal / ultracode 프로파일에서는 비활성 (hook-profiles.sh 가 판정)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/hook-profiles.sh" should-gateguard || exit 0
 
 GUARD_DIR="/tmp/claude-gateguard-$$"
 mkdir -p "$GUARD_DIR" 2>/dev/null

@@ -1,6 +1,10 @@
 #!/bin/bash
 # Evaluate Session: 세션에서 패턴 추출 + instinct 시스템 연계
 # Stop 훅에서 호출
+# ultracode / minimal 프로파일에서는 우회 (hook-profiles.sh 가 판정)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/hook-profiles.sh" should-stop-telemetry || exit 0
 
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 INSTINCTS_FILE="$PROJECT_DIR/docs/instincts.jsonl"

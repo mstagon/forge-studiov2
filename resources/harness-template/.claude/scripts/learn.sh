@@ -1,6 +1,10 @@
 #!/bin/bash
 # Continuous Learning: 교훈 기록 + 자동 Escalation
 # Stop hook에서 호출 — 세션 종료 시 lessons-learned 분석
+# ultracode / minimal 프로파일에서는 우회 (hook-profiles.sh 가 판정)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/hook-profiles.sh" should-stop-telemetry || exit 0
 
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 LESSONS_FILE="$PROJECT_DIR/docs/lessons-learned.md"
