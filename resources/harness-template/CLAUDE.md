@@ -113,8 +113,9 @@ forge-team complete --team-id <id>                     # 팀 강제 완료 (orch
   gateguard 조사 강제 · bash 출력 압축 (compress-bash-output)
 - SessionStart: 프로파일 자동 감지 (`auto-profile.sh` — prd/stg=strict, 메인 max-tier=ultracode,
   멤버=standard) · MCP per-workspace 자동 활성 (`forge-mcp-profile.sh`)
-- Stop: dart format / eslint · DTO broadcast · 메인 폴링 (팀 신호 surface) · 학습 루프
-  (ultracode 프로파일에서는 학습/텔레메트리 우회)
+- Stop: dart format / eslint · DTO broadcast · symbol 충돌 경보 · 메인 폴링 (팀 신호 surface) ·
+  학습 루프 (ultracode 프로파일에서는 학습/텔레메트리 우회)
+- PreCompact: 하네스 상태 스냅샷 — **컴팩션 직후 `.claude/compact-state.md` 가 있으면 반드시 Read**
 
 ---
 
