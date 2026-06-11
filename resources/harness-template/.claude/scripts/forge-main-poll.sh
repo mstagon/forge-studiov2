@@ -37,6 +37,13 @@ NEW_SEEN="$SEEN"
 for TEAM_PATH in "$TEAMS_DIR"/*/; do
   [ -d "$TEAM_PATH" ] || continue
   TEAM_ID=$(basename "$TEAM_PATH")
+
+  # archive 된 팀은 history — 신호 surface 대상 아님 (v0.13.0)
+  if [ -f "$TEAM_PATH/config.json" ]; then
+    ARCHIVED=$(jq -r '.archivedAt // ""' "$TEAM_PATH/config.json" 2>/dev/null)
+    [ -n "$ARCHIVED" ] && continue
+  fi
+
   MAIN_INBOX="$TEAM_PATH/inboxes/main.json"
   [ ! -f "$MAIN_INBOX" ] && continue
 
