@@ -4,6 +4,26 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-06-11
+
+### Changed — Identity Reset (독트린 역전)
+
+- **"무조건 팀" 독트린 폐기**: 메인 세션 (max-tier) 이 기본 실행자. 팀은
+  ①병렬 워커 (30분+ 독립 작업 2개+) ②Council 적대 검수 (cross-provider)
+  ③백그라운드 잡 — 3용도 전용 스케일 도구로 재정의. "5줄 금지" 룰 폐기.
+  (근거: Fable 5 급 메인에선 조정비용이 위임 이득을 잠식 — 감사 문서 참조)
+- **agent 정의 spawn 실주입**: `.claude/agents/<id>.md` 가 claude 멤버는
+  `--append-system-prompt`, codex 멤버는 task brief 상단으로 실제 주입.
+  (기존엔 정의가 spawn 에 전혀 사용되지 않았음)
+
+### Fixed — 전수조사 결함
+
+- Wizard 에이전트 풀: 가짜 18종 → 실제 하네스 18종 (기존 일치율 2/18)
+- 온보딩 샘플런이 존재하지 않는 agent (`reviewer`, `nestjs-auth`) 로 팀 생성하던 결함
+- 온보딩 Step4 가 삭제된 Library 뷰를 안내하던 잔재
+- StatusBar 하드코딩 fake 수치 (MCP "4/5", 'UTF-8 · LF · TypeScript') — 실값 없으면 미표시
+- PresetManager 의 실재한 적 없는 bundled preset (flutter-nest 등) 거짓 제거
+
 ## [0.14.0] — 2026-06-11
 
 ### Added — P1 최적화 (Hermes/Wit 패턴 차용)
