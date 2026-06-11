@@ -35,7 +35,7 @@ fi
 if echo "$FILE" | grep -qE 'server/src/auth/'; then
   SKILLS="$SKILLS nestjs-auth"
 fi
-if echo "$FILE" | grep -qE 'server/src/.*/dto/'; then
+if echo "$FILE" | grep -qE 'server/src/.*/dto/|contracts/.*\.md$'; then
   SKILLS="$SKILLS api-contract"
 fi
 

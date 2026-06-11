@@ -26,6 +26,8 @@
 3. **큰 앱**: Phase -1 Council (tech-architect + planner) → Phase 0 인프라 결정 (사용자에게
    질문 — 결정 없이 구현 금지) → phases.json → phase 별 팀 → merge → 리뷰
 4. **TDD 필수**: 각 phase 의 첫 멤버는 반드시 `test-writer` (Red → Green → Refactor)
+5. **Contract-first**: 크로스-스택 피처는 팀 spawn 전에 메인이 `contracts/<domain>.contract.md`
+   작성 (스펙 문서라 5줄 금지 예외). 멤버는 read-only — 서버/클라 DTO 둘 다 계약을 따른다
 
 **팀 plan 을 짜기 전 반드시 Read**: [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md)
 — Team Routing 표, file-level 멤버 분배, phases.json schema, Phase 0 인프라 결정표 전부 거기 있다.

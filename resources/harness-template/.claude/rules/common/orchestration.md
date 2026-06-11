@@ -268,5 +268,9 @@ agentId 전체 목록은 `.claude/agents/` 디렉토리 참조.
 
 - `expectedFiles` 겹치면 자동 sequential. `dependsOn` 의 phase 머지 후만 spawn.
 - 각 phase 의 첫 멤버는 반드시 `test-writer` (TDD Red 선행).
+- **Contract-first (v0.14.0)**: 크로스-스택 phase 는 spawn 전에 메인 세션이
+  `contracts/<domain>.contract.md` 작성 (형식: `contracts/README.md`).
+  멤버 task 에 "contracts/<domain>.contract.md 를 따른다" 명시 — 멤버는 read-only.
+  계약 작성은 메인의 "5줄 금지" 예외 (코드가 아니라 스펙 문서).
 - 멤버 spawn 시 role/goal/expectedFiles/다른 멤버 영역/완료 신호 (`complete-member`) 가
   task prompt 로 자동 주입된다 — 멤버는 자기 영역 밖을 건드리지 않는다.

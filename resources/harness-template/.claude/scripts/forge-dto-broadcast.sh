@@ -36,7 +36,7 @@ CHANGED=$(git diff --name-only HEAD 2>/dev/null; git status --porcelain | awk '{
 [ -z "$CHANGED" ] && exit 0
 
 # DTO / 엔티티 / 스키마 후보 패턴 (Flutter + NestJS + Prisma + Next.js)
-DTO_FILES=$(echo "$CHANGED" | grep -E '(/dto/|schema\.prisma|/entity/|/entities/|/models?/|/types?/|\.proto$|openapi\.(yaml|json))' | sort -u || true)
+DTO_FILES=$(echo "$CHANGED" | grep -E '(^|/)contracts/.*\.md$|(/dto/|schema\.prisma|/entity/|/entities/|/models?/|/types?/|\.proto$|openapi\.(yaml|json))' | sort -u || true)
 [ -z "$DTO_FILES" ] && exit 0
 
 # 같은 팀의 다른 멤버 (자기 자신 제외)

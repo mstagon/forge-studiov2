@@ -1,16 +1,30 @@
 ---
 name: api-contract
 description: Cross-stack API 계약 동기화. NestJS DTO ↔ Flutter DTO 일치성 관리.
-globs: server/src/**/dto/**, client/data/remote/**, client/data/dto/**, client/domain/entity/**, docs/api/**
+globs: contracts/**, server/src/**/dto/**, client/data/remote/**, client/data/dto/**, client/domain/entity/**, docs/api/**
 ---
+
+## Contract-First (v0.14.0 — 최우선 룰)
+
+크로스-스택 피처는 **`contracts/<domain>.contract.md` 가 계약의 원본**이다.
+서버 DTO 작성 전에 반드시 확인:
+
+1. `contracts/<domain>.contract.md` 가 있으면 → 그 필드/타입/enum 그대로 구현.
+   계약에 없는 필드 추가 금지 — 필요하면 메인 세션에 inbox 로 계약 수정 요청.
+2. 없으면 → 새 엔드포인트 작성 전 계약 파일 먼저 생성 (`contracts/README.md` 형식).
+   팀 멤버라면 메인에게 계약 작성 요청이 원칙 (멤버는 contracts/ read-only).
+3. Flutter DTO 도 같은 계약 파일을 보고 작성 — 서버 코드 추측 금지.
+4. 계약 ↔ 서버 DTO ↔ 클라 DTO 3자 대조가 `/api-sync` 의 기준.
+
+contracts/ 가 없는 레거시 프로젝트는 아래 기존 흐름 (NestJS DTO = 원본) 사용.
 
 ## API 계약 동기화 패턴
 
 ### 계약 흐름
 ```
-Prisma Schema → NestJS DTO (Response) → Flutter DTO → Flutter Entity
-      ↑                ↑                      ↑              ↑
-   DB 테이블        API 응답 형태         JSON 역직렬화      앱 도메인 모델
+contracts/*.contract.md → Prisma Schema → NestJS DTO → Flutter DTO → Flutter Entity
+        ↑                       ↑               ↑             ↑              ↑
+    계약 원본               DB 테이블       API 응답 형태   JSON 역직렬화   앱 도메인 모델
 ```
 
 ### NestJS Response DTO (서버 계약의 원본)
