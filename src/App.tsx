@@ -331,15 +331,6 @@ export default function App() {
     setWizardOpen(true)
   }
 
-  const onOnboardingSampleRun = () => {
-    // 3 members chosen to mirror the "default agent set" surfaced in
-    // Settings → Agents (front-end + backend + reviewer is the most common
-    // shape for first-run flows). The wizard still shows step 1 first so
-    // the user can refine the goal before launching.
-    setWizardPrefill(['flutter-ui', 'nestjs-backend', 'code-reviewer'])
-    setWizardOpen(true)
-  }
-
   /**
    * Map an agent id to its model. Settings → "역할별 모델" + "에이전트별
    * override" 가 사용자 정책의 source of truth. 사용자가 명시 안 한
@@ -591,7 +582,7 @@ export default function App() {
         <NewWorkspaceDialog />
         {/* Onboarding overlays the empty state on first run so brand-new users
             don't see only a single button — they get the full 5-step tour. */}
-        <Onboarding onSampleRun={onOnboardingSampleRun} />
+        <Onboarding />
       </div>
     )
   }
@@ -690,7 +681,7 @@ export default function App() {
         prefillMembers={wizardPrefill}
       />
 
-      <Onboarding onSampleRun={onOnboardingSampleRun} />
+      <Onboarding />
 
       <CommandPalette
         open={paletteOpen}

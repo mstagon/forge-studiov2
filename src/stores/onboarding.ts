@@ -1,5 +1,5 @@
 /**
- * Onboarding store — drives the first-run 5-step overlay.
+ * Onboarding store — drives the first-run 3-step overlay.
  *
  * Persistence: browser `localStorage` keyed at `forge.hasOnboarded`. We use
  * localStorage rather than going through the electron-store IPC bridge because
@@ -41,7 +41,7 @@ export interface OnboardingState {
   visible: boolean
   /** Has the user ever finished (or explicitly skipped) onboarding? */
   hasOnboarded: boolean
-  /** Current 1-based step index (1..5). */
+  /** Current 1-based step index (1..3). */
   step: number
   /** Live dependency-check results, in display order. */
   deps: DependencyStatus[]
@@ -56,7 +56,7 @@ export interface OnboardingState {
   finish: () => void
   /** Reset persisted flag (so the next mount auto-shows again). */
   reset: () => void
-  /** Move to a specific step (clamped 1..5). */
+  /** Move to a specific step (clamped 1..3). */
   goTo: (step: number) => void
   /** Re-run the `system:which` sweep for all tracked deps. */
   checkDeps: () => Promise<void>
@@ -142,7 +142,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   },
 
   goTo: (step: number) => {
-    const clamped = Math.min(5, Math.max(1, step))
+    const clamped = Math.min(3, Math.max(1, step))
     set({ step: clamped })
   },
 

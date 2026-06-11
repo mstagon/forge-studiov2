@@ -19,12 +19,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { Btn, Pill } from './primitives'
 import { Icon } from './icons'
 
-export interface OnboardingProps {
-  /** Open the create-team wizard (used by Step 5's "Sample Run 만들기"). */
-  onSampleRun?: () => void
-}
-
-export function Onboarding({ onSampleRun }: OnboardingProps) {
+export function Onboarding() {
   const visible = useOnboardingStore((s) => s.visible)
   const step = useOnboardingStore((s) => s.step)
   const goTo = useOnboardingStore((s) => s.goTo)
@@ -42,7 +37,7 @@ export function Onboarding({ onSampleRun }: OnboardingProps) {
 
   if (!visible) return null
 
-  const isLast = step === 5
+  const isLast = step === 3
   const next = () => (isLast ? finish() : goTo(step + 1))
   const back = () => goTo(step - 1)
 
@@ -80,8 +75,6 @@ export function Onboarding({ onSampleRun }: OnboardingProps) {
           {step === 1 && <Step1Welcome />}
           {step === 2 && <Step2Dependencies />}
           {step === 3 && <Step3Workspace />}
-          {step === 4 && <Step4HarnessTour />}
-          {step === 5 && <Step5FirstTeam onSampleRun={onSampleRun} onClose={finish} />}
         </div>
       </div>
 
@@ -101,7 +94,7 @@ export function Onboarding({ onSampleRun }: OnboardingProps) {
         </Btn>
         <div style={{ flex: 1 }} />
         <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          Step {step} / 5
+          Step {step} / 3
         </span>
         {step > 1 && (
           <Btn
@@ -122,7 +115,7 @@ export function Onboarding({ onSampleRun }: OnboardingProps) {
 
 // ─── Progress rail ────────────────────────────────────────────────────
 
-const STEP_LABELS = ['환영', '의존성', '워크스페이스', '하네스', '첫 팀']
+const STEP_LABELS = ['환영', '의존성', '워크스페이스']
 
 function ProgressRail({ step }: { step: number }) {
   return (
@@ -500,250 +493,3 @@ function Step3Workspace() {
   )
 }
 
-// ─── Step 4: harness tour ─────────────────────────────────────────────
-
-function Step4HarnessTour() {
-  const sidebarItems: { icon: ReactNode; label: string; desc: string }[] = [
-    {
-      icon: <Icon.Folder size={14} />,
-      label: 'Workspace',
-      desc: '터미널 그리드 + Run 카드 + agent 라이브 뷰. 일상적인 작업 공간.',
-    },
-    {
-      icon: <Icon.Git size={14} />,
-      label: 'Git',
-      desc: '변경/스테이징/커밋/푸시 + 브랜치 + 머지 충돌 뷰.',
-    },
-    {
-      icon: <Icon.Grid size={14} />,
-      label: 'Dashboard',
-      desc: '실행 중인 Run 요약과 자원 사용량을 한눈에.',
-    },
-    {
-      icon: <Icon.Cog size={14} />,
-      label: 'Settings',
-      desc: 'workspaces, harness 버전, 통합, MCP 서버, 계정.',
-    },
-  ]
-
-  const shortcuts: { keys: string; label: string }[] = [
-    { keys: '⌘1 / ⌘2 / ⌘3 / ⌘4', label: '뷰 전환 (Workspace/Git/Dashboard/Teams)' },
-    { keys: '⌘N', label: '새 워크스페이스' },
-    { keys: '⌘T', label: '새 터미널 탭' },
-    { keys: '⌘K', label: 'Command Palette' },
-    { keys: '⌘,', label: 'Settings' },
-    { keys: '⌘⇧.', label: '하네스 파일 토글 (git 패널)' },
-    { keys: '⌘⇧H', label: '터미널 split' },
-    { keys: 'Esc', label: 'Run / 모달 닫기' },
-  ]
-
-  return (
-    <>
-      <Heading
-        title="하네스 둘러보기"
-        sub="좌측 사이드바의 다섯 항목과 자주 쓰는 단축키를 미리 봐두세요. 모든 화면은 Command Palette(⌘K)에서도 바로 열 수 있습니다."
-      />
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            className="ns mono"
-            style={{
-              padding: '10px 14px',
-              borderBottom: '1px solid var(--line-1)',
-              fontSize: 10.5,
-              letterSpacing: 1.2,
-              color: 'var(--text-3)',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}
-          >
-            사이드바
-          </div>
-          {sidebarItems.map((it, i) => (
-            <div
-              key={it.label}
-              style={{
-                padding: '10px 14px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                borderBottom:
-                  i < sidebarItems.length - 1 ? '1px solid var(--line-1)' : 'none',
-              }}
-            >
-              <span
-                style={{
-                  color: 'var(--accent)',
-                  marginTop: 2,
-                  flexShrink: 0,
-                }}
-              >
-                {it.icon}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)' }}>
-                  {it.label}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11.5,
-                    color: 'var(--text-3)',
-                    marginTop: 2,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {it.desc}
-                </div>
-              </div>
-            </div>
-          ))}
-        </Card>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            className="ns mono"
-            style={{
-              padding: '10px 14px',
-              borderBottom: '1px solid var(--line-1)',
-              fontSize: 10.5,
-              letterSpacing: 1.2,
-              color: 'var(--text-3)',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}
-          >
-            단축키
-          </div>
-          {shortcuts.map((it, i) => (
-            <div
-              key={it.keys}
-              style={{
-                padding: '8px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                borderBottom: i < shortcuts.length - 1 ? '1px solid var(--line-1)' : 'none',
-              }}
-            >
-              <code
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-1)',
-                  background: 'var(--bg-3)',
-                  border: '1px solid var(--line-2)',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  flexShrink: 0,
-                }}
-              >
-                {it.keys}
-              </code>
-              <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{it.label}</span>
-            </div>
-          ))}
-        </Card>
-      </div>
-    </>
-  )
-}
-
-// ─── Step 5: first team / sample run ──────────────────────────────────
-
-function Step5FirstTeam({
-  onSampleRun,
-  onClose,
-}: {
-  onSampleRun?: () => void
-  onClose: () => void
-}) {
-  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
-  const sampleMembers = useMemo(() => ['flutter-ui', 'nestjs-backend', 'code-reviewer'], [])
-
-  const launch = () => {
-    onSampleRun?.()
-  }
-
-  return (
-    <>
-      <Heading
-        title="첫 팀을 만들어보세요"
-        sub="평소엔 메인 세션이 직접 일하고, 30분+ 독립 작업 병렬·Council 검수·백그라운드 잡일 때만 팀을 띄웁니다. 팀이 어떻게 생겼는지 3명짜리 샘플 위저드로 미리 볼 수 있어요 — 건너뛰어도 됩니다."
-      />
-      <Card style={{ padding: 18, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <span
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: 'var(--accent-dim)',
-              border: '1px solid var(--accent-line)',
-              color: 'var(--accent)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Icon.Users size={16} />
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-              Sample Run · 3 members
-            </div>
-            <div
-              className="mono"
-              style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 4 }}
-            >
-              {sampleMembers.join('  ·  ')}
-            </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.5 }}>
-              팀 위저드가 멤버를 미리 채운 상태로 열립니다. 이름과 목표만 입력하면 격리 워크트리 +
-              tmux 세션이 자동 생성됩니다.
-            </div>
-          </div>
-        </div>
-        {!activeWorkspace && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: '8px 10px',
-              background: 'color-mix(in oklab, var(--warning) 8%, transparent)',
-              border: '1px solid color-mix(in oklab, var(--warning) 22%, transparent)',
-              borderRadius: 6,
-              fontSize: 11,
-              color: 'var(--text-2)',
-            }}
-          >
-            먼저 워크스페이스를 선택해야 팀을 생성할 수 있습니다 — 이전 단계로 돌아가세요.
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <Btn
-            variant="primary"
-            icon={<Icon.Bolt size={11} />}
-            onClick={() => {
-              launch()
-              onClose()
-            }}
-            disabled={!activeWorkspace}
-          >
-            Sample Run 만들기
-          </Btn>
-          <Btn variant="ghost" onClick={onClose}>
-            Skip
-          </Btn>
-        </div>
-      </Card>
-      <div
-        style={{
-          fontSize: 11.5,
-          color: 'var(--text-4)',
-          lineHeight: 1.5,
-        }}
-      >
-        나중에 Settings → General 의 “Show onboarding again” 버튼으로 이 가이드를 다시 열 수 있습니다.
-      </div>
-    </>
-  )
-}
