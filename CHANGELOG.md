@@ -4,6 +4,27 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] — 2026-06-11
+
+### Added — P1 최적화 (Hermes/Wit 패턴 차용)
+
+- **Contract-first** (P1-7): `contracts/<domain>.contract.md` 가 API 계약의 원본.
+  워크스페이스 생성/하네스 업데이트 시 자동 시드. 메인이 팀 spawn 전 작성,
+  멤버는 read-only. api-contract 스킬 / skill-injector / dto-broadcast 연동.
+- **Symbol 충돌 조기 경보** (P1-6 v1, `forge-symbol-guard.sh`): 두 멤버가 같은
+  함수를 동시 수정하면 양쪽 inbox 경보. git diff hunk context 기반 (의존성 0).
+- **Context lineage** (P1-5): 컴팩션 직전 팀 진행/inbox 미읽음/contracts/git
+  상태를 `.claude/compact-state.md` 로 구조화 스냅샷 + 컴팩션 직후 Read 지시.
+  새 세션은 `forge-lineage-restore.sh` 가 48h 이내 스냅샷 포인터 surface.
+- **Code graph 자동 갱신** (P1-8, `forge-code-graph.sh`): HEAD 변경 감지 시
+  code-review-graph 인덱스 백그라운드 rebuild (CLI 설치된 경우만).
+
+### Fixed
+
+- **dto-broadcast 가 isolated worktree 에서 무동작**: 멤버 CWD 가 worktree 라
+  teams registry 경로 조회가 항상 실패 → broadcast 가 한 번도 발사 안 되던
+  결함. main workspace 루트 역산으로 fix (symbol-guard 도 같은 패턴 적용).
+
 ## [0.13.0] — 2026-06-11
 
 > 0.7.0~0.12.0 엔트리는 미기록 (git log + GitHub release 노트 참조).
