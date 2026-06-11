@@ -2,7 +2,8 @@
   "model": "claude-opus-4-8",
   "effortLevel": "max",
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "BASH_MAX_OUTPUT_LENGTH": "25000"
   },
   "permissions": {
     "allowedTools": [
@@ -96,6 +97,15 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/auto-profile.sh\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/forge-mcp-profile.sh\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -118,6 +128,10 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/tmux-dev.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/compress-bash-output.sh\""
           }
         ]
       },
