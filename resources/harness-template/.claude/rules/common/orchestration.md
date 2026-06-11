@@ -6,13 +6,15 @@
 > **CRITICAL**: `Agent` / `Task` 도구 호출 금지 — `permissions.deny` 등록되어
 > PreToolUse 훅이 차단한다. 모든 병렬/위임은 **`forge-team` CLI** 로만 한다.
 
-## 핵심 원칙
+## 핵심 원칙 (v0.15 독트린 — 직접 우선)
 
-1. **팀 자동 파견**: 요청 분석 → Team Routing 매칭 → `forge-team create` 즉시 호출. "어떤 멤버 띄울까요?" 묻지 마라.
+1. **메인이 직접이 기본**: max-tier 메인이 분석/구현/테스트/커밋을 직접 한다.
+   팀은 ① 30분+ 독립 작업 2개 이상 (병렬 워커) ② Council/적대 검수 (cross-provider)
+   ③ 백그라운드 잡 — 이 3가지에만. "어떤 멤버 띄울까요?" 묻지 말고 판정 후 실행.
 2. **스킬 자동 적용**: 파일 패턴 → Skill Routing 매칭 → 해당 스킬 읽고 적용. 스킬 적용 여부를 묻지 마라.
 3. **커맨드 자동 실행**: verify, review 등 워크플로우 커맨드는 흐름에 따라 자동 트리거. 유저가 `/verify` 칠 필요 없다.
-4. **병렬 멤버 spawn**: 독립 작업 2개 이상이면 한 `forge-team create` 호출에 멀티 멤버 등록 (각 멤버가 격리 worktree + tmux pane). `Agent` 도구 사용 금지.
-5. **자동 수정 루프**: 빌드/테스트 실패 시 `loop-operator` 멤버 추가 spawn. 5회까지 자동 재시도.
+4. **팀을 띄울 땐 멀티 멤버 한 팀**: 한 `forge-team create` 에 멤버 전부 등록 (1인팀은 CLI 가 거부). `Agent` 도구 사용 금지.
+5. **자동 수정 루프**: 빌드/테스트 실패 시 메인이 직접 수정 (5회까지). 장기화되면 백그라운드 잡 팀으로 전환.
 
 ## 자동 실행 플로우 (MAX RESOURCES — 항상 풀 파이프라인)
 
@@ -62,24 +64,19 @@
     - "커밋할까요?" (이것만 유저에게 묻는다)
 ```
 
-## 에이전트 자동 파견 규칙
+## 직접 vs 팀 판정표 (v0.15)
 
-| 유저 요청 패턴 | 자동 액션 (묻지 않고 실행) |
-|---------------|--------------------------|
-| "~~ 만들어줘/구현해줘" | 영향 스택 분석 → 에이전트 체이닝 자동 실행 → 검증 → 보고 |
-| "~~ 수정해줘/고쳐줘/바꿔줘" | 관련 파일 분석 → 단일 에이전트 직접 실행 → 검증 |
-| "리뷰해줘/검토해줘" | code-reviewer + security-auditor + spec-verifier 3종 동시 파견 |
-| "빌드 에러/안 돌아가/에러" | build-error-resolver → loop-operator 자동 수정 루프 |
-| "테스트 짜줘/테스트 추가" | test-writer 자동 파견 |
-| "리팩토링/정리" | refactor-cleaner 자동 파견 |
-| "보안/취약점/인증" | security-auditor 자동 파견 |
-| "문서/API 문서" | doc-updater 자동 파견 |
-| "설계/아키텍처" | tech-architect → planner 체이닝 |
-| DB/스키마/테이블 관련 | prisma-data → nestjs-backend 자동 체이닝 |
-| API/엔드포인트 관련 | nestjs-backend → api-sync → flutter DTO 자동 체이닝 |
-| UI/화면/위젯 관련 | pencil 확인 → mobile-design (MFRI) → flutter-ui → riverpod-logic |
-| 제스처/햅틱/모션/애니메이션/트랜지션 | mobile-touch → flutter-ui (애니메이션 컨트롤러 + 스프링/이징 적용) |
-| CMS/어드민 관련 | nextjs-cms 독립 실행 |
+| 유저 요청 패턴 | 기본 처리 | 팀 전환 조건 |
+|---------------|----------|-------------|
+| 버그 fix / 작은 수정 / 단일 화면·API | **메인 직접** (TDD + verify) | 없음 — 항상 직접 |
+| 풀스택 피처 (DB→API→앱) | contracts 작성 → 메인 직접 순차 | 스택별 작업이 각 30분+ 이면 병렬 워커 팀 |
+| 리뷰/보안 검수 | 메인 직접 (review-checklist 스킬) | 릴리즈 전 최종 검수는 Council (claude+gpt 혼성 — 적대 검수) |
+| 큰 앱 부트스트랩 | Phase 0 인프라 결정 → 직접 | 독립 스택 3개 동시 부트스트랩이면 병렬 워커 팀 |
+| 대량 마이그레이션 / 긴 테스트 매트릭스 | — | 백그라운드 잡 팀 (메인은 다음 작업 진행) |
+| 설계 큰 결정 | 메인 초안 | 갈림길이 크면 Council 1회 |
+
+스킬 적용 (mobile-design / dio-retrofit / prisma-patterns 등) 은 주체와 무관 —
+편집 파일 패턴에 skill-injector 가 자동 주입한다.
 
 ## 팀 멤버 병렬 spawn
 

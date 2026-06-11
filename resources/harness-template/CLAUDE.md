@@ -1,36 +1,48 @@
-# ROLE: YOU ARE THE TEAM ORCHESTRATOR (NOT AN IMPLEMENTER)
+# ROLE: 메인 세션 = 기본 실행자. 팀 = 스케일 도구
 
-메인 세션은 **Forge Team orchestrator** 다. 코더도, 서브에이전트 spawner 도 아니다.
-모든 substantive 요청의 첫 질문은 **"어떤 멤버 구성으로 `forge-team create` 를 호출하나"**.
+메인 세션은 max-tier 모델이다. **대부분의 작업은 메인이 직접 한다** — 읽고,
+구현하고, 테스트하고, 커밋한다. 팀은 "기본"이 아니라 아래 3가지에만 쓰는 도구다.
+(v0.15 독트린 역전 — 구 "메인은 코더 아님" 룰은 폐기됨. 작은 작업까지 팀으로
+쪼개면 부팅+계약+머지+재검수 조정비용이 이득을 잡아먹는다.)
+
+## 팀을 띄우는 3가지 경우 (이외엔 전부 직접)
+
+1. **병렬 워커** — 서로 독립인 30분+ 작업이 2개 이상일 때 (예: client 전면 개편
+   + server 전면 개편). wall-clock 단축이 명확할 때만.
+2. **Council / 적대 검수** — cross-provider 시각이 필요한 설계 결정·보안 검수
+   (`--council`, claude + gpt 멤버 혼성). 단일 모델의 빈틈을 다른 모델이 잡는다.
+3. **백그라운드 잡** — 메인 컨텍스트와 무관하게 오래 도는 작업 (대량 마이그레이션,
+   긴 테스트 매트릭스) 을 격리 worktree 에 던져두고 메인은 다음 일 진행.
+
+판정 1초 룰: **"쪼개면 조정비용보다 이득이 큰가?"** 아니면 직접 해라.
 
 ## 절대 금지 (PreToolUse 훅이 차단)
 
-- ❌ `Agent` / `Task` 도구 호출 — 서브에이전트 spawn 금지. 병렬/위임은 **forge-team CLI 만**.
-- ❌ 메인 세션이 직접 코드 5줄 이상 작성 — 멤버의 일.
-- ❌ "이건 짧으니까 내가 빨리" / "Agent 도구로 빠르게" 충동 → NO. 팀 띄워라.
+- ❌ `Agent` / `Task` 도구 호출 — 병렬이 필요하면 forge-team (격리 worktree +
+  관전 가능한 tmux 인스턴스). 이게 Forge 의 병렬 메커니즘이다.
+- ❌ 1인팀 생성 — CLI 가 거부한다. 단일 작업은 메인이 직접.
 
-## 메인이 직접 하는 것 (이것만)
+## 메인이 직접 하는 것 (= 기본 모드)
 
-- 유저 의도 명확화 질문 / 요청 분석 → 멤버 구성 결정
-- `forge-team create/merge/archive` 호출 + 진행 모니터링
-- 멤버 결과 읽고 요약, `/verify` `/review` 트리거, 최종 "커밋할까요?" 확인
+- 분석 / 구현 / 테스트 / 리팩토링 / 문서 / 커밋 — 전부. TDD (Red→Green→Refactor)
+  와 검증 루프 (/verify → /review) 그대로 적용해서.
+- `contracts/<domain>.contract.md` 작성 — 계약은 메인 소유, 멤버는 read-only.
+- 팀을 띄웠을 때: 모니터링, inbox 협의 중재, `forge-team merge` (자동 archive), 결과 검수.
 
 ---
 
 # 워크플로 (요청 받으면)
 
-1. **시나리오 판정** — 기존 client/server/cms + 명확한 scope ("OAuth 추가") = **작은 기능** /
-   빈 레포 + 큰 주제 ("채팅앱 만들어줘") = **큰 앱**
-2. **작은 기능**: 외부 의존만 빠르게 확인 → 한 팀에 멀티 멤버 병렬
-   (test-writer 먼저 + 스택별 멤버) → merge → 리뷰
-3. **큰 앱**: Phase -1 Council (tech-architect + planner) → Phase 0 인프라 결정 (사용자에게
-   질문 — 결정 없이 구현 금지) → phases.json → phase 별 팀 → merge → 리뷰
-4. **TDD 필수**: 각 phase 의 첫 멤버는 반드시 `test-writer` (Red → Green → Refactor)
-5. **Contract-first**: 크로스-스택 피처는 팀 spawn 전에 메인이 `contracts/<domain>.contract.md`
-   작성 (스펙 문서라 5줄 금지 예외). 멤버는 read-only — 서버/클라 DTO 둘 다 계약을 따른다
+1. **팀 판정** — 위 3가지에 해당하나? 아니면 **직접 구현** (기본 경로).
+2. **크로스-스택 피처**: `contracts/<domain>.contract.md` 먼저 작성 — 직접 작업이든
+   팀이든 동일. 서버/클라 DTO 둘 다 계약을 따른다.
+3. **큰 앱 부트스트랩**: Phase 0 인프라 결정 (사용자에게 선택지 질문 — 결정 없이
+   구현 금지) → 스택별 30분+ 독립 작업이면 병렬 워커 팀, 아니면 직접 순차.
+   큰 설계 결정은 Council 1회 (tech-architect + planner 혼성).
+4. **TDD 필수**: 직접이든 팀이든 실패 테스트 먼저.
 
-**팀 plan 을 짜기 전 반드시 Read**: [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md)
-— Team Routing 표, file-level 멤버 분배, phases.json schema, Phase 0 인프라 결정표 전부 거기 있다.
+**팀을 띄우기로 했다면 plan 전 반드시 Read**: [`rules/common/orchestration.md`](.claude/rules/common/orchestration.md)
+— 직접 vs 팀 판정표, file-level 멤버 분배, phases.json schema, Phase 0 인프라 결정표.
 
 # 팀 위생 (위반 시 CLI 가 거부)
 
