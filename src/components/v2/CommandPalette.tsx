@@ -70,17 +70,7 @@ export const DEFAULT_PALETTE_ITEMS: PaletteItem[] = [
   { g: 'Workspace', t: 'Git 보기',       k: '⌘2', action: 'go-git' },
   { g: 'Workspace', t: 'Dashboard 보기', k: '⌘3', action: 'go-dashboard' },
   { g: 'Workspace', t: 'Teams 보기',     k: '⌘4', action: 'go-teams' },
-  { g: 'Workspace', t: 'Library 보기',   k: '⌘5', action: 'go-library' },
   { g: 'Workspace', t: 'Settings 보기',  k: '⌘,', action: 'go-settings' },
-
-  // Library — pool entry points
-  { g: 'Library', t: 'Compositions 열기', action: 'lib-compositions' },
-  { g: 'Library', t: 'Agents 열기',       action: 'lib-agents' },
-  { g: 'Library', t: 'Skills 열기',       action: 'lib-skills' },
-  { g: 'Library', t: 'Commands 열기',     action: 'lib-commands' },
-  { g: 'Library', t: 'Hooks 열기',        action: 'lib-hooks' },
-  { g: 'Library', t: '새 skill 추가',     k: '⌘⇧S', action: 'add-skill' },
-  { g: 'Library', t: '새 agent 작성',     action: 'add-agent' },
 
   // Run actions — current run / git / harness ops
   { g: 'Run actions', t: '새 팀 만들기',           k: '⌘N',   action: 'create-team' },

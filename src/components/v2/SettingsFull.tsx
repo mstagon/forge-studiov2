@@ -818,21 +818,7 @@ export function SettingsAgents() {
     <>
       <SectionHeader title={t('settings.agents')} sub={t('settings.agentsSub')} />
 
-      <SettingsCard
-        title="Pool defaults"
-        right={
-          <Btn
-            variant="ghost"
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:nav-library', { detail: { tab: 'agents' } }),
-              )
-            }}
-          >
-            Library에서 편집
-          </Btn>
-        }
-      >
+      <SettingsCard title="Pool defaults">
         <Row
           label="Default agent set"
           sub="새 Run이 빈 멤버로 시작할 때 추천되는 5명"

@@ -27,8 +27,6 @@ function buildNavItems(): NavItem[] {
     { id: 'workspace', label: t('sidebar.workspace'), icon: Icon.Folder, kbd: '⌘1' },
     { id: 'git',       label: t('sidebar.git'),       icon: Icon.Git,    kbd: '⌘2' },
     { id: 'dashboard', label: t('sidebar.dashboard'), icon: Icon.Grid,   kbd: '⌘3' },
-    { id: 'library',   label: t('sidebar.library'),   icon: Icon.Cube,   kbd: '⌘4' },
-    { id: 'sprint',    label: '계획',                  icon: Icon.Layers, kbd: '⌘5' },
   ]
 }
 

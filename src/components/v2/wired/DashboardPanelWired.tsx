@@ -237,27 +237,11 @@ export function DashboardPanelWired({ onCmdK }: DashboardPanelWiredProps) {
       },
     },
     {
-      i: <Icon.Sparkle size={13} />,
-      t: 'skill 추가',
-      k: '',
-      action: () => {
-        window.dispatchEvent(new CustomEvent('forge:nav-library', { detail: { tab: 'skills' } }))
-      },
-    },
-    {
       i: <Icon.Cube size={13} />,
       t: 'MCP 추가',
       k: '',
       action: () => {
         window.dispatchEvent(new CustomEvent('forge:nav-settings', { detail: { section: 'harness', card: 'mcp-servers' } }))
-      },
-    },
-    {
-      i: <Icon.Code size={13} />,
-      t: 'command 작성',
-      k: '',
-      action: () => {
-        window.dispatchEvent(new CustomEvent('forge:nav-library', { detail: { tab: 'commands' } }))
       },
     },
     {

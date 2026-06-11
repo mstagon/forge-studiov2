@@ -14,7 +14,7 @@ import { Fragment, useEffect, useState, type CSSProperties } from 'react'
 import { Btn, AgentBadge, AvatarStack } from './primitives'
 import { Icon } from './icons'
 // TODO: foundation import — `./data` is the AGENT_POOL seed module from the
-// main session's foundation pass. Falls back to LibraryData agents if needed.
+// main session'''s foundation pass.
 import { AGENT_POOL, AGENT_BY_ID } from './data'
 import type { Agent } from './types'
 import { t } from '@/i18n'

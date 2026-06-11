@@ -3,7 +3,6 @@ import { useWorkspaceStore } from './stores/workspace'
 import { useAppUpdateStore } from './stores/appUpdate'
 import { useGitStore } from './stores/git'
 import { useAgentTeamStore } from './stores/agentTeam'
-import { useLibraryStore } from './stores/library'
 import { subscribeToMainErrors } from './stores/errorLog'
 import { useModelPolicyStore } from './stores/modelPolicy'
 
@@ -11,9 +10,7 @@ import { Shell } from './components/v2/Shell'
 import { LiveTerminalsRoot } from './components/v2/LiveTerminalsRoot'
 import { useLiveTerminalsStore } from './stores/liveTerminals'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
-import { Library } from './components/v2/Library'
 import { SettingsFull } from './components/v2/SettingsFull'
-import { SprintManager } from './components/v2/SprintManager'
 import { Wizard, type WizardResult } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
@@ -200,13 +197,10 @@ export default function App() {
     return () => useAgentTeamStore.getState().unsubscribeAll()
   }, [loadWorkspaces])
 
-  // ── Library: hydrate scanner-backed lists when workspace changes ──
+  // ── Teams: reload when workspace changes ──
   useEffect(() => {
     if (activeWorkspace) {
-      void useLibraryStore.getState().loadAll(activeWorkspace.path)
       void useAgentTeamStore.getState().load()
-    } else {
-      useLibraryStore.getState().reset()
     }
   }, [activeWorkspace])
 
@@ -289,9 +283,8 @@ export default function App() {
   useEffect(() => {
     const handleNewRun = (e: Event) => {
       const detail = (e as CustomEvent<{ prefillMembers?: string[] }>).detail
-      // Library "Add to run" passes a single-member prefill — preserve it so
-      // the wizard opens with that agent already selected. Dashboard's plain
-      // "새 팀 만들기" still emits with no detail, so we fall back to undefined.
+      // 호출자가 prefillMembers 를 넘기면 그 멤버가 미리 선택된 상태로 위저드
+      // 가 열린다. Dashboard 의 "새 팀 만들기" 는 detail 없이 emit → undefined.
       setWizardPrefill(
         detail?.prefillMembers && detail.prefillMembers.length > 0
           ? detail.prefillMembers
@@ -302,17 +295,6 @@ export default function App() {
     const handleOpenFolder = (e: Event) => {
       const detail = (e as CustomEvent<{ path: string }>).detail
       if (detail?.path) void openWorkspace(detail.path)
-    }
-    const handleNavLibrary = (e: Event) => {
-      setView('library')
-      const detail = (e as CustomEvent<{ tab?: string }>).detail
-      if (detail?.tab) {
-        // Library tab is owned by Library component — broadcast a follow-up
-        // event it can pick up after mount.
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('forge:library-tab', { detail: { tab: detail.tab } }))
-        }, 50)
-      }
     }
     const handleNavSettings = (e: Event) => {
       setView('settings')
@@ -325,12 +307,10 @@ export default function App() {
     }
     window.addEventListener('forge:new-run', handleNewRun)
     window.addEventListener('forge:open-folder', handleOpenFolder)
-    window.addEventListener('forge:nav-library', handleNavLibrary)
     window.addEventListener('forge:nav-settings', handleNavSettings)
     return () => {
       window.removeEventListener('forge:new-run', handleNewRun)
       window.removeEventListener('forge:open-folder', handleOpenFolder)
-      window.removeEventListener('forge:nav-library', handleNavLibrary)
       window.removeEventListener('forge:nav-settings', handleNavSettings)
     }
   }, [openWorkspace])
@@ -357,13 +337,6 @@ export default function App() {
     // shape for first-run flows). The wizard still shows step 1 first so
     // the user can refine the goal before launching.
     setWizardPrefill(['flutter-ui', 'nestjs-auth', 'reviewer'])
-    setWizardOpen(true)
-  }
-
-  const onApplyComposition = (comp: { name: string; members?: unknown[] }) => {
-    const memberCount = Array.isArray(comp.members) ? comp.members.length : 1
-    setToast({ name: comp.name, count: memberCount })
-    setTimeout(() => setToast(null), 4000)
     setWizardOpen(true)
   }
 
@@ -659,17 +632,8 @@ export default function App() {
     secondaryView = <GitPanelWired />
   } else if (view === 'dashboard') {
     secondaryView = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
-  } else if (view === 'library') {
-    secondaryView = (
-      <Library
-        workspace={activeSummary}
-        onApplyComposition={onApplyComposition}
-      />
-    )
   } else if (view === 'settings') {
     secondaryView = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
-  } else if (view === 'sprint') {
-    secondaryView = <SprintManager />
   }
 
   const main = (
@@ -743,61 +707,8 @@ export default function App() {
             setView('dashboard')
           } else if (action === 'go-teams') {
             setView('workspace')
-          } else if (action === 'go-library' || action === 'view-library') {
-            setView('library')
           } else if (action === 'go-settings' || action === 'open-settings') {
             setView('settings')
-          }
-          // ── Library deep-links
-          else if (action === 'lib-compositions') {
-            setView('library')
-            setTimeout(() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:library-tab', { detail: { tab: 'compositions' } }),
-              )
-            }, 50)
-          } else if (action === 'lib-agents' || action === 'add-agent') {
-            setView('library')
-            setTimeout(() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:library-tab', { detail: { tab: 'agents' } }),
-              )
-              if (action === 'add-agent') {
-                setTimeout(() => {
-                  window.dispatchEvent(
-                    new CustomEvent('forge:library-new', { detail: { tab: 'agents' } }),
-                  )
-                }, 50)
-              }
-            }, 50)
-          } else if (action === 'lib-skills' || action === 'add-skill') {
-            setView('library')
-            setTimeout(() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:library-tab', { detail: { tab: 'skills' } }),
-              )
-              if (action === 'add-skill') {
-                setTimeout(() => {
-                  window.dispatchEvent(
-                    new CustomEvent('forge:library-new', { detail: { tab: 'skills' } }),
-                  )
-                }, 50)
-              }
-            }, 50)
-          } else if (action === 'lib-commands') {
-            setView('library')
-            setTimeout(() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:library-tab', { detail: { tab: 'commands' } }),
-              )
-            }, 50)
-          } else if (action === 'lib-hooks') {
-            setView('library')
-            setTimeout(() => {
-              window.dispatchEvent(
-                new CustomEvent('forge:library-tab', { detail: { tab: 'hooks' } }),
-              )
-            }, 50)
           }
           // ── Run actions
           else if (action === 'create-team' || action === 'new-run') {
