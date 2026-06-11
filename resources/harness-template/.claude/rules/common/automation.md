@@ -18,7 +18,9 @@
 | `forge-symbol-guard.sh` | Stop | 멤버 간 같은 함수 동시 수정 감지 → 양쪽 경보 (Wit lite) |
 | `forge-main-poll.sh` | Stop | 메인 세션이 팀 신호 (done 등) 자동 surface |
 | `hook-profiles.sh` | 유틸리티 | minimal/standard/strict/ultracode 프로파일 판정 |
-| `pre-compact.sh` | PreCompact | 컴팩션 전 상태 보존 |
+| `pre-compact.sh` | PreCompact | 하네스 상태 스냅샷 → `.claude/compact-state.md` (팀/inbox/계약/git) |
+| `forge-lineage-restore.sh` | SessionStart | 48h 이내 스냅샷 있으면 Read 포인터 surface |
+| `forge-code-graph.sh` | SessionStart | HEAD 변경 시 code-review-graph 인덱스 백그라운드 갱신 |
 
 ## Hook Profile (auto-profile.sh 가 자동 감지)
 
