@@ -4,6 +4,18 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] — 2026-06-11
+
+### Added — 프리셋 2라운드
+
+- **flutter-only 프리셋**: Flutter + Riverpod + go_router 앱 단독 (백엔드 없음 —
+  로컬 우선 또는 Supabase BaaS). 전용 architecture (오프라인 우선, RLS 계약) +
+  신규 `supabase-flutter` 스킬 (인증/DB/리얼타임/스토리지/RLS). dart MCP 자동.
+- **옵트인 MCP**: New Workspace 에서 프리셋 선택 시 통합 MCP 체크박스 —
+  체크한 것만 mcpServers 로 승격 (flutter-only: supabase/playwright ·
+  nextjs-web: supabase/vercel/playwright · api-server: supabase/railway).
+- **nextauth-patterns 스킬** (nextjs-web): Auth.js v5 세션/미들웨어/Server Action 가드.
+
 ## [0.17.0] — 2026-06-11
 
 ### Added — 프리셋 시스템 실구현
