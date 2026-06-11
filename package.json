@@ -1,6 +1,6 @@
 {
   "name": "forge-studio",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Forge Studio — Claude Code GUI Wrapper",
   "license": "GPL-3.0-or-later",
   "main": "dist-electron/main.js",
@@ -90,22 +90,35 @@
       {
         "from": "resources/harness-template",
         "to": "harness-template",
-        "filter": ["**/*", "!.pdca-*", "!settings.local.json"]
+        "filter": [
+          "**/*",
+          "!.pdca-*",
+          "!settings.local.json"
+        ]
       },
       {
         "from": "resources/bundled-tools/darwin-arm64",
         "to": "bundled-tools",
-        "filter": ["**/*", "!.gitkeep"]
+        "filter": [
+          "**/*",
+          "!.gitkeep"
+        ]
       },
       {
         "from": "bin",
         "to": "forge-cli/bin",
-        "filter": ["forge-team", "forge-team.ts"]
+        "filter": [
+          "forge-team",
+          "forge-team.ts"
+        ]
       },
       {
         "from": "electron/services",
         "to": "forge-cli/electron/services",
-        "filter": ["TeamOperations.ts", "ProviderRouter.ts"]
+        "filter": [
+          "TeamOperations.ts",
+          "ProviderRouter.ts"
+        ]
       }
     ],
     "directories": {
