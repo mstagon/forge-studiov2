@@ -315,7 +315,7 @@ function Toggle({ value, onChange }: ToggleProps) {
  * 호출자가 options 를 명시하면 그것 우선.
  */
 const DEFAULT_MODEL_OPTIONS = [
-  'claude-opus-4-7',
+  'claude-opus-4-8',
   'claude-sonnet-4-6',
   'claude-haiku-4-5',
   'opus-4',

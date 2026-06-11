@@ -14,13 +14,13 @@ import { persist } from 'zustand/middleware'
 export type ModelRole = 'Frontend' | 'Backend' | 'Database' | 'Tests' | 'Review' | 'Architecture' | 'Other'
 
 const DEFAULT_BY_ROLE: Record<ModelRole, string> = {
-  Frontend: 'claude-opus-4-7',
-  Backend: 'claude-opus-4-7',
+  Frontend: 'claude-opus-4-8',
+  Backend: 'claude-opus-4-8',
   Database: 'gpt-5.5', // 정확성 강점
-  Tests: 'claude-opus-4-7',
-  Review: 'claude-opus-4-7',
-  Architecture: 'claude-opus-4-7',
-  Other: 'claude-opus-4-7',
+  Tests: 'claude-opus-4-8',
+  Review: 'claude-opus-4-8',
+  Architecture: 'claude-opus-4-8',
+  Other: 'claude-opus-4-8',
 }
 
 /**

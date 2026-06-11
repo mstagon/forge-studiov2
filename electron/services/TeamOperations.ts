@@ -570,7 +570,7 @@ export class TeamOperations {
         // Honor the caller's model override; default to claude opus for new
         // members. The autoStart spawner reads this to pick the right CLI
         // (claude vs codex) with the matching bypass flag.
-        model: m.model ?? 'claude-opus-4-7',
+        model: m.model ?? 'claude-opus-4-8',
         joinedAt: now + idx,
         task: m.task,
         state: 'active',

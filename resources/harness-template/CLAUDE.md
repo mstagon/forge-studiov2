@@ -101,7 +101,7 @@ forge-team create \
   --name "<goal>-architect" \
   --goal "<사용자 요청 한 줄> — 아키텍처 + Phase 구조 + 멤버 분배 결정" \
   --members '[
-    { "agentId": "tech-architect", "role": "Architecture", "task": "...", "model": "claude-opus-4-7" },
+    { "agentId": "tech-architect", "role": "Architecture", "task": "...", "model": "claude-opus-4-8" },
     { "agentId": "planner",        "role": "Architecture", "task": "...", "model": "gpt-5.5" }
   ]' \
   --council \
@@ -206,7 +206,7 @@ default (각 항목의 첫 옵션 = Recommended) 선택 후 명시.
           "agentId": "<Team Routing 표 참조>",
           "task": "<멤버 task — 동사 시작, 한 문장. 콤마 X (CLI 파싱).>",
           "expectedFiles": ["client/lib/auth/login_screen.dart", "..."],
-          "model": "claude-opus-4-7" | "gpt-5.5" | ...
+          "model": "claude-opus-4-8" | "gpt-5.5" | ...
         }
       ]
     }
@@ -246,7 +246,7 @@ MEMBERS='[
     "role": "Tests",
     "task": "Phase 1 의 모든 module 의 실패 테스트 먼저 작성",
     "expectedFiles": ["server/test/**/*.spec.ts", "client/test/**/*.dart"],
-    "model": "claude-opus-4-7"
+    "model": "claude-opus-4-8"
   },
   {
     "agentId": "prisma-data",
@@ -260,14 +260,14 @@ MEMBERS='[
     "role": "Backend",
     "task": "프로젝트 부트스트랩 + 인증 모듈 (Passport + JWT + bcrypt)",
     "expectedFiles": ["server/src/**", "server/package.json", "server/tsconfig.json"],
-    "model": "claude-opus-4-7"
+    "model": "claude-opus-4-8"
   },
   {
     "agentId": "flutter-ui",
     "role": "Frontend",
     "task": "Flutter 부트스트랩 + Clean Architecture 골격 + 로그인/회원가입 화면",
     "expectedFiles": ["client/**", "client/pubspec.yaml"],
-    "model": "claude-opus-4-7"
+    "model": "claude-opus-4-8"
   }
 ]'
 

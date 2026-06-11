@@ -42,10 +42,10 @@ const SAMPLE_PLAN: PlanDocument = {
   workspaceId: '',
   phases: [
     { phase: 1, description: '스키마', parallel: false, members: [{ agentId: 'prisma-data', task: '스키마', model: 'gpt-5.5' }] },
-    { phase: 2, description: 'API', parallel: false, dependsOn: [1], members: [{ agentId: 'nestjs-backend', task: 'API', model: 'claude-opus-4-7' }] },
+    { phase: 2, description: 'API', parallel: false, dependsOn: [1], members: [{ agentId: 'nestjs-backend', task: 'API', model: 'claude-opus-4-8' }] },
     { phase: 3, description: 'UI 병렬', parallel: true, dependsOn: [2], members: [
-      { agentId: 'flutter-ui', task: '화면', model: 'claude-opus-4-7' },
-      { agentId: 'riverpod-logic', task: '상태관리', model: 'claude-opus-4-7' },
+      { agentId: 'flutter-ui', task: '화면', model: 'claude-opus-4-8' },
+      { agentId: 'riverpod-logic', task: '상태관리', model: 'claude-opus-4-8' },
     ]},
   ],
   notes: 'Sprint Manager 사용 예시',

@@ -32,7 +32,7 @@ export interface TeamMember {
   tmuxPaneId?: string
   /** Inbox unread count — drives the AgentCard mail icon badge. */
   unreadCount?: number
-  /** Provider model id (claude-opus-4-7 / gpt-5.5 / etc). Drives the model
+  /** Provider model id (claude-opus-4-8 / gpt-5.5 / etc). Drives the model
    *  badge on AgentCard + ProviderRouter dispatch on team spawn. */
   model?: string
 }

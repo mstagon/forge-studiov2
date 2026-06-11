@@ -763,7 +763,7 @@ function ModelAndCouncilStep({
                 }}
               >
                 <option value="">자동</option>
-                <option value="claude-opus-4-7">Opus 4.7</option>
+                <option value="claude-opus-4-8">Opus 4.7</option>
                 <option value="claude-sonnet-4-6">Sonnet 4.6</option>
                 <option value="claude-haiku-4-5">Haiku 4.5</option>
                 <option value="gpt-5.5">GPT-5.5</option>

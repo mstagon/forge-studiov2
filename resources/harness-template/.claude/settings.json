@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-7",
+  "model": "claude-opus-4-8",
   "effortLevel": "max",
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
@@ -206,6 +206,22 @@
           {
             "type": "command",
             "command": "changed_dart=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.dart$' | grep -vE '\\.g\\.dart$|\\.freezed\\.dart$' | head -20); changed_ts=$(git diff --name-only --diff-filter=M 2>/dev/null | grep '\\.tsx\\?$' | head -20); if [ -n \"$changed_dart\" ]; then echo \"$changed_dart\" | xargs dart format 2>/dev/null; flutter analyze --no-pub client/ 2>&1 | tail -5; fi; if [ -n \"$changed_ts\" ] && [ -d server ]; then cd server && npx eslint --fix $(echo \"$changed_ts\" | tr '\\n' ' ') 2>/dev/null; cd ..; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/forge-dto-broadcast.sh\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/forge-main-poll.sh\""
           }
         ]
       },

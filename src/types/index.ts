@@ -206,14 +206,16 @@ export interface Team {
   leadAgentId: string
   leadSessionId?: string
   members: TeamMember[]
-  /** Lifecycle status — 'active' | 'paused'. Absent = active. */
+  /** Lifecycle status — 'active' | 'paused' | 'done'. Absent = active. */
   status?: TeamStatus
+  /** 협의 모드 (Council, round-robin 토론). RunLiveView 의 토론 탭 표시 조건. */
+  council?: boolean
 }
 
 export interface TeamCreateMember {
   agentId: string
   task?: string
-  /** Provider model id (claude-opus-4-7 / gpt-5.5 / etc). 멤버 spawn 시
+  /** Provider model id (claude-opus-4-8 / gpt-5.5 / etc). 멤버 spawn 시
    *  ProviderRouter 가 해당 CLI 로 dispatch. 미지정 시 claude default. */
   model?: string
 }

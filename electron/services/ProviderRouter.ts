@@ -24,13 +24,14 @@ export interface ProviderSpec {
 
 /**
  * Resolve a model identifier to a provider + launch command. Examples:
+ *   "claude-opus-4-8"   → claude, --dangerously-skip-permissions, --model claude-opus-4-8
  *   "claude-opus-4-7"   → claude, --dangerously-skip-permissions, --model claude-opus-4-7
  *   "opus"              → claude, --dangerously-skip-permissions
- *   "sonnet-4.5"        → claude, --dangerously-skip-permissions, --model sonnet-4.5
+ *   "sonnet-4.6"        → claude, --dangerously-skip-permissions, --model sonnet-4.6
  *   "gpt-5.5"           → codex,  --dangerously-bypass-approvals-and-sandbox, --model gpt-5.5
  *   "o1-preview"        → codex,  --dangerously-bypass-approvals-and-sandbox, --model o1-preview
  *   "codex"             → codex,  --dangerously-bypass-approvals-and-sandbox
- *   undefined / ""      → claude (default)
+ *   undefined / ""      → claude (default — 최신 opus 자동 매핑)
  */
 export function resolveProvider(model: string | undefined): ProviderSpec {
   const m = (model ?? '').trim().toLowerCase()
