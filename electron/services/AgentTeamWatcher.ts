@@ -85,6 +85,11 @@ export interface Team {
   leadSessionId?: string
   members: TeamMember[]
   status?: TeamStatus
+  /** merge 완료 시각 (ISO) — TeamOperations.merge 가 기록. */
+  mergedAt?: string
+  /** archive 시각 (ISO). worktree/tmux/브랜치 정리 완료된 history 팀 —
+   *  renderer 는 이 값으로 활성 목록에서 제외한다 (v0.13.0). */
+  archivedAt?: string
   /** Council 모드 (round-robin 토론) — RunLiveView 의 토론 탭 표시 조건. */
   council?: boolean
 }
@@ -271,6 +276,8 @@ export class AgentTeamWatcher extends EventEmitter {
       leadSessionId: config.leadSessionId,
       members,
       status: config.status,
+      mergedAt: config.mergedAt,
+      archivedAt: config.archivedAt,
       // Codex 적대 검수 (medium #6) fix: config.council 이 watcher Team
       // 으로 안 옮겨져서 renderer 가 항상 council=false 로 받음 → council
       // 팀 만들어도 토론 탭 안 뜸. 명시적 copy.

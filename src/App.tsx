@@ -449,6 +449,9 @@ export default function App() {
     const wsName = activeWorkspace?.name
     return realTeams
       .filter((t) => {
+        // archive 된 팀은 history — worktree/tmux 가 이미 정리돼 터미널 뷰가
+        // 무의미하다. 활성 목록에서 제외 (v0.13.0 팀 자동 정리).
+        if (t.archivedAt) return false
         if (!activeWorkspace) return !t.workspaceId
         if (t.workspacePath) return normalize(t.workspacePath) === wsPath
         if (t.workspaceId) {

@@ -208,6 +208,11 @@ export interface Team {
   members: TeamMember[]
   /** Lifecycle status — 'active' | 'paused' | 'done'. Absent = active. */
   status?: TeamStatus
+  /** merge 완료 시각 (ISO). */
+  mergedAt?: string
+  /** archive 시각 (ISO) — worktree/tmux/브랜치 정리된 history 팀.
+   *  활성 목록 표시에서 제외 (v0.13.0). */
+  archivedAt?: string
   /** 협의 모드 (Council, round-robin 토론). RunLiveView 의 토론 탭 표시 조건. */
   council?: boolean
 }
