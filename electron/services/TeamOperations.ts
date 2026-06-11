@@ -1,7 +1,7 @@
 import path from 'path'
 import os from 'os'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
 // .ts 확장자 명시 — Node 의 --experimental-strip-types 가 packaged
 // forge-team CLI 에서 module 을 resolve 할 때 ESM resolver 가 implicit
@@ -108,10 +108,17 @@ export interface TeamMergeResult {
   commitSha?: string
   conflicts?: TeamMergeConflict[]
   error?: string
+  /** 멤버 결과가 back-merge 된 원래 브랜치 (v0.13.0 — parentBranch 통합). */
+  integratedInto?: string
+  /** merge 성공 후 자동 archive 까지 완료됐는지. */
+  archived?: boolean
 }
 
 export interface TeamMergeOptions {
   mergeStrategy?: MergeStrategy
+  /** merge 성공 후 worktree/tmux/브랜치 자동 정리 (기본 true). config 는
+   *  history 로 보존. CLI 의 --no-archive 가 false 로 내린다. */
+  autoArchive?: boolean
 }
 
 export interface RawMember {
@@ -154,6 +161,14 @@ export interface RawConfig {
   members: RawMember[]
   status?: TeamStatus
   baseBranch?: string
+  /** 팀 생성 시 워크스페이스가 체크아웃하고 있던 원래 브랜치. merge 의 최종
+   *  통합 대상 — team base branch 의 결과를 여기로 back-merge 한다 (v0.13.0). */
+  parentBranch?: string
+  /** merge 성공 시각 (ISO). archive 의 미통합 작업 보호 판정에 사용. */
+  mergedAt?: string
+  /** archive 시각 (ISO). worktree/tmux/브랜치는 정리됐고 config 는 history
+   *  로 보존된 상태. GUI 는 이 값으로 Active / Done 팀을 분리 표시. */
+  archivedAt?: string
   /** Council 모드로 생성된 팀. Sprint/Discussion 뷰가 round-robin 진행
    *  표시 + Stop hook 이 다음 round 자동 진행 시 참조. */
   council?: boolean
@@ -167,6 +182,8 @@ export interface TeamSummary {
   worktreeStrategy?: WorktreeStrategy
   mergeStrategy?: MergeStrategy
   status?: TeamStatus
+  mergedAt?: string
+  archivedAt?: string
   createdAt: number
   leadAgentId: string
   council?: boolean
@@ -498,6 +515,8 @@ export class TeamOperations {
         worktreeStrategy: cfg.worktreeStrategy,
         mergeStrategy: cfg.mergeStrategy,
         status: cfg.status,
+        mergedAt: cfg.mergedAt,
+        archivedAt: cfg.archivedAt,
         createdAt: cfg.createdAt,
         leadAgentId: cfg.leadAgentId,
         council: cfg.council === true,
@@ -731,6 +750,7 @@ export class TeamOperations {
       members: rawMembers,
       status: 'active',
       baseBranch: teamBaseBranch,
+      parentBranch: baseBranch,
       council: councilEnabled,
     }
     const configPath = path.join(teamRoot, 'config.json')
@@ -859,6 +879,8 @@ export class TeamOperations {
         lines.push(`다른 멤버 작업 중인데 강제 호출하면 미완성 결과 merge 위험.`)
         lines.push('')
         lines.push(`불완전/blocked 면 호출 X — 그 경우 inbox 로 사유 보고하고 사용자 개입 기다림.`)
+        lines.push(`완료 신호 전 자기 worktree 의 모든 변경을 commit 해 둘 것 — 모든 멤버 완료 후`)
+        lines.push(`이 tmux 세션은 자동 정리되고, merge 후 worktree/브랜치도 자동 archive 됨.`)
         if (councilEnabled) {
           const otherNames = others.map((o) => o.name)
           lines.push('')
@@ -1426,6 +1448,9 @@ export class TeamOperations {
       } catch {
         // best-effort
       }
+      // 모든 멤버 완료 — 멤버 tmux 세션들을 지연 정리 (CPU/RAM 즉시 회수,
+      // 호출자 멤버의 마지막 turn 은 delay 가 보장). 사용자 보고 결함 fix.
+      this.scheduleTmuxCleanup(teamId, found.config.members)
     }
     return { ok: true, teamId, member: member.name, completedAt, teamDone: allDone }
   }
@@ -1481,6 +1506,8 @@ export class TeamOperations {
     } catch {
       // main inbox 쓰기 실패해도 config status 는 done — wait 가 그걸로도 감지
     }
+    // 강제 완료도 멤버 tmux 세션 지연 정리 (orchestrator 가 결과 검증 후 호출)
+    this.scheduleTmuxCleanup(teamId, found.config.members)
     return { ok: true, teamId, doneAt }
   }
 
@@ -1609,6 +1636,47 @@ export class TeamOperations {
       }
     }
 
+    // ── 부모 브랜치 back-merge (v0.13.0) ─────────────────────────────
+    // 멤버 머지 결과는 team base branch (team/<id>-base) 에 쌓인다. 여기서
+    // 끝내면 워크스페이스가 팀 브랜치에 남고 결과가 원래 브랜치에 없다 —
+    // 팀 생성 시 기록한 parentBranch 로 통합해야 "merge = 통합 완료".
+    // legacy 팀 (parentBranch 없음) 은 기존 동작 유지.
+    let integratedInto: string | undefined
+    const parentBranch = cfg.parentBranch
+    if (parentBranch && parentBranch !== baseBranch) {
+      try {
+        await execFileAsync('git', ['-C', wsPath, 'checkout', parentBranch], {
+          timeout: 10_000,
+          env,
+        })
+      } catch (err) {
+        return {
+          ok: false,
+          conflicts: [],
+          error: `failed to checkout ${parentBranch}: ${(err as Error).message}`,
+        }
+      }
+      try {
+        await execFileAsync(
+          'git',
+          ['-C', wsPath, 'merge', '--no-ff', '-m', `team(${teamId}): ${cfg.name} 팀 결과 통합`, baseBranch],
+          { timeout: 30_000, env }
+        )
+        integratedInto = parentBranch
+      } catch (err) {
+        const conflicts = await this.collectConflicts(wsPath, baseBranch, parentBranch)
+        await execFileAsync('git', ['-C', wsPath, 'merge', '--abort'], {
+          timeout: 5000,
+          env,
+        }).catch(() => {})
+        return {
+          ok: false,
+          conflicts,
+          error: `parent merge failed (${parentBranch} ← ${baseBranch}): ${(err as Error).message}`,
+        }
+      }
+    }
+
     let commitSha: string | undefined
     try {
       const { stdout } = await execFileAsync('git', ['-C', wsPath, 'rev-parse', 'HEAD'], {
@@ -1620,17 +1688,33 @@ export class TeamOperations {
       // ignore
     }
 
+    cfg.mergedAt = new Date().toISOString()
+    await this.writeConfig(found.configPath, cfg)
+
+    // merge 성공 = 멤버 작업물이 전부 통합됨 → 잔재 (worktree/tmux/브랜치)
+    // 자동 정리. 사용자 보고 결함 fix: "팀 작업 끝나도 바로 안 없어짐".
+    let archived = false
+    if (opts.autoArchive !== false) {
+      const archiveRes = await this.archiveTeam(workspacePath, teamId, { force: true })
+      archived = archiveRes.ok
+    }
+
     const result: TeamMergeResult = { ok: true, mergedBranch: baseBranch }
     if (commitSha) result.commitSha = commitSha
+    if (integratedInto) result.integratedInto = integratedInto
+    result.archived = archived
     return result
   }
 
   private async workspaceDirty(wsPath: string): Promise<boolean> {
     try {
+      // -uall: untracked 를 디렉토리 축약 (`?? .claude/`) 없이 개별 파일로
+      // 나열 — 축약되면 forge-owned (.claude/teams/**) 필터가 매칭 못 해서
+      // 팀 config 만 있는 깨끗한 워크스페이스도 dirty 로 오판한다 (v0.13.0 fix).
       const { stdout } = await execFileAsync(
         'git',
-        ['-C', wsPath, 'status', '--porcelain'],
-        { timeout: 5000, env: this.tmuxEnv() }
+        ['-C', wsPath, 'status', '--porcelain', '-uall'],
+        { timeout: 10_000, env: this.tmuxEnv() }
       )
       const lines = stdout.split('\n').map((l) => l.trimEnd()).filter(Boolean)
       const userDirty = lines.filter((line) => {
@@ -1687,6 +1771,179 @@ export class TeamOperations {
       out.push({ file, theirsBranch, oursBranch, conflictMarkers })
     }
     return out
+  }
+
+  // ── Archive (v0.13.0) ────────────────────────────────────────────────
+
+  /**
+   * 팀 리소스 정리 — tmux 세션 kill + worktree 제거 + 팀 브랜치 삭제.
+   * remove() 와 달리 config.json 은 history 로 보존한다 (archivedAt 기록,
+   * status='done'). GUI 는 archivedAt 으로 Active / Done 을 분리 표시.
+   * 사용자 보고 결함 fix: "팀 작업 끝나도 worktree/tmux/config 잔재 남음".
+   *
+   * 안전 규칙:
+   *   - merge 전 (mergedAt 없음) 인데 멤버 브랜치에 미통합 commit 이 있으면
+   *     force 없이 거부 — 작업 유실 방지. (리뷰-only 팀처럼 commit 0 이면 통과)
+   *   - team base branch 는 parentBranch 가 그 내용을 전부 포함할 때만 삭제.
+   *     아니면 보존하고 keptBaseBranch 로 보고.
+   */
+  async archiveTeam(
+    workspacePath: string | null,
+    teamId: string,
+    opts: { force?: boolean } = {},
+  ): Promise<{
+    ok: boolean
+    archivedAt?: string
+    tmuxKilled: number
+    worktreesRemoved: number
+    branchesDeleted: number
+    keptBaseBranch?: string
+    error?: string
+  }> {
+    const empty = { tmuxKilled: 0, worktreesRemoved: 0, branchesDeleted: 0 }
+    if (!teamId) return { ok: false, ...empty, error: 'teamId required' }
+    const found = await this.readConfig(workspacePath, teamId)
+    if (!found) return { ok: false, ...empty, error: 'team not found' }
+    const cfg = found.config
+    const wsPath = cfg.workspacePath
+    const env = this.tmuxEnv()
+    const gitOk = await this.hasGit()
+
+    // 미통합 작업 보호
+    if (!cfg.mergedAt && !opts.force && gitOk && wsPath && cfg.baseBranch) {
+      const unmerged: string[] = []
+      for (const m of cfg.members) {
+        if (!m.branch || m.branch === cfg.baseBranch) continue
+        try {
+          const { stdout } = await execFileAsync(
+            'git',
+            ['-C', wsPath, 'rev-list', '--count', `${cfg.baseBranch}..${m.branch}`],
+            { timeout: 5000, env },
+          )
+          if (parseInt(stdout.trim(), 10) > 0) unmerged.push(m.branch)
+        } catch {
+          // 브랜치 이미 없음 — 정리 대상으로 진행
+        }
+      }
+      if (unmerged.length > 0) {
+        return {
+          ok: false,
+          ...empty,
+          error: `미통합 commit 있는 브랜치: ${unmerged.join(', ')} — forge-team merge 먼저, 작업물 버리고 강제 정리는 --force`,
+        }
+      }
+    }
+
+    // 1. tmux 세션 kill
+    let tmuxKilled = 0
+    if (await this.hasTmux()) {
+      const tmux = this.tmuxBin()
+      for (const m of cfg.members) {
+        const session = teamSessionName(teamId, m.agentId)
+        const killed = await execFileAsync(tmux, ['kill-session', '-t', session], {
+          timeout: 3000,
+          env,
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (killed) tmuxKilled++
+      }
+    }
+
+    // 2. worktree 제거 + prune, 3. 브랜치 삭제
+    let worktreesRemoved = 0
+    let branchesDeleted = 0
+    let keptBaseBranch: string | undefined
+    if (gitOk && wsPath) {
+      for (const m of cfg.members) {
+        if (!m.worktreePath || m.worktreePath === wsPath) continue
+        if (!isPathInside(wsPath, m.worktreePath)) continue
+        const removed = await execFileAsync(
+          'git',
+          ['-C', wsPath, 'worktree', 'remove', m.worktreePath, '--force'],
+          { timeout: 15_000, env },
+        )
+          .then(() => true)
+          .catch(() => false)
+        if (removed) worktreesRemoved++
+      }
+      await execFileAsync('git', ['-C', wsPath, 'worktree', 'prune'], {
+        timeout: 10_000,
+        env,
+      }).catch(() => {})
+
+      for (const m of cfg.members) {
+        if (!m.branch || !m.branch.startsWith(`team/${teamId}`)) continue
+        if (m.branch === cfg.baseBranch) continue
+        const deleted = await execFileAsync('git', ['-C', wsPath, 'branch', '-D', m.branch], {
+          timeout: 5000,
+          env,
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (deleted) branchesDeleted++
+      }
+
+      // team base branch — parentBranch 가 내용을 전부 포함할 때만 삭제.
+      // (legacy 팀은 parentBranch 미기록 → back-merge 결과 보존 위해 유지)
+      const teamBase = cfg.baseBranch
+      if (teamBase) {
+        let safeToDelete = false
+        if (cfg.parentBranch) {
+          try {
+            const { stdout } = await execFileAsync(
+              'git',
+              ['-C', wsPath, 'rev-list', '--count', `${cfg.parentBranch}..${teamBase}`],
+              { timeout: 5000, env },
+            )
+            safeToDelete = parseInt(stdout.trim(), 10) === 0
+          } catch {
+            safeToDelete = false
+          }
+        }
+        if (safeToDelete) {
+          const deleted = await execFileAsync('git', ['-C', wsPath, 'branch', '-D', teamBase], {
+            timeout: 5000,
+            env,
+          })
+            .then(() => true)
+            .catch(() => false)
+          if (deleted) branchesDeleted++
+          else keptBaseBranch = teamBase
+        } else {
+          keptBaseBranch = teamBase
+        }
+      }
+    }
+
+    const archivedAt = new Date().toISOString()
+    cfg.status = 'done'
+    cfg.archivedAt = archivedAt
+    await this.writeConfig(found.configPath, cfg)
+    return { ok: true, archivedAt, tmuxKilled, worktreesRemoved, branchesDeleted, keptBaseBranch }
+  }
+
+  /**
+   * 모든 멤버 완료 후 멤버 tmux 세션 지연 정리. complete-member 는 멤버
+   * 자신의 pane 안에서 호출되므로 즉시 kill 하면 호출자 claude 가 마지막
+   * turn 을 못 끝냄 — detached 프로세스가 delaySec 뒤에 kill (CLI 프로세스
+   * 종료 후에도 살아남음). worktree/브랜치는 merge → archive 가 처리.
+   */
+  private scheduleTmuxCleanup(teamId: string, members: RawMember[], delaySec = 90): void {
+    const sessions = members.map((m) => teamSessionName(teamId, m.agentId))
+    if (sessions.length === 0) return
+    const tmux = this.tmuxBin()
+    const cmds = sessions.map((s) => `"${tmux}" kill-session -t "${s}" 2>/dev/null`).join('; ')
+    try {
+      const child = spawn('/bin/sh', ['-c', `sleep ${delaySec}; ${cmds}; exit 0`], {
+        detached: true,
+        stdio: 'ignore',
+        env: this.tmuxEnv(),
+      })
+      child.unref()
+    } catch {
+      // best-effort — 실패해도 merge → archive 가 결국 정리
+    }
   }
 
   // ── Remove ───────────────────────────────────────────────────────────
