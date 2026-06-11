@@ -231,7 +231,10 @@ export class WorkspaceManager {
           return !rel.includes('settings.local.json') && !rel.includes('.pdca-')
         },
       })
-      await this.writeVersionFile(destClaude, app.getVersion())
+      await this.writeVersionFile(
+        destClaude,
+        (await this.readTemplateHarnessVersion(options.templatePath)) ?? app.getVersion(),
+      )
       await this.ensureMcpRootLink(projectPath)
     }
 
@@ -335,10 +338,30 @@ export class WorkspaceManager {
   }
 
   async getInstalledVersion(workspacePath: string): Promise<string | null> {
-    const versionFile = path.join(workspacePath, '.claude', '.harness-version')
+    // v0.16 독립 버저닝: 템플릿이 들고 다니는 .claude/harness-version 이
+    // 1순위 (하네스 내용이 바뀔 때만 bump). 레거시 마커 (.harness-version =
+    // 설치 당시 앱 버전) 는 구버전 워크스페이스 fallback.
+    for (const rel of ['harness-version', '.harness-version']) {
+      const versionFile = path.join(workspacePath, '.claude', rel)
+      try {
+        if (await fs.pathExists(versionFile)) {
+          const v = (await fs.readFile(versionFile, 'utf-8')).trim()
+          if (v) return v
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null
+  }
+
+  /** 템플릿 (.claude 디렉토리) 의 harness-version 파일 읽기 — 없으면 null. */
+  async readTemplateHarnessVersion(templatePath: string): Promise<string | null> {
     try {
-      if (await fs.pathExists(versionFile)) {
-        return (await fs.readFile(versionFile, 'utf-8')).trim()
+      const f = path.join(templatePath, 'harness-version')
+      if (await fs.pathExists(f)) {
+        const v = (await fs.readFile(f, 'utf-8')).trim()
+        if (v) return v
       }
     } catch {
       // ignore
@@ -531,8 +554,8 @@ export class WorkspaceManager {
       await fs.copy(contractsSrc, path.join(workspacePath, 'contracts'), { overwrite: false })
     }
 
-    // Write version marker
-    const version = app.getVersion()
+    // Write version marker — 하네스 독립 버전 (없으면 앱 버전 fallback)
+    const version = (await this.readTemplateHarnessVersion(templatePath)) ?? app.getVersion()
     await this.writeVersionFile(claudeDir, version)
 
     // Ensure root .mcp.json symlink for Claude Code MCP auto-discovery

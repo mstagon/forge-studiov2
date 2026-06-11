@@ -469,7 +469,21 @@ ipcMain.handle('harness:listCompositions', async () => {
   return harnessScanner.listCompositions()
 })
 
-ipcMain.handle('harness:getBundledVersion', () => app.getVersion())
+ipcMain.handle('harness:getBundledVersion', async () => {
+  // v0.16 독립 버저닝 — 번들 템플릿의 harness-version 이 진짜 하네스 버전.
+  // (구버전: 앱 버전을 그대로 반환 → 앱만 업데이트해도 "하네스 업데이트
+  // 가능" 으로 오판. 하네스 내용이 안 바뀌면 버전도 안 바뀌어야 맞다)
+  const tpl = app.isPackaged
+    ? path.join(process.resourcesPath, 'harness-template', '.claude', 'harness-version')
+    : path.resolve(__dirname, '..', 'resources', 'harness-template', '.claude', 'harness-version')
+  try {
+    const v = fs.readFileSync(tpl, 'utf-8').trim()
+    if (v) return v
+  } catch {
+    // fallthrough
+  }
+  return app.getVersion()
+})
 
 ipcMain.handle('harness:getInstalledVersion', async (_event, workspacePath: string) => {
   if (!workspacePath || typeof workspacePath !== 'string') return null
