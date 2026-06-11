@@ -4,6 +4,21 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] — 2026-06-11
+
+### Added
+
+- **symbol-guard v2**: git diff driver 매핑 (brace 언어 → java xfuncname) 으로
+  충돌 감지가 class 단위 → **메서드 단위**로 정밀화. tree-sitter 의존성 없음.
+- **하네스 독립 버저닝**: `.claude/harness-version` (1.0.0 시작) 이 단일 소스.
+  하네스 내용이 바뀔 때만 bump — 앱만 업데이트해도 "하네스 업데이트 가능" 으로
+  오판하던 앱 버전 결합 해소. 레거시 마커는 fallback.
+
+### Changed
+
+- **온보딩 5-step → 3-step**: 낡은 하네스 투어 + 구 독트린 기반 샘플팀 스텝 제거.
+  환영 / 의존성 / 워크스페이스만.
+
 ## [0.15.0] — 2026-06-11
 
 ### Changed — Identity Reset (독트린 역전)
