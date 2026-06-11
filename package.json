@@ -120,6 +120,13 @@
           "ProviderRouter.ts",
           "ForgeConfig.ts"
         ]
+      },
+      {
+        "from": "resources/presets",
+        "to": "presets",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "directories": {
