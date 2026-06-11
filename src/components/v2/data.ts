@@ -14,24 +14,27 @@ import type {
 } from './types'
 
 export const AGENTS: Agent[] = [
-  { id: 'flutter-ui', name: 'flutter-ui', role: 'Flutter UI', color: 'var(--role-fe)', icon: 'F', desc: 'Widget tree, theme, navigation' },
-  { id: 'flutter-state', name: 'flutter-state', role: 'State / Riverpod', color: 'var(--role-fe)', icon: 'F', desc: 'Riverpod, providers, async' },
-  { id: 'nestjs-backend', name: 'nestjs-backend', role: 'NestJS API', color: 'var(--role-be)', icon: 'N', desc: 'Controllers, services, DTOs' },
-  { id: 'nestjs-auth', name: 'nestjs-auth', role: 'Auth & Security', color: 'var(--role-be)', icon: 'N', desc: 'JWT, OAuth, guards' },
-  { id: 'prisma-schema', name: 'prisma-schema', role: 'Prisma Schema', color: 'var(--role-db)', icon: 'P', desc: 'Models, migrations, relations' },
-  { id: 'prisma-seed', name: 'prisma-seed', role: 'DB Seeding', color: 'var(--role-db)', icon: 'P', desc: 'Seed scripts, fixtures' },
-  { id: 'next-app', name: 'next-app', role: 'Next.js App', color: 'var(--role-fe)', icon: 'N', desc: 'App router, layouts, RSC' },
-  { id: 'next-api', name: 'next-api', role: 'Next API Routes', color: 'var(--role-be)', icon: 'N', desc: 'Route handlers, middleware' },
-  { id: 'tailwind-ui', name: 'tailwind-ui', role: 'Design Tokens', color: 'var(--role-fe)', icon: 'T', desc: 'Tokens, components, themes' },
-  { id: 'test-unit', name: 'test-unit', role: 'Unit Tests', color: 'var(--role-test)', icon: 'T', desc: 'Vitest, Jest, Dart test' },
-  { id: 'test-e2e', name: 'test-e2e', role: 'E2E Tests', color: 'var(--role-test)', icon: 'E', desc: 'Playwright, integration_test' },
-  { id: 'reviewer', name: 'reviewer', role: 'Code Reviewer', color: 'var(--role-review)', icon: 'R', desc: 'Diff review, style critique' },
-  { id: 'infra-docker', name: 'infra-docker', role: 'Docker / Infra', color: 'var(--role-infra)', icon: 'D', desc: 'Dockerfiles, compose, CI' },
-  { id: 'infra-k8s', name: 'infra-k8s', role: 'Kubernetes', color: 'var(--role-infra)', icon: 'K', desc: 'Manifests, helm, deploy' },
-  { id: 'architect', name: 'architect', role: 'Architect', color: 'var(--role-arch)', icon: 'A', desc: 'ADRs, planning, decomposition' },
-  { id: 'doc-writer', name: 'doc-writer', role: 'Docs & ADRs', color: 'var(--role-doc)', icon: 'D', desc: 'README, ADR, API docs' },
-  { id: 'perf-profiler', name: 'perf-profiler', role: 'Performance', color: 'var(--role-arch)', icon: 'P', desc: 'Profiling, bundle size' },
-  { id: 'i18n', name: 'i18n', role: 'i18n', color: 'var(--role-doc)', icon: 'i', desc: '한/영 catalog, ICU' },
+  // v0.15 — harness-template/.claude/agents/ 의 실제 18개와 1:1 동기.
+  // (구버전: design seed 의 가짜 id 18개 중 2개만 실존 → GUI 로 만든 팀
+  // 멤버 대부분이 존재하지 않는 agent 였음. 감사 문서 참조)
+  { id: 'flutter-ui', name: 'flutter-ui', role: 'Flutter UI', color: 'var(--role-fe)', icon: 'F', desc: '화면/위젯/테마/네비게이션' },
+  { id: 'riverpod-logic', name: 'riverpod-logic', role: 'State / Riverpod', color: 'var(--role-fe)', icon: 'R', desc: 'Riverpod 상태관리, usecase' },
+  { id: 'nestjs-backend', name: 'nestjs-backend', role: 'NestJS API', color: 'var(--role-be)', icon: 'N', desc: 'Controller/Service/DTO' },
+  { id: 'prisma-data', name: 'prisma-data', role: 'Prisma Schema', color: 'var(--role-db)', icon: 'P', desc: '스키마/마이그레이션/관계' },
+  { id: 'nextjs-cms', name: 'nextjs-cms', role: 'Next.js CMS', color: 'var(--role-fe)', icon: 'C', desc: 'App Router 어드민' },
+  { id: 'test-writer', name: 'test-writer', role: 'Tests', color: 'var(--role-test)', icon: 'T', desc: 'unit/widget/e2e 테스트 작성' },
+  { id: 'tdd-guide', name: 'tdd-guide', role: 'TDD Guide', color: 'var(--role-test)', icon: 'G', desc: 'Red→Green→Refactor 가이드' },
+  { id: 'code-reviewer', name: 'code-reviewer', role: 'Code Review', color: 'var(--role-review)', icon: 'R', desc: 'diff 리뷰, 스타일 비평' },
+  { id: 'security-auditor', name: 'security-auditor', role: 'Security', color: 'var(--role-review)', icon: 'S', desc: 'OWASP 취약점 검수' },
+  { id: 'spec-verifier', name: 'spec-verifier', role: 'Spec Verify', color: 'var(--role-review)', icon: 'V', desc: '스펙-코드 정합성 검증' },
+  { id: 'tech-architect', name: 'tech-architect', role: 'Architect', color: 'var(--role-arch)', icon: 'A', desc: '풀스택 아키텍처 설계' },
+  { id: 'planner', name: 'planner', role: 'Planner', color: 'var(--role-arch)', icon: 'P', desc: '피처 기획 → 태스크 분해' },
+  { id: 'refactor-cleaner', name: 'refactor-cleaner', role: 'Refactor', color: 'var(--role-arch)', icon: 'C', desc: '데드코드 탐지/정리' },
+  { id: 'build-error-resolver', name: 'build-error-resolver', role: 'Build Fixer', color: 'var(--role-infra)', icon: 'B', desc: '빌드 에러 자동 분석/수정' },
+  { id: 'loop-operator', name: 'loop-operator', role: 'Auto Loop', color: 'var(--role-infra)', icon: 'L', desc: '조건 충족까지 자율 반복' },
+  { id: 'harness-optimizer', name: 'harness-optimizer', role: 'Harness Meta', color: 'var(--role-infra)', icon: 'H', desc: '하네스 자체 분석/개선' },
+  { id: 'doc-updater', name: 'doc-updater', role: 'Docs', color: 'var(--role-doc)', icon: 'D', desc: '코드 변경 → 문서 동기화' },
+  { id: 'docs-lookup', name: 'docs-lookup', role: 'Docs Lookup', color: 'var(--role-doc)', icon: 'Q', desc: '공식 문서/API 레퍼런스 검색' },
 ]
 
 export const AGENT_POOL = AGENTS

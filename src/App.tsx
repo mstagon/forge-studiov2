@@ -336,7 +336,7 @@ export default function App() {
     // Settings → Agents (front-end + backend + reviewer is the most common
     // shape for first-run flows). The wizard still shows step 1 first so
     // the user can refine the goal before launching.
-    setWizardPrefill(['flutter-ui', 'nestjs-auth', 'reviewer'])
+    setWizardPrefill(['flutter-ui', 'nestjs-backend', 'code-reviewer'])
     setWizardOpen(true)
   }
 
