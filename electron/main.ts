@@ -357,18 +357,25 @@ ipcMain.handle(
     try {
       let templatePath = options.templatePath
       let claudeMdPath = options.claudeMdPath
+      let presetCleanup: (() => Promise<void>) | null = null
       if (options.preset) {
-        const preset = await presetManager.findPreset(options.preset)
-        if (preset) {
-          templatePath = preset.templatePath
-          claudeMdPath = preset.claudeMdPath ?? claudeMdPath
+        // v0.17 — 상속 프리셋은 base + 델타를 tmp 에 합성해서 templatePath 로 사용
+        const resolved = await presetManager.resolveTemplatePaths(options.preset)
+        if (resolved) {
+          templatePath = resolved.templatePath
+          claudeMdPath = resolved.claudeMdPath ?? claudeMdPath
+          presetCleanup = resolved.cleanup
         }
       }
-      return await workspaceManager.create({
-        ...options,
-        templatePath,
-        claudeMdPath,
-      })
+      try {
+        return await workspaceManager.create({
+          ...options,
+          templatePath,
+          claudeMdPath,
+        })
+      } finally {
+        if (presetCleanup) await presetCleanup().catch(() => {})
+      }
     } catch (err) {
       pushErrorToRenderer({
         code: 'IPC_INVALID_PAYLOAD',

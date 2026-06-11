@@ -2,6 +2,12 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { app } from 'electron'
+import {
+  composePreset,
+  cleanupComposed,
+  readPresetManifest as readComposeManifest,
+  type PresetManifest as ComposeManifest,
+} from './PresetCompose'
 
 /**
  * PresetManager — bundles + user-saved harness presets.
@@ -32,11 +38,17 @@ export interface PresetInfo {
   templatePath: string
   /** Optional sibling `CLAUDE.md`, when the preset ships one. */
   claudeMdPath?: string
+  /** v0.17 — base harness-template 상속 프리셋 (델타만 보유). */
+  extendsDefault?: boolean
+  /** 프리셋 루트 디렉토리 (manifest/overlay 위치). */
+  presetDir: string
 }
 
 interface PresetManifest {
   name?: string
   description?: string
+  extends?: 'default'
+  exclude?: string[]
 }
 
 export class PresetManager {
@@ -51,6 +63,42 @@ export class PresetManager {
   /** `~/.claude/my-presets/`. Created lazily on first save. */
   private userRoot(): string {
     return path.join(os.homedir(), '.claude', 'my-presets')
+  }
+
+  /** 번들 harness-template 루트 ({.claude, CLAUDE.md, contracts}). */
+  private baseTemplateRoot(): string {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, 'harness-template')
+    }
+    return path.resolve(__dirname, '..', 'resources', 'harness-template')
+  }
+
+  /**
+   * 프리셋 id → 실제 사용할 templatePath/claudeMdPath 해석 (v0.17).
+   * 상속 프리셋이면 base + 델타를 tmp 에 합성해서 반환 — 호출자는 복사가
+   * 끝나면 cleanup() 호출. 정적 프리셋이면 그대로 + no-op cleanup.
+   */
+  async resolveTemplatePaths(presetId: string): Promise<{
+    templatePath: string
+    claudeMdPath?: string
+    cleanup: () => Promise<void>
+  } | null> {
+    const preset = await this.findPreset(presetId)
+    if (!preset) return null
+    if (preset.extendsDefault) {
+      const manifest = (await readComposeManifest(preset.presetDir)) ?? ({} as ComposeManifest)
+      const composed = await composePreset(this.baseTemplateRoot(), preset.presetDir, manifest)
+      return {
+        templatePath: composed.templatePath,
+        claudeMdPath: composed.claudeMdPath,
+        cleanup: () => cleanupComposed(composed),
+      }
+    }
+    return {
+      templatePath: preset.templatePath,
+      claudeMdPath: preset.claudeMdPath,
+      cleanup: async () => {},
+    }
   }
 
   async listPresets(): Promise<PresetInfo[]> {
@@ -83,8 +131,10 @@ export class PresetManager {
       if (!entry.isDirectory()) continue
       const presetDir = path.join(root, entry.name)
       const templatePath = path.join(presetDir, '.claude')
-      if (!(await fs.pathExists(templatePath))) continue
       const manifest = await this.readManifest(presetDir)
+      const extendsDefault = manifest?.extends === 'default'
+      // 정적 프리셋은 .claude 필수, 상속 프리셋은 manifest 만으로 성립
+      if (!extendsDefault && !(await fs.pathExists(templatePath))) continue
       const claudeMdPath = path.join(presetDir, 'CLAUDE.md')
       out.push({
         id: entry.name,
@@ -93,6 +143,8 @@ export class PresetManager {
         source,
         templatePath,
         claudeMdPath: (await fs.pathExists(claudeMdPath)) ? claudeMdPath : undefined,
+        extendsDefault,
+        presetDir,
       })
     }
     return out
@@ -134,23 +186,29 @@ export class PresetManager {
   async applyPreset(workspacePath: string, presetId: string): Promise<{ ok: true; preset: PresetInfo }> {
     const preset = await this.findPreset(presetId)
     if (!preset) throw new Error(`Preset not found: ${presetId}`)
-    if (!(await fs.pathExists(preset.templatePath))) {
-      throw new Error(`Preset has no .claude/ directory: ${preset.templatePath}`)
+    // v0.17 — 상속 프리셋은 base + 델타 합성 결과를 복사
+    const resolved = await this.resolveTemplatePaths(presetId)
+    if (!resolved || !(await fs.pathExists(resolved.templatePath))) {
+      throw new Error(`Preset has no usable template: ${presetId}`)
     }
-    const destClaude = path.join(workspacePath, '.claude')
-    await fs.ensureDir(destClaude)
-    await fs.copy(preset.templatePath, destClaude, {
-      overwrite: false,
-      filter: (src) => {
-        const rel = path.relative(preset.templatePath, src)
-        return !rel.includes('settings.local.json') && !rel.includes('.pdca-')
-      },
-    })
-    if (preset.claudeMdPath && (await fs.pathExists(preset.claudeMdPath))) {
-      const destClaudeMd = path.join(workspacePath, 'CLAUDE.md')
-      if (!(await fs.pathExists(destClaudeMd))) {
-        await fs.copy(preset.claudeMdPath, destClaudeMd)
+    try {
+      const destClaude = path.join(workspacePath, '.claude')
+      await fs.ensureDir(destClaude)
+      await fs.copy(resolved.templatePath, destClaude, {
+        overwrite: false,
+        filter: (src) => {
+          const rel = path.relative(resolved.templatePath, src)
+          return !rel.includes('settings.local.json') && !rel.includes('.pdca-')
+        },
+      })
+      if (resolved.claudeMdPath && (await fs.pathExists(resolved.claudeMdPath))) {
+        const destClaudeMd = path.join(workspacePath, 'CLAUDE.md')
+        if (!(await fs.pathExists(destClaudeMd))) {
+          await fs.copy(resolved.claudeMdPath, destClaudeMd)
+        }
       }
+    } finally {
+      await resolved.cleanup().catch(() => {})
     }
     return { ok: true, preset }
   }
@@ -205,6 +263,7 @@ export class PresetManager {
       name: manifest.name ?? id,
       description: manifest.description,
       source: 'user',
+      presetDir: dest,
       templatePath: path.join(dest, '.claude'),
       claudeMdPath: (await fs.pathExists(path.join(dest, 'CLAUDE.md')))
         ? path.join(dest, 'CLAUDE.md')
