@@ -25,7 +25,17 @@ command -v jq >/dev/null 2>&1 || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 
 WS_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-TEAM_DIR="$WS_ROOT/.claude/teams/$FORGE_TEAM_ID"
+
+# v0.14.0 fix: isolated worktree 멤버의 CWD 는
+#   <main_ws>/.claude/teams/<id>/worktrees/<agent>
+# 라서 "$WS_ROOT/.claude/teams/..." 가 존재하지 않아 항상 조기 exit 했음
+# (= isolated 팀에서 DTO broadcast 가 한 번도 발사 안 되던 결함).
+# worktree path 패턴이면 main workspace 루트를 역산.
+case "$WS_ROOT" in
+  */.claude/teams/*/worktrees/*) MAIN_WS="${WS_ROOT%%/.claude/teams/*}" ;;
+  *) MAIN_WS="$WS_ROOT" ;;
+esac
+TEAM_DIR="$MAIN_WS/.claude/teams/$FORGE_TEAM_ID"
 CONFIG="$TEAM_DIR/config.json"
 [ ! -f "$CONFIG" ] && exit 0
 
@@ -65,9 +75,10 @@ EOF
 )
 
 # 각 멤버에게 broadcast (forge-team CLI 가 path traversal 검증 + 알림 push 까지 처리)
+# --workspace 는 main workspace — teams registry 가 거기 있음 (worktree 아님)
 for OTHER in $OTHERS; do
   forge-team send-message \
-    --workspace "$WS_ROOT" \
+    --workspace "$MAIN_WS" \
     --team-id "$FORGE_TEAM_ID" \
     --from "$FORGE_MEMBER_NAME" \
     --to "$OTHER" \
