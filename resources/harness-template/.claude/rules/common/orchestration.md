@@ -193,3 +193,80 @@ planner prisma   nestjs    flutter   nextjs  test   api-    code-reviewer
 - 📦 **커밋/배포**: 커밋 여부, subtree-push 여부
 
 그 외 모든 것(리뷰, 테스트, 리팩토링, 문서, 체크포인트, 학습)은 **묻지 않고 자동 실행**한다.
+
+---
+
+# Team Routing (요청 → 멤버 구성) — CLAUDE.md 에서 이동 (v0.13.0)
+
+| 요청 유형 | 멤버 구성 (`--members`) | 비고 |
+|-----------|----------------------|------|
+| 풀스택 피처 (DB→API→앱) | `prisma-data` + `nestjs-backend` + `flutter-ui` (+ `test-writer` 선행) | 의존 순서 — sequential merge |
+| 백엔드 + 프론트 동시 | `nestjs-backend` + `flutter-ui` | 병렬 — squash merge |
+| 코드 리뷰 3종 | `code-reviewer` + `security-auditor` + `spec-verifier` | 병렬, 수정 X |
+| CMS 포함 | `nextjs-cms` 추가 | 항상 독립 병렬 가능 |
+| 빌드 에러 / 자율 수정 | `build-error-resolver` + `loop-operator` | 5회 자동 재시도 |
+| 단일 영역 작업 (UI만 / 스키마만 / 테스트만 / 문서만 / 정리만) | 해당 멤버 1명이지만 **1인팀 금지** — 다른 대기 작업과 묶어 멀티 멤버 팀으로. 묶을 게 없으면 `--solo` | flutter-ui / riverpod-logic / prisma-data / test-writer / doc-updater / refactor-cleaner / security-auditor 등 |
+
+agentId 전체 목록은 `.claude/agents/` 디렉토리 참조.
+
+# File-level Specialization (한 멤버 = 한 파일 카테고리)
+
+한 멤버가 UI + state + API + entity 다 하면 팀 의미 0. plan 짤 때 file-level 까지 분리.
+
+| 에이전트 | role | expectedFiles |
+|---|---|---|
+| `flutter-ui` | Frontend-View | `client/lib/presentation/screens/**`, `client/lib/presentation/widgets/**` |
+| `riverpod-logic` | Frontend-State | `client/lib/presentation/controllers/**`, `client/lib/presentation/providers/**`, `client/lib/domain/usecase/**` |
+| `dio-retrofit` | Frontend-Network | `client/lib/data/remote/**`, `client/lib/core/network/**` |
+| `freezed-models` | Frontend-Models | `client/lib/domain/entity/**`, `client/lib/data/**/dto/**` |
+| `prisma-data` | Database | `prisma/schema.prisma`, `prisma/migrations/**`, `server/src/prisma/**` |
+| `nestjs-backend` | Backend-Logic | `server/src/<domain>/*.controller.ts`, `*.service.ts`, `dto/**` |
+| `nestjs-auth` | Backend-Auth | `server/src/auth/**` |
+| `nestjs-module` | Backend-Module | `server/src/<domain>/*.module.ts`, `server/src/app.module.ts` |
+| `nextjs-cms` | CMS | `cms/app/**`, `cms/components/**`, `cms/lib/**` |
+| `test-writer` | Tests | `client/test/**`, `server/test/**`, `cms/__tests__/**`, `integration_test/**` |
+| `code-reviewer` / `security-auditor` / `spec-verifier` | Review | (수정 X — 분석만) |
+
+**충돌 룰**: 같은 phase 멤버들의 expectedFiles 가 겹치면 자동 sequential 변환 (parallel:false).
+한 멤버 영역이 다른 멤버 영역의 prefix 면 좁은 멤버 우선.
+
+# Phase 0 — 외부 인프라 사전 확인 (코드 작성 전 필수)
+
+외부 의존이 있는 피처는 코드 작성 전에 사용자에게 선택지로 질문. **결정 없이 Phase 1 진행 금지**.
+사용자가 "알아서 해" 라면 각 항목 첫 옵션 (Recommended) 선택 후 명시.
+
+| 피처 | 결정 항목 |
+|---|---|
+| 이미지/파일 업로드 | Supabase Storage / S3 presigned / 서버 로컬 디스크 |
+| 푸시 알림 | FCM / OneSignal / APNs 직접 / 안 함 |
+| 인증 | 이메일+JWT / OAuth (Google/Kakao) / Magic Link |
+| 결제 | Stripe / Toss / 안 함 |
+| 실시간 통신 | Socket.IO / WebSocket native / SSE / Long polling |
+| DB | PostgreSQL (local Docker) / Supabase / Neon |
+| 배포 | Vercel + Railway / 자체 서버 / 안 함 |
+| AI/LLM | Anthropic / OpenAI / 안 함 |
+
+# phases.json schema (큰 앱 Phase 1 산출물)
+
+```json
+{
+  "goal": "<사용자 요청 한 줄>",
+  "infrastructure": { "storage": "...", "auth": "...", "realtime": "...", "db": "...", "deploy": "..." },
+  "phases": [
+    {
+      "phase": 1,
+      "description": "<한 줄>",
+      "parallel": true,
+      "dependsOn": [],
+      "members": [
+        { "agentId": "test-writer", "task": "<동사 시작 한 문장. 콤마 X>", "expectedFiles": ["..."], "model": "claude-opus-4-8" }
+      ]
+    }
+  ]
+}
+```
+
+- `expectedFiles` 겹치면 자동 sequential. `dependsOn` 의 phase 머지 후만 spawn.
+- 각 phase 의 첫 멤버는 반드시 `test-writer` (TDD Red 선행).
+- 멤버 spawn 시 role/goal/expectedFiles/다른 멤버 영역/완료 신호 (`complete-member`) 가
+  task prompt 로 자동 주입된다 — 멤버는 자기 영역 밖을 건드리지 않는다.

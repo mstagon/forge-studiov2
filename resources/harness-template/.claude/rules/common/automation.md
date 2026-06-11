@@ -4,24 +4,36 @@
 
 | 스크립트 | 훅 | 동작 |
 |---------|-----|------|
-| `gateguard.sh` | PreToolUse Write/Edit | 첫 편집 시 조사 강제 (30분 TTL) |
-| `skill-injector.sh` | PreToolUse Write/Edit | 파일 패턴 → 스킬 자동 매칭 + 주입 |
+| `gateguard.sh` | PreToolUse Write/Edit | 첫 편집 시 조사 강제 (30분 TTL). minimal/ultracode 우회 |
+| `skill-injector.sh` | PreToolUse Write/Edit | 파일 패턴 → 스킬 + 룰 lazy-load 주입. ultracode 우회 |
+| `compress-bash-output.sh` | PreToolUse Bash | 출력 폭탄 명령 head150+tail20 압축 wrap (Headroom 패턴) |
 | `tmux-dev.sh` | PreToolUse Bash | dev 서버 → tmux 세션 자동 전환 |
-| `auto-profile.sh` | SessionStart | 브랜치 기반 훅 프로파일 자동 감지 |
-| `learn.sh` | Stop | 교훈 반복 패턴 탐지 (3회+ → 승격) |
-| `cost-tracker.sh` | Stop | 세션 메트릭스 JSONL 기록 |
+| `auto-profile.sh` | SessionStart | 훅 프로파일 자동 감지 (브랜치 + effortLevel + 세션 종류) |
+| `forge-mcp-profile.sh` | SessionStart | stack 감지 → MCP per-workspace 자동 활성 (다음 세션 적용) |
 | `mcp-health.sh` | SessionStart | MCP 서버 헬스체크 (지수 백오프) |
-| `hook-profiles.sh` | 유틸리티 | minimal/standard/strict 프로파일 |
+| `learn.sh` | Stop | 교훈 반복 패턴 탐지 (3회+ → 승격). ultracode/minimal 우회 |
+| `cost-tracker.sh` | Stop | 세션 메트릭스 JSONL 기록. ultracode/minimal 우회 |
+| `evaluate-session.sh` | Stop | 세션 패턴 추출 + 신뢰도 평가. ultracode/minimal 우회 |
+| `forge-dto-broadcast.sh` | Stop | 멤버 DTO 변경 → 다른 멤버 inbox broadcast |
+| `forge-main-poll.sh` | Stop | 메인 세션이 팀 신호 (done 등) 자동 surface |
+| `hook-profiles.sh` | 유틸리티 | minimal/standard/strict/ultracode 프로파일 판정 |
 | `pre-compact.sh` | PreCompact | 컴팩션 전 상태 보존 |
-| `evaluate-session.sh` | Stop | 세션에서 패턴 추출 + 신뢰도 평가 |
 
-## Hook Profile (auto-profile.sh가 브랜치 기반 자동 감지)
+## Hook Profile (auto-profile.sh 가 자동 감지)
+
+우선순위: env/파일 override (`FORGE_HOOK_PROFILE`, `.claude/hook-profile`) →
+prd/stg/hotfix 브랜치 → 메인 세션 + effortLevel=max → 브랜치 기본값.
+프로파일은 프로젝트별 파일 (`/tmp/forge-hook-profile-<md5>`) 에 기록되어
+워크스페이스/멤버 worktree 간 격리된다.
 
 ```
-prd, stg, hotfix/*  → strict   (엄격 검증)
-dev, feat/*, fix/*  → standard (일반 개발)
-explore/*, poc/*    → minimal  (프로토타이핑)
+prd, stg, hotfix/*            → strict    (엄격 검증)
+메인 세션 + effortLevel=max   → ultracode (gateguard/스킬주입/학습 훅 우회 — 안전 차단은 유지)
+dev, feat/*, fix/*            → standard  (일반 개발 — 멤버 세션 기본)
+explore/*, poc/*              → minimal   (프로토타이핑)
 ```
+
+멤버 세션 (FORGE_TEAM_ID set) 은 ultracode 가 적용되지 않는다 — 멤버 가드는 항상 유지.
 
 ## Continuous Learning v2 (자동 — 세션 종료 시 전부 실행)
 
