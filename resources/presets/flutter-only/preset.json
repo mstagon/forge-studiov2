@@ -1,0 +1,28 @@
+{
+  "name": "Flutter App (앱 단독)",
+  "description": "Flutter + Riverpod + go_router. 백엔드 없음 — 로컬 우선 또는 Supabase BaaS.",
+  "extends": "default",
+  "_sync_note": "CLAUDE.md overlay 는 base 의 Project 섹션 교체본",
+  "exclude": [
+    "agents/nestjs-backend.md",
+    "agents/nextjs-cms.md",
+    "agents/prisma-data.md",
+    "skills/nestjs-auth",
+    "skills/nestjs-module",
+    "skills/nextjs-patterns",
+    "skills/prisma-patterns",
+    "skills/postgres-patterns"
+  ],
+  "optionalMcp": [
+    {
+      "id": "supabase",
+      "label": "Supabase MCP",
+      "hint": "BaaS 백엔드 (DB/인증/스토리지) 관리. SUPABASE_ACCESS_TOKEN 환경변수 필요 — Settings → Integrations"
+    },
+    {
+      "id": "playwright",
+      "label": "Playwright MCP",
+      "hint": "Flutter Web 빌드 E2E / 웹뷰 테스트용 브라우저 자동화"
+    }
+  ]
+}
