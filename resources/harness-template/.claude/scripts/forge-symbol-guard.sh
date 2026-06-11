@@ -35,8 +35,30 @@ CONFIG="$TEAM_DIR/config.json"
 
 cd "$WS_ROOT" || exit 0
 
+# v2: git 내장 diff driver 매핑으로 hunk context 를 메서드 단위로 정밀화.
+# TS/Dart 같은 brace 언어는 기본 휴리스틱이 class 선언만 잡지만, java driver
+# 의 xfuncname 은 들여쓰인 메서드 시그니처를 잡는다. tree-sitter 없이 해결.
+SYM_DIR="$TEAM_DIR/symbols"
+mkdir -p "$SYM_DIR"
+ATTR_FILE="$SYM_DIR/.attributes"
+if [ ! -f "$ATTR_FILE" ]; then
+  cat > "$ATTR_FILE" <<'ATTR'
+*.ts diff=java
+*.tsx diff=java
+*.js diff=java
+*.jsx diff=java
+*.mjs diff=java
+*.dart diff=java
+*.java diff=java
+*.kt diff=kotlin
+*.py diff=python
+*.go diff=golang
+*.rs diff=rust
+ATTR
+fi
+
 # (file :: enclosing-function) 추출 — hunk context 가 빈 줄이면 file 단위로 기록
-SYMS=$(git diff -U0 HEAD 2>/dev/null | awk '
+SYMS=$(git -c core.attributesFile="$ATTR_FILE" diff -U0 HEAD 2>/dev/null | awk '
   /^\+\+\+ b\// { file = substr($0, 7) }
   /^@@/ {
     ctx = $0
@@ -49,8 +71,6 @@ SYMS=$(git diff -U0 HEAD 2>/dev/null | awk '
   }' | sort -u)
 [ -z "$SYMS" ] && exit 0
 
-SYM_DIR="$TEAM_DIR/symbols"
-mkdir -p "$SYM_DIR"
 ME_FILE="$SYM_DIR/$FORGE_MEMBER_NAME.txt"
 printf '%s\n' "$SYMS" > "$ME_FILE"
 
