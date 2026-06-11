@@ -1,0 +1,26 @@
+{
+  "name": "Minimal Core (스택 무관)",
+  "description": "팀/안전/학습 하네스 코어만. 스택별 룰·스킬·에이전트 없음 — 어떤 코드베이스에든.",
+  "extends": "default",
+  "_sync_note": "CLAUDE.md overlay 는 base 의 Project 섹션 교체본",
+  "exclude": [
+    "agents/flutter-ui.md",
+    "agents/riverpod-logic.md",
+    "agents/nestjs-backend.md",
+    "agents/nextjs-cms.md",
+    "agents/prisma-data.md",
+    "skills/dio-retrofit",
+    "skills/flutter-driver-e2e",
+    "skills/freezed-models",
+    "skills/go-router",
+    "skills/mobile-design",
+    "skills/mobile-touch",
+    "skills/riverpod-patterns",
+    "skills/nestjs-auth",
+    "skills/nestjs-module",
+    "skills/nextjs-patterns",
+    "skills/prisma-patterns",
+    "skills/postgres-patterns",
+    "rules/common/architecture.md"
+  ]
+}

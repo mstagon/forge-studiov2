@@ -1,0 +1,19 @@
+{
+  "name": "API Server (NestJS)",
+  "description": "NestJS + Prisma 백엔드 단독. 프론트 없음 — 외부 클라이언트가 소비하는 API.",
+  "extends": "default",
+  "_sync_note": "CLAUDE.md overlay 는 base 의 Project 섹션 교체본",
+  "exclude": [
+    "agents/flutter-ui.md",
+    "agents/riverpod-logic.md",
+    "skills/dio-retrofit",
+    "skills/flutter-driver-e2e",
+    "skills/freezed-models",
+    "skills/go-router",
+    "skills/mobile-design",
+    "skills/mobile-touch",
+    "skills/riverpod-patterns",
+    "agents/nextjs-cms.md",
+    "skills/nextjs-patterns"
+  ]
+}

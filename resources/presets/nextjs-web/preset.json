@@ -1,0 +1,20 @@
+{
+  "name": "Next.js Web (풀스택 웹)",
+  "description": "Next.js 15 App Router + Prisma + Tailwind. Server Actions 가 백엔드 — 별도 API 서버 없음.",
+  "extends": "default",
+  "_sync_note": "CLAUDE.md overlay 는 base 의 Project 섹션 교체본 — base CLAUDE.md 대폭 변경 시 재생성 필요",
+  "exclude": [
+    "agents/flutter-ui.md",
+    "agents/riverpod-logic.md",
+    "skills/dio-retrofit",
+    "skills/flutter-driver-e2e",
+    "skills/freezed-models",
+    "skills/go-router",
+    "skills/mobile-design",
+    "skills/mobile-touch",
+    "skills/riverpod-patterns",
+    "agents/nestjs-backend.md",
+    "skills/nestjs-auth",
+    "skills/nestjs-module"
+  ]
+}
