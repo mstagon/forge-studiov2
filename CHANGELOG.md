@@ -4,6 +4,20 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] — 2026-06-11
+
+### Added — 프리셋 시스템 실구현
+
+- **base 상속 + 델타 합성 엔진** (PresetCompose): 프리셋은 manifest (exclude
+  목록) + overlay 파일만 보유 — base 하네스에서 합성. 정적 복제 방식의
+  이중관리 문제 (v0.15 감사의 베이퍼 프리셋 근본 원인) 원천 차단.
+- **번들 프리셋 3종**:
+  - `nextjs-web` — Next.js 15 App Router + Prisma + Tailwind (Server Actions 백엔드)
+  - `api-server` — NestJS + Prisma 백엔드 단독
+  - `minimal-core` — 스택 무관 코어 (팀/안전/학습 하네스만 + 범용 architecture 룰)
+  각각 전용 CLAUDE.md / tech-stack / architecture overlay + 스택별 agents/skills 서브셋.
+- presets 디렉토리 extraResources 패키징 등록 (기존엔 누락이라 패키징 앱에 0개).
+
 ## [0.16.0] — 2026-06-11
 
 ### Added
