@@ -4,6 +4,47 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] — 2026-06-11
+
+> 0.7.0~0.12.0 엔트리는 미기록 (git log + GitHub release 노트 참조).
+
+### Added — 하네스 토큰/성능 최적화 (P0)
+
+- **토큰 다이어트**: 템플릿 CLAUDE.md 599→132줄. rules 8개 @-include 제거 —
+  `skill-injector.sh` 가 편집 파일 패턴에 맞는 룰만 lazy 주입. 세션 시작
+  강제 로드 ~90% 절감.
+- **bash 출력 압축** (`compress-bash-output.sh`): 출력 폭탄 명령을 head150+tail20
+  으로 wrap (PreToolUse updatedInput). 복합 명령/리다이렉션은 안전상 제외.
+  `BASH_MAX_OUTPUT_LENGTH=25000` cap.
+- **ultracode 훅 프로파일**: 메인 세션 + effortLevel=max 시 gateguard/스킬주입/
+  Stop 학습 훅 우회 (안전 차단은 유지). 멤버 세션은 가드 전부 유지.
+  프로파일 파일 워크스페이스별 격리 (`/tmp/forge-hook-profile-<md5>`).
+- **MCP per-workspace 자동 활성** (`forge-mcp-profile.sh`): pubspec→dart,
+  playwright.config→playwright. 자동 추가분만 마커 관리, 수동 설정 불가침.
+
+### Added — 팀 라이프사이클 완결 (사용자 보고 결함)
+
+- **merge 가 부모 브랜치 통합까지 완결**: 멤버 squash → team base →
+  parentBranch back-merge. 기존엔 결과가 `team/<id>-base` 에 표류.
+- **자동 archive**: merge 성공 시 worktree/tmux/브랜치 자동 정리, config 는
+  history 보존 (`archivedAt`). `--no-archive` 옵트아웃. `forge-team archive`
+  명령 신설 (미통합 commit 시 거부, `--force` 강제).
+- **tmux 지연 정리**: 전원 complete 시 멤버 세션 90초 후 자동 kill.
+- **1인팀 가드**: CLI create 멤버 1명 거부 (`--solo` 로만 허용) + 활성 팀
+  3개 이상 경고.
+- **GUI**: archive 된 팀은 활성 목록에서 제외 (Active/Done 분리).
+
+### Fixed
+
+- `.gitignore` 의 `.claude/` 가 harness-template 의 신규 스크립트를 삼켜
+  v0.12.0 의 `forge-dto-broadcast.sh` / `forge-main-poll.sh` /
+  `forge-council-stop.sh` 가 커밋 누락되던 결함 — 루트 한정 (`/.claude/`) 으로
+  수정 + 3종 복구.
+- `workspaceDirty`: untracked 디렉토리 축약 (`?? .claude/`) 이 forge-owned
+  필터를 우회해 깨끗한 워크스페이스도 dirty 오판 → merge 거부되던 결함
+  (`git status -uall`).
+- `forge-main-poll.sh`: archive 된 팀 신호 무시.
+
 ## [0.6.3] — 2026-05-08
 
 ### Fixed — claude 프로세스가 화면 이동 시 죽던 진짜 원인
