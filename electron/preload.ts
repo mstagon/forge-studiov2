@@ -627,6 +627,13 @@ const api = {
       ipcRenderer.invoke('settings:removeEnvVar', opts),
   },
 
+  // ─── ForgeConfig (팀 동작 설정 — ~/.forge-studio/config.json) ─────
+  forgeConfig: {
+    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('forgeConfig:get'),
+    set: (partial: Record<string, unknown>): Promise<{ ok: boolean; config?: Record<string, unknown>; error?: string }> =>
+      ipcRenderer.invoke('forgeConfig:set', partial),
+  },
+
   // ─── System ──────────────────────────────────────────────────────
   system: {
     openExternal: (url: string) =>

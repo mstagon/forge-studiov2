@@ -17,6 +17,7 @@ import { HookProfiler } from './services/HookProfiler'
 import { pathManager } from './services/PathManager'
 import { TeamActivityTracker, type ActivityEvent, type MemberSpec } from './services/TeamActivityTracker'
 import { ResourceMonitor } from './services/ResourceMonitor'
+import { loadForgeConfig, saveForgeConfig, type ForgeConfig } from './services/ForgeConfig'
 
 const execFileAsync = promisify(execFile)
 
@@ -1259,6 +1260,17 @@ ipcMain.handle('teams:detectConflicts', async (_event, opts: { teamId: string })
 // 보안:
 //   - .env 가 .gitignore 에 있는지 확인 후 없으면 추가 (실수 commit 방지)
 //   - 값 자체는 disk 에 plain text — macOS keychain 은 v0.9.1+ (별도 backend)
+
+// ─── ForgeConfig — 팀 동작 설정 (~/.forge-studio/config.json) ───────
+// CLI (forge-team) 와 같은 파일을 공유 — GUI 에서 바꾸면 CLI 도 즉시 반영.
+ipcMain.handle('forgeConfig:get', async () => loadForgeConfig())
+ipcMain.handle('forgeConfig:set', async (_event, partial: Partial<ForgeConfig>) => {
+  try {
+    return { ok: true, config: saveForgeConfig(partial ?? {}) }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+})
 
 ipcMain.handle('settings:saveEnvVar', async (_event, opts: { workspacePath: string; key: string; value: string }) => {
   if (!opts.workspacePath || !opts.key) {

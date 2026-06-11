@@ -239,6 +239,132 @@ interface RowProps {
   last?: boolean
 }
 
+/**
+ * 팀 동작 설정 — ~/.forge-studio/config.json (ForgeConfig).
+ * forge-team CLI 와 같은 파일을 공유: 여기서 바꾸면 메인 세션이 만드는
+ * 팀에도 즉시 반영된다. 기존 하드코딩 값들의 단일 편집 지점 (v0.13.0).
+ */
+function TeamBehaviorCard() {
+  const [cfg, setCfg] = useState<Record<string, unknown> | null>(null)
+  const [flash, setFlash] = useState(false)
+
+  useEffect(() => {
+    void window.api.forgeConfig.get().then((c) => setCfg(c))
+  }, [])
+
+  const save = (partial: Record<string, unknown>) => {
+    setCfg((prev) => (prev ? { ...prev, ...partial } : prev))
+    void window.api.forgeConfig.set(partial).then((res) => {
+      if (res.ok && res.config) {
+        setCfg(res.config)
+        setFlash(true)
+        setTimeout(() => setFlash(false), 1200)
+      }
+    })
+  }
+
+  if (!cfg) return null
+  const num = (k: string): number => Number(cfg[k] ?? 0)
+  const bool = (k: string): boolean => cfg[k] === true
+
+  const numInput = (key: string, width = 72) => (
+    <input
+      type="number"
+      defaultValue={num(key)}
+      key={`${key}-${num(key)}`}
+      onBlur={(e) => {
+        const v = parseInt(e.target.value, 10)
+        if (Number.isFinite(v) && v !== num(key)) save({ [key]: v })
+      }}
+      style={{
+        width,
+        background: 'var(--bg-1)',
+        color: 'var(--text-1)',
+        border: '1px solid var(--line-2)',
+        borderRadius: 4,
+        padding: '4px 6px',
+        fontSize: 11.5,
+        fontFamily: 'var(--font-mono)',
+        textAlign: 'right',
+      }}
+    />
+  )
+
+  return (
+    <SettingsCard
+      title="팀 동작"
+      right={
+        flash ? (
+          <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--success)', color: 'var(--bg-1)', borderRadius: 3, fontWeight: 600 }}>
+            저장됨
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+            ~/.forge-studio/config.json
+          </span>
+        )
+      }
+    >
+      <Row
+        label="기본 멤버 모델"
+        sub="멤버 spawn 시 model 미지정이면 사용. forge-team CLI 도 동일 적용"
+        right={
+          <input
+            type="text"
+            defaultValue={String(cfg.defaultMemberModel ?? '')}
+            key={`model-${String(cfg.defaultMemberModel)}`}
+            onBlur={(e) => {
+              const v = e.target.value.trim()
+              if (v && v !== cfg.defaultMemberModel) save({ defaultMemberModel: v })
+            }}
+            style={{
+              width: 170,
+              background: 'var(--bg-1)',
+              color: 'var(--text-1)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 4,
+              padding: '4px 6px',
+              fontSize: 11.5,
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+        }
+      />
+      <Row
+        label="멤버 부팅 대기 (ms)"
+        sub="claude/codex 부팅 후 task prompt 주입까지 대기. codex auto-update 가 느리면 늘릴 것"
+        right={numInput('memberBootWaitMs')}
+      />
+      <Row
+        label="tmux 스크롤백 (줄)"
+        sub="멤버 터미널 history-limit"
+        right={numInput('tmuxHistoryLimit', 84)}
+      />
+      <Row
+        label="완료 후 tmux 정리 지연 (초)"
+        sub="모든 멤버 완료 후 멤버 세션 자동 kill 까지의 유예"
+        right={numInput('tmuxCleanupDelaySec')}
+      />
+      <Row
+        label="1인팀 가드"
+        sub="CLI 의 단일 멤버 팀 생성 거부 (--solo 로만 허용)"
+        right={<Toggle value={bool('soloTeamGuard')} onChange={(v) => save({ soloTeamGuard: v })} />}
+      />
+      <Row
+        label="활성 팀 경고 임계치"
+        sub="활성 팀이 이 수 이상이면 create 시 경고"
+        right={numInput('activeTeamWarnThreshold', 56)}
+      />
+      <Row
+        label="merge 후 자동 archive"
+        sub="merge 성공 시 worktree/tmux/브랜치 자동 정리 (config 는 history 보존)"
+        right={<Toggle value={bool('autoArchiveOnMerge')} onChange={(v) => save({ autoArchiveOnMerge: v })} />}
+        last
+      />
+    </SettingsCard>
+  )
+}
+
 function Row({ label, sub, right, last }: RowProps) {
   return (
     <div
@@ -817,6 +943,8 @@ export function SettingsAgents() {
   return (
     <>
       <SectionHeader title={t('settings.agents')} sub={t('settings.agentsSub')} />
+
+      <TeamBehaviorCard />
 
       <SettingsCard title="Pool defaults">
         <Row
