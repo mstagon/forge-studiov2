@@ -29,8 +29,8 @@ docs/.bkit-*
 /main.js
 /preload.js
 
-# Local Claude Code project state
-.claude/
+# Local Claude Code project state (루트만 — harness-template 의 .claude 는 추적 필수)
+/.claude/
 
 # Ad-hoc generic harness extraction (reference folder, not shipped)
 framework-agnostic-harness/
