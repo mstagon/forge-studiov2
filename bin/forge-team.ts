@@ -140,6 +140,33 @@ async function cmdCreate(flags: Map<string, string>): Promise<void> {
   const membersRaw = requireFlag(flags, 'members')
   const members = parseMembers(membersRaw)
   if (members.length === 0) fail('--members must list at least one entry')
+
+  // v0.13.0 — 1인팀 가드. 메인 세션이 phase 마다 단일 멤버 팀을 연속 생성해
+  // worktree/tmux 가 누적되는 패턴 차단 (사용자 보고 결함). 정말 단일 멤버가
+  // 필요하면 --solo 명시.
+  if (members.length === 1 && flags.get('solo') !== 'true') {
+    fail(
+      '1인팀 거부: 단일 멤버 팀의 연속 생성은 worktree/tmux 누적 낭비. ' +
+        '대기 중인 다른 작업과 묶어 멀티 멤버 한 팀으로 만들거나, ' +
+        '정말 단일 멤버가 필요하면 --solo 를 명시하라.',
+      4
+    )
+  }
+
+  // v0.13.0 — 활성 팀 누적 경고. 끝난 팀 정리 없이 계속 만드는 패턴 감지.
+  try {
+    const existing = await ops.list(workspacePath)
+    const active = existing.filter((t) => t.status !== 'done' && !t.archivedAt)
+    if (active.length >= 3) {
+      process.stderr.write(
+        `forge-team: ⚠️ 활성 팀이 이미 ${active.length}개 (${active
+          .map((t) => t.id)
+          .join(', ')}) — 끝난 팀은 merge(자동 archive) 또는 archive 후 새 팀을 만들 것.\n`
+      )
+    }
+  } catch {
+    // 목록 조회 실패는 create 를 막지 않음
+  }
   const worktreeStrategy = asWorktreeStrategy(flags.get('worktree-strategy'))
   const mergeStrategy = asMergeStrategy(flags.get('merge-strategy'))
   const workspaceId = flags.get('workspace-id') ?? path.basename(workspacePath)
@@ -180,8 +207,20 @@ async function cmdMerge(flags: Map<string, string>): Promise<void> {
   const workspacePath = resolveWorkspace(flags)
   const teamId = requireFlag(flags, 'team-id')
   const strategyFlag = flags.get('merge-strategy')
-  const opts = strategyFlag ? { mergeStrategy: asMergeStrategy(strategyFlag) } : {}
-  const result = await ops.merge(workspacePath, teamId, opts)
+  const result = await ops.merge(workspacePath, teamId, {
+    ...(strategyFlag ? { mergeStrategy: asMergeStrategy(strategyFlag) } : {}),
+    // 기본: merge 성공 시 worktree/tmux/브랜치 자동 archive. --no-archive 로 옵트아웃.
+    autoArchive: flags.get('no-archive') !== 'true',
+  })
+  emit(result)
+  if (!result.ok) process.exit(2)
+}
+
+async function cmdArchive(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const teamId = requireFlag(flags, 'team-id')
+  const force = flags.get('force') === 'true'
+  const result = await ops.archiveTeam(workspacePath, teamId, { force })
   emit(result)
   if (!result.ok) process.exit(2)
 }
@@ -442,9 +481,13 @@ function printHelp(): void {
       '',
       'Commands:',
       '  create   Provision a new team (worktrees + tmux + config.json)',
-      '  list     List teams under a workspace',
+      '           멤버 1명이면 거부 (--solo 로 명시 허용). 활성 팀 3개+ 경고.',
+      '  list     List teams under a workspace (archivedAt/mergedAt 포함)',
       '  remove   Tear down a team (worktrees + tmux + branches + config)',
-      '  merge    Merge member branches back into the team base branch',
+      '  merge    멤버 브랜치 → team base → 부모 브랜치 통합 + 자동 archive',
+      '           (--no-archive 로 정리 옵트아웃)',
+      '  archive  worktree/tmux/브랜치 정리, config 는 history 보존',
+      '           (미통합 commit 있으면 거부 — --force 로 강제)',
       '  pause    Pause an entire team or a single member (--agent-id)',
       '  resume   Resume an entire team or a single member (--agent-id)',
       '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
@@ -468,9 +511,14 @@ function printHelp(): void {
       '  --workspace-id <id>         Override workspace id (default: dir name)',
       '  --auto-start                Auto-run `claude` inside each tmux pane',
       '  --council                   협의 모드 (멤버끼리 inbox 로 round-robin 토론)',
+      '  --solo                      단일 멤버 팀 명시 허용 (기본 거부)',
       '',
       'merge flags:',
       '  --merge-strategy            squash | sequential (overrides team default)',
+      '  --no-archive                merge 후 자동 archive 끄기',
+      '',
+      'archive flags:',
+      '  --force                     미통합 commit 무시하고 강제 정리',
       '',
       'pause/resume flags:',
       '  --agent-id <id>             Pause/resume just this member',
@@ -515,6 +563,9 @@ async function main(): Promise<void> {
         break
       case 'merge':
         await cmdMerge(flags)
+        break
+      case 'archive':
+        await cmdArchive(flags)
         break
       case 'pause':
         await cmdPause(flags)
