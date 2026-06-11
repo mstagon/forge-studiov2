@@ -9,8 +9,10 @@ import { app } from 'electron'
  * Two sources:
  *
  *   1. Bundled presets, shipped under `resources/presets/<id>/.claude/`.
- *      `flutter-nest` mirrors the current default harness. `nextjs-only` and
- *      `empty` are slimmer variants for non-Fullstack projects. Read-only.
+ *      v0.15 현재 bundled preset 은 없다 — 기본 하네스는 harness-template
+ *      자체이고, New Workspace 의 '__default__' 가 그걸 가리킨다. (구버전
+ *      주석의 flutter-nest/nextjs-only/empty 는 실재한 적 없는 베이퍼였음 —
+ *      감사 문서 참조.) 디렉토리가 생기면 자동으로 목록에 뜬다.
  *
  *   2. User-saved presets in `~/.claude/my-presets/<id>/.claude/`. The user
  *      can capture the current workspace's `.claude/` as a preset and reuse
@@ -61,14 +63,9 @@ export class PresetManager {
     if (await fs.pathExists(user)) {
       out.push(...(await this.scanRoot(user, 'user')))
     }
-    // Stable ordering: bundled first (with flutter-nest at the top so the
-    // default sticks), then user presets alphabetically.
+    // Stable ordering: bundled first, then user presets alphabetically.
     out.sort((a, b) => {
       if (a.source !== b.source) return a.source === 'bundled' ? -1 : 1
-      if (a.source === 'bundled') {
-        if (a.id === 'flutter-nest') return -1
-        if (b.id === 'flutter-nest') return 1
-      }
       return a.name.localeCompare(b.name)
     })
     return out
