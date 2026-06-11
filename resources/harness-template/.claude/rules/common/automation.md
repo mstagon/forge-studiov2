@@ -14,7 +14,8 @@
 | `learn.sh` | Stop | 교훈 반복 패턴 탐지 (3회+ → 승격). ultracode/minimal 우회 |
 | `cost-tracker.sh` | Stop | 세션 메트릭스 JSONL 기록. ultracode/minimal 우회 |
 | `evaluate-session.sh` | Stop | 세션 패턴 추출 + 신뢰도 평가. ultracode/minimal 우회 |
-| `forge-dto-broadcast.sh` | Stop | 멤버 DTO 변경 → 다른 멤버 inbox broadcast |
+| `forge-dto-broadcast.sh` | Stop | 멤버 DTO/contracts 변경 → 다른 멤버 inbox broadcast |
+| `forge-symbol-guard.sh` | Stop | 멤버 간 같은 함수 동시 수정 감지 → 양쪽 경보 (Wit lite) |
 | `forge-main-poll.sh` | Stop | 메인 세션이 팀 신호 (done 등) 자동 surface |
 | `hook-profiles.sh` | 유틸리티 | minimal/standard/strict/ultracode 프로파일 판정 |
 | `pre-compact.sh` | PreCompact | 컴팩션 전 상태 보존 |
