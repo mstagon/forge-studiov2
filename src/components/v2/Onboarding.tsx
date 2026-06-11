@@ -520,11 +520,6 @@ function Step4HarnessTour() {
       desc: '실행 중인 Run 요약과 자원 사용량을 한눈에.',
     },
     {
-      icon: <Icon.Box size={14} />,
-      label: 'Library',
-      desc: 'agents / skills / commands / hooks / compositions — .claude 자산 관리.',
-    },
-    {
       icon: <Icon.Cog size={14} />,
       label: 'Settings',
       desc: 'workspaces, harness 버전, 통합, MCP 서버, 계정.',
@@ -532,7 +527,7 @@ function Step4HarnessTour() {
   ]
 
   const shortcuts: { keys: string; label: string }[] = [
-    { keys: '⌘1 / ⌘2 / ⌘3 / ⌘4', label: '뷰 전환 (Workspace/Git/Dashboard/Library)' },
+    { keys: '⌘1 / ⌘2 / ⌘3 / ⌘4', label: '뷰 전환 (Workspace/Git/Dashboard/Teams)' },
     { keys: '⌘N', label: '새 워크스페이스' },
     { keys: '⌘T', label: '새 터미널 탭' },
     { keys: '⌘K', label: 'Command Palette' },
@@ -662,7 +657,7 @@ function Step5FirstTeam({
   onClose: () => void
 }) {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
-  const sampleMembers = useMemo(() => ['flutter-ui', 'nestjs-auth', 'reviewer'], [])
+  const sampleMembers = useMemo(() => ['flutter-ui', 'nestjs-backend', 'code-reviewer'], [])
 
   const launch = () => {
     onSampleRun?.()
@@ -672,7 +667,7 @@ function Step5FirstTeam({
     <>
       <Heading
         title="첫 팀을 만들어보세요"
-        sub="Forge Studio 의 핵심은 여러 agent 가 격리 워크트리에서 병렬로 일하는 Run 입니다. 아래 버튼으로 3명짜리 샘플 팀 위저드를 미리 채워서 열거나, 그냥 건너뛰어도 됩니다."
+        sub="평소엔 메인 세션이 직접 일하고, 30분+ 독립 작업 병렬·Council 검수·백그라운드 잡일 때만 팀을 띄웁니다. 팀이 어떻게 생겼는지 3명짜리 샘플 위저드로 미리 볼 수 있어요 — 건너뛰어도 됩니다."
       />
       <Card style={{ padding: 18, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
