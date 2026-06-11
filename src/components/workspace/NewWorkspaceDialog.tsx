@@ -6,6 +6,8 @@ interface PresetOption {
   id: string
   name: string
   source: 'bundled' | 'user'
+  /** 프리셋 선택 시 옵트인으로 묻는 MCP 목록 (v0.18). */
+  optionalMcp?: Array<{ id: string; label: string; hint?: string }>
 }
 
 export function NewWorkspaceDialog() {
@@ -26,6 +28,8 @@ export function NewWorkspaceDialog() {
   // `harness-template/.claude/` (Flutter + NestJS + Prisma + Next.js).
   const [preset, setPreset] = useState<string>('__default__')
   const [presetOptions, setPresetOptions] = useState<PresetOption[]>([])
+  // 프리셋별 옵트인 MCP 체크 상태 (supabase / vercel / railway 등)
+  const [mcpChecks, setMcpChecks] = useState<Record<string, boolean>>({})
 
   // Lazy-load presets from the IPC bridge whenever the dialog opens — this
   // keeps the bundle slim and lets newly-saved user presets show up without a
@@ -35,14 +39,25 @@ export function NewWorkspaceDialog() {
     const api = (window as unknown as {
       api?: {
         preset?: {
-          list?: () => Promise<{ id: string; name: string; source: 'bundled' | 'user' }[]>
+          list?: () => Promise<
+            {
+              id: string
+              name: string
+              source: 'bundled' | 'user'
+              optionalMcp?: Array<{ id: string; label: string; hint?: string }>
+            }[]
+          >
         }
       }
     }).api
     if (!api?.preset?.list) return
     api.preset
       .list()
-      .then((items) => setPresetOptions(items.map((p) => ({ id: p.id, name: p.name, source: p.source }))))
+      .then((items) =>
+        setPresetOptions(
+          items.map((p) => ({ id: p.id, name: p.name, source: p.source, optionalMcp: p.optionalMcp })),
+        ),
+      )
       .catch(() => setPresetOptions([]))
   }, [newWorkspaceDialogVisible])
 
@@ -80,7 +95,10 @@ export function NewWorkspaceDialog() {
             }
           : undefined,
         crGraphAutoBuild ? { autoBuild: true } : undefined,
-        preset === '__default__' ? undefined : preset
+        preset === '__default__' ? undefined : preset,
+        Object.entries(mcpChecks)
+          .filter(([, v]) => v)
+          .map(([k]) => k)
       )
       setName('')
       setDirPath('')
@@ -90,6 +108,7 @@ export function NewWorkspaceDialog() {
       setAutoCreateRepos(false)
       setCrGraphAutoBuild(false)
       setPreset('__default__')
+      setMcpChecks({})
     } finally {
       setCreating(false)
     }
@@ -238,7 +257,10 @@ export function NewWorkspaceDialog() {
               </label>
               <select
                 value={preset}
-                onChange={(e) => setPreset(e.target.value)}
+                onChange={(e) => {
+                  setPreset(e.target.value)
+                  setMcpChecks({})
+                }}
                 className="w-full bg-surface-1 text-text-primary text-xs px-2.5 py-1.5 rounded-md border border-border focus:border-accent outline-none"
               >
                 <option value="__default__">Default (flutter + nest + cms)</option>
@@ -249,9 +271,44 @@ export function NewWorkspaceDialog() {
                 ))}
               </select>
               <div className="text-2xs text-text-muted mt-1.5 leading-relaxed">
-                Preset 을 고르면 번들된 default 대신 해당 프리셋의 .claude/ 가 복사됩니다.
-                Library → My Presets 에서 직접 만들 수도 있습니다.
+                Preset 을 고르면 base 하네스에서 합성된 .claude/ 가 들어갑니다.
+                현재 워크스페이스를 Settings 에서 내 프리셋으로 저장할 수도 있습니다.
               </div>
+
+              {(() => {
+                const sel = presetOptions.find((p) => p.id === preset)
+                if (!sel?.optionalMcp?.length) return null
+                return (
+                  <div className="mt-2.5 bg-surface-1 rounded-md border border-border p-2.5">
+                    <div className="text-2xs text-text-secondary mb-1.5">
+                      통합 MCP (선택 — 체크한 것만 활성화)
+                    </div>
+                    {sel.optionalMcp.map((m) => (
+                      <label
+                        key={m.id}
+                        className="flex items-start gap-2 cursor-pointer select-none py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!mcpChecks[m.id]}
+                          onChange={(e) =>
+                            setMcpChecks((prev) => ({ ...prev, [m.id]: e.target.checked }))
+                          }
+                          className="mt-0.5 w-3.5 h-3.5 accent-accent"
+                        />
+                        <span className="flex-1">
+                          <span className="block text-xs text-text-primary">{m.label}</span>
+                          {m.hint && (
+                            <span className="block text-2xs text-text-muted leading-relaxed mt-0.5">
+                              {m.hint}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
 
             <label className="flex items-start gap-2 cursor-pointer select-none">
