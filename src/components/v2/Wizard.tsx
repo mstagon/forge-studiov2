@@ -13,8 +13,7 @@ import { Fragment, useEffect, useState, type CSSProperties } from 'react'
 // TODO: foundation import
 import { Btn, AgentBadge, AvatarStack } from './primitives'
 import { Icon } from './icons'
-// TODO: foundation import — `./data` is the AGENT_POOL seed module from the
-// main session'''s foundation pass.
+// `./data` 는 AGENT_POOL seed 모듈 — 위저드의 에이전트 선택 풀.
 import { AGENT_POOL, AGENT_BY_ID } from './data'
 import type { Agent } from './types'
 import { t } from '@/i18n'

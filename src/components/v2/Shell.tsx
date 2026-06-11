@@ -214,6 +214,9 @@ export function Shell({
       if (e.key === '1') { e.preventDefault(); onView('workspace'); return }
       if (e.key === '2') { e.preventDefault(); onView('git');       return }
       if (e.key === '3') { e.preventDefault(); onView('dashboard'); return }
+      // ⌘4 = Teams — 팀은 workspace 뷰 안에 살므로 workspace 로 이동
+      // (CommandPalette 의 'Teams 보기 ⌘4' 와 일치)
+      if (e.key === '4') { e.preventDefault(); onView('workspace'); return }
       if (e.key === ',') {
         e.preventDefault()
         if (onOpenSettings) onOpenSettings()
