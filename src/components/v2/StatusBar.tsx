@@ -37,14 +37,16 @@ export interface StatusBarProps {
 
 export function StatusBar({
   workspace,
-  mcpOk = 4,
-  mcpTotal = 5,
+  // v0.15 — fake 디폴트 제거: 실값이 안 들어오면 해당 세그먼트를 그리지 않는다.
+  // (구버전: MCP "4/5", 'UTF-8 · LF · TypeScript' 가 하드코딩으로 항상 표시)
+  mcpOk,
+  mcpTotal,
   agents = 0,
   branch,
   ahead = 0,
   behind = 0,
   harness,
-  fileMeta = 'UTF-8 · LF · TypeScript',
+  fileMeta,
   tabsLabel,
 }: StatusBarProps) {
   const branchLabel = branch ?? workspace.branch
@@ -76,18 +78,22 @@ export function StatusBar({
       <span>
         harness <span style={{ color: 'var(--text-2)' }}>{harnessLabel}</span>
       </span>
-      <span>·</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <Dot
-          color={mcpOk === mcpTotal ? 'var(--success)' : 'var(--warning)'}
-          size={6}
-        />
-        MCP {mcpOk}/{mcpTotal}
-      </span>
+      {mcpOk != null && mcpTotal != null && (
+        <>
+          <span>·</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Dot
+              color={mcpOk === mcpTotal ? 'var(--success)' : 'var(--warning)'}
+              size={6}
+            />
+            MCP {mcpOk}/{mcpTotal}
+          </span>
+        </>
+      )}
       <span>·</span>
       <span>{agents} agents</span>
       <div style={{ flex: 1 }} />
-      <span>{fileMeta}</span>
+      {fileMeta && <span>{fileMeta}</span>}
       {tabsLabel && (
         <>
           <span>·</span>
