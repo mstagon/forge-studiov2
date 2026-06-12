@@ -4,6 +4,18 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.19.1] — 2026-06-12
+
+### Added — 구독 랩핑 지원 (claude/codex subscription)
+
+- **authMode** (`subscription` 기본 / `api`): 구독 모드는 spawn 전 stray
+  API 키 (ANTHROPIC_API_KEY/OPENAI_API_KEY) 를 env 에서 제거해 CLI 가 로그인된
+  구독을 쓰게 강제. 문서상 API 키가 있으면 구독을 무시하고 저단가 API 로
+  라우팅됨 (= "크레딧 부족" 에러 원인). OAuth 토큰은 보존. Settings 토글.
+- **Gauntlet 구독 한도 내성**: 심판 결과를 ok/rate_limited/auth/error 로 분류
+  (claude json 봉투 api_error_status 429/402 + 키워드). rate_limited 는 지수
+  백오프 재시도, auth(크레딧/로그인) 는 즉시 surface. 멤버 spawn 도 구독 env 적용.
+
 ## [0.19.0] — 2026-06-12
 
 ### Added — Gauntlet (cross-provider 적대 심판) + Obsidian 볼트
