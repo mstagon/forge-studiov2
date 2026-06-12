@@ -11,6 +11,7 @@ import { LiveTerminalsRoot } from './components/v2/LiveTerminalsRoot'
 import { useLiveTerminalsStore } from './stores/liveTerminals'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
 import { SettingsFull } from './components/v2/SettingsFull'
+import { FactoryView } from './components/v2/FactoryView'
 import { Wizard, type WizardResult } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
@@ -623,6 +624,8 @@ export default function App() {
     secondaryView = <GitPanelWired />
   } else if (view === 'dashboard') {
     secondaryView = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
+  } else if (view === 'factory') {
+    secondaryView = <FactoryView />
   } else if (view === 'settings') {
     secondaryView = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
   }
@@ -696,6 +699,8 @@ export default function App() {
             setView('git')
           } else if (action === 'go-dashboard' || action === 'view-dashboard') {
             setView('dashboard')
+          } else if (action === 'go-factory' || action === 'view-factory') {
+            setView('factory')
           } else if (action === 'go-teams') {
             setView('workspace')
           } else if (action === 'go-settings' || action === 'open-settings') {
