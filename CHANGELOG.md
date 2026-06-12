@@ -4,6 +4,25 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] — 2026-06-12
+
+### Added — 자율 개발 공장 완성 (Night Shift + Flight Recorder)
+
+- **Night Shift** (`forge-team factory add/list/run`): 계약 큐 (`.claude/factory/
+  queue.json`) 를 의존성 순으로 자율 실행 — team 생산 → 멤버 완료 대기 →
+  **머지 전 Gauntlet 게이트** (멤버 브랜치 적대 심판) → blocker 없을 때만
+  머지(+archive), 있으면 보류 + worktree 보존. 끝나면 아침 브리핑 md (+ 볼트
+  미러). 순차 + rate-limit 넉넉 재시도 (구독 한도). 검수 안 된 코드가 부모
+  브랜치에 자동 유입되지 않는다.
+- **Flight Recorder** (`forge-team recorder timeline/capture/fork`): 작업
+  타임라인을 단일 스트림으로 (activity + tmux pane 출력 + inbox + git log 병합),
+  과거 commit 시점에서 worktree 를 떼어 되감아 다시 시도 (fork). AI 작업의
+  블랙박스 + 리플레이 primitive.
+
+### Fixed
+- FactoryRunner: TS parameter property 가 Node strip-only 런타임에서 깨지는
+  문제 회피 (명시 필드 할당) — 패키징 CLI 안전.
+
 ## [0.19.1] — 2026-06-12
 
 ### Added — 구독 랩핑 지원 (claude/codex subscription)
