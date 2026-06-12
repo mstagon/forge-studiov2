@@ -8,7 +8,7 @@ import { promisify } from 'util'
 // extension 을 안 채워주므로 명시 필요 (v0.9.4 fix). bin/forge-team.ts
 // 도 같은 패턴으로 './TeamOperations.ts' 명시 중.
 import { resolveProvider } from './ProviderRouter.ts'
-import { loadForgeConfig } from './ForgeConfig.ts'
+import { loadForgeConfig, authScrubbedEnv } from './ForgeConfig.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -703,8 +703,9 @@ export class TeamOperations {
         // v0.9.7 — FORGE_TEAM_ID + FORGE_MEMBER_NAME env 주입.
         // forge-boundary-guard.sh PreToolUse hook 이 이걸 보고 멤버 영역
         // 외 파일 수정 시도 차단. 메인 세션은 이 env 없어서 통과.
+        // v0.19.1 — 구독 랩핑: 멤버 claude/codex 도 stray API 키 제거 후 spawn.
         const env = {
-          ...this.tmuxEnv(),
+          ...authScrubbedEnv(this.tmuxEnv(), forgeCfg.authMode),
           FORGE_TEAM_ID: teamId,
           FORGE_MEMBER_NAME: member.name,
           FORGE_TEAM_NAME: opts.name,
