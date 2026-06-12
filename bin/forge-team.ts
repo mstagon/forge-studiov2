@@ -21,6 +21,7 @@ import path from 'path'
 import { TeamOperations } from '../electron/services/TeamOperations.ts'
 import { loadForgeConfig } from '../electron/services/ForgeConfig.ts'
 import { GauntletRunner } from '../electron/services/GauntletRunner.ts'
+import { FactoryRunner, type FactoryJob } from '../electron/services/FactoryRunner.ts'
 import type {
   TeamCreateMember,
   WorktreeStrategy,
@@ -226,6 +227,62 @@ async function cmdArchive(flags: Map<string, string>): Promise<void> {
   const result = await ops.archiveTeam(workspacePath, teamId, { force })
   emit(result)
   if (!result.ok) process.exit(2)
+}
+
+// ────────────────────────────────────────────────────────────────────
+// factory — Night Shift 자율 공장 (계약 큐 → 생산 → Gauntlet 게이트 → 머지)
+// ────────────────────────────────────────────────────────────────────
+
+const factory = new FactoryRunner(ops)
+
+async function cmdFactory(flags: Map<string, string>, sub: string): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  switch (sub) {
+    case 'add': {
+      // --id <id> --goal "<목표>" --members <spec> [--contract <path>] [--depends a,b]
+      const id = requireFlag(flags, 'id')
+      const goal = requireFlag(flags, 'goal')
+      const members = parseMembers(requireFlag(flags, 'members'))
+      if (members.length === 0) fail('--members 최소 1개')
+      const contract = flags.get('contract')
+      const dependsOn = flags.get('depends')?.split(',').map((s) => s.trim()).filter(Boolean)
+      const job = await factory.addJob(workspacePath, { id, goal, members, contract, dependsOn })
+      emit({ ok: true, added: job.id })
+      break
+    }
+    case 'list':
+    case 'status': {
+      const queue = await factory.loadQueue(workspacePath)
+      emit({
+        jobs: queue.jobs.map((j: FactoryJob) => ({
+          id: j.id,
+          status: j.status,
+          goal: j.goal,
+          dependsOn: j.dependsOn ?? [],
+          blockerCount: j.blockerCount,
+          note: j.note,
+        })),
+      })
+      break
+    }
+    case 'run': {
+      const dateStamp = flags.get('date') ?? new Date().toISOString().slice(0, 10)
+      const judges = flags.get('judges')?.split(',').map((s) => s.trim()).filter(Boolean)
+      const jobTimeoutMs = flags.get('job-timeout') ? parseInt(flags.get('job-timeout')!, 10) : 0
+      const result = await factory.run({
+        workspacePath,
+        dateStamp,
+        judges,
+        jobTimeoutMs,
+        env: { ...process.env },
+      })
+      emit(result)
+      if (result.failed.length > 0) process.exit(3)
+      break
+    }
+    default:
+      fail(`unknown factory subcommand: ${sub} (add|list|status|run)`)
+  }
 }
 
 async function cmdGauntlet(flags: Map<string, string>): Promise<void> {
@@ -521,6 +578,10 @@ function printHelp(): void {
       '           (미통합 commit 있으면 거부 — --force 로 강제)',
       '  gauntlet cross-provider 적대 심판 — diff 를 claude+codex 가 검수',
       '           --range <git range> [--judges m1,m2]. blocker 시 exit 3',
+      '  factory  Night Shift 자율 공장 (계약 큐 → 생산 → Gauntlet 게이트 → 머지)',
+      '    add    --id <id> --goal "..." --members <spec> [--contract p] [--depends a,b]',
+      '    list   큐 + 각 job 상태',
+      '    run    큐 자율 실행 [--judges m1,m2] [--job-timeout ms] → 아침 브리핑',
       '  pause    Pause an entire team or a single member (--agent-id)',
       '  resume   Resume an entire team or a single member (--agent-id)',
       '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
@@ -604,6 +665,12 @@ async function main(): Promise<void> {
       case 'judge':
         await cmdGauntlet(flags)
         break
+      case 'factory': {
+        // 두 번째 위치 인자가 서브명령 (add/list/status/run)
+        const sub = argv[1] && !argv[1].startsWith('--') ? argv[1] : 'list'
+        await cmdFactory(flags, sub)
+        break
+      }
       case 'pause':
         await cmdPause(flags)
         break

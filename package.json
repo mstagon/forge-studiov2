@@ -116,6 +116,7 @@
         "from": "electron/services",
         "to": "forge-cli/electron/services",
         "filter": [
+          "FactoryRunner.ts",
           "ForgeConfig.ts",
           "GauntletRunner.ts",
           "ProviderRouter.ts",
