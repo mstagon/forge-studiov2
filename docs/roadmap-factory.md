@@ -75,6 +75,19 @@ claude/codex 는 **구독 랩핑**으로 작동 (API 키 아님). 함의:
 
 ---
 
+## 알려진 갭 / 다음 단계 (v0.22+)
+
+- **Gauntlet GitHub Action ("적대적 CI")**: PR 마다 cross-provider 적대 심판을 돌려
+  blocker 시 체크 실패 + PR 코멘트. Forge 안 쓰는 사람도 유입되는 깔때기.
+  난점: forge-cli 가 npm 미publish — CI 러너에 vendoring 하거나 standalone action
+  패키지 필요 + CI 는 authMode=api (구독 OAuth 는 headless 불가, secrets 로 API 키).
+- **Flight Recorder GUI 스크럽**: 지금 timeline 은 CLI/jsonl 만. GUI 타임라인
+  스크럽 + fork 버튼은 미연결.
+- **fork 정리 갭**: `recorder fork` 가 만든 `fork/<teamId>/<agent>` worktree/브랜치는
+  archiveTeam/remove 가 정리 안 함 (member 브랜치만). 수동 기능이라 후순위.
+- **factory GUI run 트리거**: 관제실은 읽기 전용. run 은 장기 프로세스라 GUI 에서
+  띄우려면 PtyManager 로 터미널에 명령 주입하는 방식 고려.
+
 ## 다음 세션 인수인계
 - v0.19 부품: GauntletRunner / VaultSync / forge-team gauntlet CLI / ForgeConfig.obsidianVaultPath
 - 새 electron/services 모듈은 **package.json extraResources forge-cli 필터에 추가** ([[forge-packaging-trap]])
