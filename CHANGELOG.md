@@ -4,6 +4,17 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] — 2026-06-12
+
+### Added — 공장 관제실 GUI
+
+- **공장 관제실 뷰** (⌘4): CLI+jsonl 만 있던 자율 공장을 GUI 에 노출.
+  - Night Shift 계약 큐 보드 (job 상태/의존성/blocker, 3초 폴링 실시간)
+  - 최근 Gauntlet 적대 심판 결과 (clean/blocker · 합의/단독)
+  - 최신 아침 브리핑 렌더
+  - `factory:status` IPC (읽기 전용 — 실행은 장기 프로세스라 CLI `factory run`)
+- 사이드바/팔레트/⌘4 단축키 배선. (구 ⌘4 Teams 는 팔레트 항목으로 유지)
+
 ## [0.20.0] — 2026-06-12
 
 ### Added — 자율 개발 공장 완성 (Night Shift + Flight Recorder)
