@@ -359,6 +359,54 @@ function TeamBehaviorCard() {
         label="merge 후 자동 archive"
         sub="merge 성공 시 worktree/tmux/브랜치 자동 정리 (config 는 history 보존)"
         right={<Toggle value={bool('autoArchiveOnMerge')} onChange={(v) => save({ autoArchiveOnMerge: v })} />}
+      />
+      <Row
+        label="Gauntlet 심판 (cross-provider)"
+        sub="적대 검수에 부를 모델 — 콤마 구분 (claude+gpt 혼성 권장)"
+        right={
+          <input
+            type="text"
+            defaultValue={Array.isArray(cfg.gauntletJudges) ? (cfg.gauntletJudges as string[]).join(',') : ''}
+            key={`judges-${(cfg.gauntletJudges as string[] | undefined)?.join(',')}`}
+            onBlur={(e) => {
+              const arr = e.target.value.split(',').map((x) => x.trim()).filter(Boolean)
+              if (arr.length > 0) save({ gauntletJudges: arr })
+            }}
+            style={{
+              width: 200,
+              background: 'var(--bg-1)',
+              color: 'var(--text-1)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 4,
+              padding: '4px 6px',
+              fontSize: 11.5,
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+        }
+      />
+      <Row
+        label="Obsidian 볼트 경로"
+        sub="설정 시 Gauntlet 리포트/브리핑을 <vault>/Forge/ 에 미러 (비우면 끔)"
+        right={
+          <input
+            type="text"
+            defaultValue={String(cfg.obsidianVaultPath ?? '')}
+            key={`vault-${String(cfg.obsidianVaultPath)}`}
+            placeholder="/Users/.../MyVault"
+            onBlur={(e) => save({ obsidianVaultPath: e.target.value.trim() })}
+            style={{
+              width: 220,
+              background: 'var(--bg-1)',
+              color: 'var(--text-1)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 4,
+              padding: '4px 6px',
+              fontSize: 11.5,
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+        }
         last
       />
     </SettingsCard>
