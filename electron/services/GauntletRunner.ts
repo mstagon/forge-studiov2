@@ -4,6 +4,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { resolveProvider } from './ProviderRouter.ts'
 import { syncNote } from './VaultSync.ts'
+import { authScrubbedEnv } from './ForgeConfig.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -34,10 +35,14 @@ export interface GauntletFinding {
   confidence: 'high' | 'medium' | 'low'
 }
 
+export type JudgeStatus = 'ok' | 'rate_limited' | 'auth' | 'error'
+
 export interface JudgeResult {
   model: string
   provider: string
   ok: boolean
+  /** 실패 분류 — rate_limited(한도, 재시도 가능) / auth(크레딧·로그인) / error. */
+  status: JudgeStatus
   findings: GauntletFinding[]
   /** 심판이 아무것도 못 찾았으면 명시 (적대 심판은 "깨끗함" 도 신호). */
   clean: boolean
@@ -66,6 +71,10 @@ export interface GauntletOptions {
   env?: NodeJS.ProcessEnv
   /** diff 가 이 바이트를 넘으면 잘라서 프롬프트에 (토큰 폭발 방지). */
   maxDiffBytes?: number
+  /** rate-limit 시 재시도 횟수 (구독 한도 대응). 기본 1 — Night Shift 는 더 크게. */
+  rateLimitRetries?: number
+  /** 재시도 1회차 대기 (ms). 지수 증가. 기본 30s. */
+  rateLimitBackoffMs?: number
 }
 
 const DEFAULT_JUDGES: JudgeSpec[] = [{ model: 'claude-opus-4-8' }, { model: 'gpt-5.5' }]
@@ -85,9 +94,12 @@ minor=경계 케이스, nit=권장. confidence 는 본인 확신도.
 
 export class GauntletRunner {
   async run(opts: GauntletOptions): Promise<GauntletVerdict> {
-    const env = opts.env ?? process.env
+    // 구독 랩핑: stray API 키 제거 → CLI 가 로그인된 구독 사용 (authMode 따름)
+    const env = authScrubbedEnv(opts.env ?? process.env)
     const judges = opts.judges?.length ? opts.judges : DEFAULT_JUDGES
     const maxDiff = opts.maxDiffBytes ?? 120_000
+    const retries = opts.rateLimitRetries ?? 1
+    const backoff = opts.rateLimitBackoffMs ?? 30_000
 
     // diff 수집
     let diff = ''
@@ -112,9 +124,9 @@ export class GauntletRunner {
     const prompt =
       PROMPT_HEADER + diff + (truncated ? '\n\n[... diff 잘림 — 큰 변경, 핵심만 검수 ...]' : '')
 
-    // 심판 병렬 실행
+    // 심판 병렬 실행 + rate-limit 시 백오프 재시도 (구독 한도 대응)
     const results = await Promise.all(
-      judges.map((j) => this.runJudge(j, prompt, opts.workspacePath, env)),
+      judges.map((j) => this.runJudgeWithRetry(j, prompt, opts.workspacePath, env, retries, backoff)),
     )
 
     // 합의/단독 분리
@@ -173,6 +185,25 @@ export class GauntletRunner {
     return verdict
   }
 
+  /** rate_limited 면 백오프 후 재시도. auth/error 는 즉시 반환 (재시도 무의미). */
+  private async runJudgeWithRetry(
+    judge: JudgeSpec,
+    prompt: string,
+    cwd: string,
+    env: NodeJS.ProcessEnv,
+    retries: number,
+    backoffMs: number,
+  ): Promise<JudgeResult> {
+    let last = await this.runJudge(judge, prompt, cwd, env)
+    let attempt = 0
+    while (last.status === 'rate_limited' && attempt < retries) {
+      await new Promise((r) => setTimeout(r, backoffMs * Math.pow(2, attempt)))
+      attempt++
+      last = await this.runJudge(judge, prompt, cwd, env)
+    }
+    return last
+  }
+
   private async runJudge(
     judge: JudgeSpec,
     prompt: string,
@@ -180,6 +211,7 @@ export class GauntletRunner {
     env: NodeJS.ProcessEnv,
   ): Promise<JudgeResult> {
     const spec = resolveProvider(judge.model)
+    const base = { model: judge.model, provider: spec.provider }
     try {
       let stdout = ''
       if (spec.provider === 'claude') {
@@ -192,8 +224,12 @@ export class GauntletRunner {
           maxBuffer: 16 * 1024 * 1024,
         })
         stdout = r.stdout
+        // claude --output-format json: 에러도 exit 0 + 봉투 안 is_error 로 옴
+        const cls = this.classifyClaudeEnvelope(stdout)
+        if (cls) {
+          return { ...base, ok: false, status: cls.status, clean: false, findings: [], error: cls.message }
+        }
       } else {
-        // codex exec — 비대화형. 프롬프트는 인자로.
         const args = ['exec', '--dangerously-bypass-approvals-and-sandbox']
         if (spec.modelArg) args.push('-m', spec.modelArg)
         args.push(prompt)
@@ -207,23 +243,55 @@ export class GauntletRunner {
       }
       const parsed = this.extractJson(stdout, spec.provider)
       return {
-        model: judge.model,
-        provider: spec.provider,
+        ...base,
         ok: true,
+        status: 'ok',
         clean: parsed.clean ?? (parsed.findings?.length ?? 0) === 0,
         findings: this.sanitizeFindings(parsed.findings ?? []),
         rawExcerpt: stdout.slice(0, 400),
       }
     } catch (err) {
+      // execFile throw (non-zero exit) — codex 등. 메시지로 분류.
+      const msg = (err as Error).message
       return {
-        model: judge.model,
-        provider: spec.provider,
+        ...base,
         ok: false,
+        status: this.classifyErrorText(msg),
         clean: false,
         findings: [],
-        error: (err as Error).message.slice(0, 300),
+        error: msg.slice(0, 300),
       }
     }
+  }
+
+  /** claude json 봉투에서 에러 분류. 정상이면 null. */
+  private classifyClaudeEnvelope(raw: string): { status: JudgeStatus; message: string } | null {
+    try {
+      const env = JSON.parse(raw)
+      if (!env || typeof env !== 'object') return null
+      if (env.is_error === true || typeof env.api_error_status === 'number') {
+        const code = env.api_error_status as number | undefined
+        const text = String(env.result ?? env.error ?? 'unknown error')
+        if (code === 429) return { status: 'rate_limited', message: text }
+        if (code === 402) return { status: 'auth', message: text }
+        return { status: this.classifyErrorText(text), message: text }
+      }
+    } catch {
+      // 봉투 아님 — 정상 텍스트일 수 있음 (extractJson 이 처리)
+    }
+    return null
+  }
+
+  /** 에러 텍스트 키워드로 분류 (codex stderr / claude result 공용). */
+  private classifyErrorText(text: string): JudgeStatus {
+    const t = text.toLowerCase()
+    if (/rate.?limit|usage limit|too many requests|429|quota|resets at|try again/.test(t)) {
+      return 'rate_limited'
+    }
+    if (/credit|balance|billing|payment|unauthor|not logged in|login|402|401/.test(t)) {
+      return 'auth'
+    }
+    return 'error'
   }
 
   /**
@@ -329,7 +397,13 @@ export class GauntletRunner {
       lines.push('')
     }
     for (const j of v.judges.filter((x) => !x.ok)) {
-      lines.push(`> ⚠️ 심판 ${j.model} 실패: ${j.error}`)
+      const tag =
+        j.status === 'rate_limited'
+          ? '⏳ 한도 초과 (재시도 소진)'
+          : j.status === 'auth'
+            ? '🔑 인증/크레딧 — 구독 로그인 또는 authMode 확인'
+            : '⚠️ 실패'
+      lines.push(`> ${tag} — 심판 ${j.model}: ${j.error}`)
     }
     return lines.join('\n') + '\n'
   }
