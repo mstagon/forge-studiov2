@@ -116,9 +116,11 @@
         "from": "electron/services",
         "to": "forge-cli/electron/services",
         "filter": [
-          "TeamOperations.ts",
+          "ForgeConfig.ts",
+          "GauntletRunner.ts",
           "ProviderRouter.ts",
-          "ForgeConfig.ts"
+          "TeamOperations.ts",
+          "VaultSync.ts"
         ]
       },
       {

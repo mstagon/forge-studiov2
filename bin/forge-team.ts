@@ -20,6 +20,7 @@
 import path from 'path'
 import { TeamOperations } from '../electron/services/TeamOperations.ts'
 import { loadForgeConfig } from '../electron/services/ForgeConfig.ts'
+import { GauntletRunner } from '../electron/services/GauntletRunner.ts'
 import type {
   TeamCreateMember,
   WorktreeStrategy,
@@ -225,6 +226,34 @@ async function cmdArchive(flags: Map<string, string>): Promise<void> {
   const result = await ops.archiveTeam(workspacePath, teamId, { force })
   emit(result)
   if (!result.ok) process.exit(2)
+}
+
+async function cmdGauntlet(flags: Map<string, string>): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  const range = flags.get('range') ?? 'HEAD~1..HEAD'
+  // 심판: --judges 우선, 없으면 ForgeConfig.gauntletJudges (cross-provider 기본)
+  const judgesFlag = flags.get('judges')
+  const judgeModels = judgesFlag
+    ? judgesFlag.split(',').map((s) => s.trim()).filter(Boolean)
+    : loadForgeConfig().gauntletJudges
+  const runner = new GauntletRunner()
+  const verdict = await runner.run({
+    workspacePath,
+    range,
+    judges: judgeModels.map((model) => ({ model })),
+    env: { ...process.env },
+  })
+  emit({
+    range: verdict.range,
+    blockerCount: verdict.blockerCount,
+    consensus: verdict.consensus.length,
+    solo: verdict.solo.length,
+    judges: verdict.judges.map((j) => ({ model: j.model, ok: j.ok, clean: j.clean, findings: j.findings.length })),
+    reportPath: verdict.reportPath,
+    jsonPath: verdict.jsonPath,
+  })
+  // CI 게이트: blocker 있으면 exit 3
+  if (verdict.blockerCount > 0) process.exit(3)
 }
 
 async function cmdPause(flags: Map<string, string>): Promise<void> {
@@ -490,6 +519,8 @@ function printHelp(): void {
       '           (--no-archive 로 정리 옵트아웃)',
       '  archive  worktree/tmux/브랜치 정리, config 는 history 보존',
       '           (미통합 commit 있으면 거부 — --force 로 강제)',
+      '  gauntlet cross-provider 적대 심판 — diff 를 claude+codex 가 검수',
+      '           --range <git range> [--judges m1,m2]. blocker 시 exit 3',
       '  pause    Pause an entire team or a single member (--agent-id)',
       '  resume   Resume an entire team or a single member (--agent-id)',
       '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
@@ -568,6 +599,10 @@ async function main(): Promise<void> {
         break
       case 'archive':
         await cmdArchive(flags)
+        break
+      case 'gauntlet':
+      case 'judge':
+        await cmdGauntlet(flags)
         break
       case 'pause':
         await cmdPause(flags)
