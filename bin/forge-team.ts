@@ -22,6 +22,7 @@ import { TeamOperations } from '../electron/services/TeamOperations.ts'
 import { loadForgeConfig } from '../electron/services/ForgeConfig.ts'
 import { GauntletRunner } from '../electron/services/GauntletRunner.ts'
 import { FactoryRunner, type FactoryJob } from '../electron/services/FactoryRunner.ts'
+import { FlightRecorder } from '../electron/services/FlightRecorder.ts'
 import type {
   TeamCreateMember,
   WorktreeStrategy,
@@ -282,6 +283,42 @@ async function cmdFactory(flags: Map<string, string>, sub: string): Promise<void
     }
     default:
       fail(`unknown factory subcommand: ${sub} (add|list|status|run)`)
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// recorder — Flight Recorder (타임라인 기록/조회 + 시점 분기)
+// ────────────────────────────────────────────────────────────────────
+
+const recorder = new FlightRecorder(ops)
+
+async function cmdRecorder(flags: Map<string, string>, sub: string): Promise<void> {
+  const workspacePath = resolveWorkspace(flags)
+  switch (sub) {
+    case 'capture': {
+      const teamId = requireFlag(flags, 'team-id')
+      const r = await recorder.capturePanes(workspacePath, teamId, { ...process.env })
+      emit({ ok: true, ...r })
+      break
+    }
+    case 'timeline': {
+      const teamId = requireFlag(flags, 'team-id')
+      const limit = flags.get('limit') ? parseInt(flags.get('limit')!, 10) : 200
+      const events = await recorder.timeline(workspacePath, teamId, { limit, env: { ...process.env } })
+      emit({ teamId, count: events.length, events })
+      break
+    }
+    case 'fork': {
+      const teamId = requireFlag(flags, 'team-id')
+      const atCommit = requireFlag(flags, 'at')
+      const asAgent = requireFlag(flags, 'as')
+      const r = await recorder.fork(workspacePath, { teamId, atCommit, asAgent, env: { ...process.env } })
+      emit(r)
+      if (!r.ok) process.exit(2)
+      break
+    }
+    default:
+      fail(`unknown recorder subcommand: ${sub} (capture|timeline|fork)`)
   }
 }
 
@@ -582,6 +619,10 @@ function printHelp(): void {
       '    add    --id <id> --goal "..." --members <spec> [--contract p] [--depends a,b]',
       '    list   큐 + 각 job 상태',
       '    run    큐 자율 실행 [--judges m1,m2] [--job-timeout ms] → 아침 브리핑',
+      '  recorder Flight Recorder — 작업 타임라인 기록/조회 + 시점 분기',
+      '    timeline --team-id <id> [--limit n]  통합 이벤트 스트림',
+      '    capture  --team-id <id>              멤버 pane 출력 스냅샷',
+      '    fork     --team-id <id> --at <sha> --as <agent>  과거 시점 분기',
       '  pause    Pause an entire team or a single member (--agent-id)',
       '  resume   Resume an entire team or a single member (--agent-id)',
       '  plan     goal → phase 별 plan.json template 출력 (v0.7.0+)',
@@ -669,6 +710,11 @@ async function main(): Promise<void> {
         // 두 번째 위치 인자가 서브명령 (add/list/status/run)
         const sub = argv[1] && !argv[1].startsWith('--') ? argv[1] : 'list'
         await cmdFactory(flags, sub)
+        break
+      }
+      case 'recorder': {
+        const sub = argv[1] && !argv[1].startsWith('--') ? argv[1] : 'timeline'
+        await cmdRecorder(flags, sub)
         break
       }
       case 'pause':
