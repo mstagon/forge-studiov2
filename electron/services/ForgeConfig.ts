@@ -31,6 +31,11 @@ export interface ForgeConfig {
   activeTeamWarnThreshold: number
   /** merge 성공 시 worktree/tmux/브랜치 자동 archive. */
   autoArchiveOnMerge: boolean
+  /** Obsidian 볼트 경로 (v0.19). 설정 시 Gauntlet 리포트/브리핑을 미러.
+   *  빈 문자열 = 비활성. */
+  obsidianVaultPath: string
+  /** Gauntlet 기본 심판 모델 목록 (cross-provider). */
+  gauntletJudges: string[]
 }
 
 export const FORGE_CONFIG_DEFAULTS: ForgeConfig = {
@@ -41,6 +46,8 @@ export const FORGE_CONFIG_DEFAULTS: ForgeConfig = {
   soloTeamGuard: true,
   activeTeamWarnThreshold: 3,
   autoArchiveOnMerge: true,
+  obsidianVaultPath: '',
+  gauntletJudges: ['claude-opus-4-8', 'gpt-5.5'],
 }
 
 export function forgeConfigPath(): string {
@@ -80,6 +87,12 @@ export function loadForgeConfig(): ForgeConfig {
     soloTeamGuard: asBool(raw.soloTeamGuard, d.soloTeamGuard),
     activeTeamWarnThreshold: clampInt(raw.activeTeamWarnThreshold, 1, 50, d.activeTeamWarnThreshold),
     autoArchiveOnMerge: asBool(raw.autoArchiveOnMerge, d.autoArchiveOnMerge),
+    obsidianVaultPath:
+      typeof raw.obsidianVaultPath === 'string' ? raw.obsidianVaultPath.trim() : d.obsidianVaultPath,
+    gauntletJudges:
+      Array.isArray(raw.gauntletJudges) && raw.gauntletJudges.every((j) => typeof j === 'string') && raw.gauntletJudges.length > 0
+        ? (raw.gauntletJudges as string[])
+        : d.gauntletJudges,
   }
 }
 
@@ -94,6 +107,11 @@ export function saveForgeConfig(partial: Partial<ForgeConfig>): ForgeConfig {
     tmuxHistoryLimit: clampInt(merged.tmuxHistoryLimit, 100, 200_000, FORGE_CONFIG_DEFAULTS.tmuxHistoryLimit),
     tmuxCleanupDelaySec: clampInt(merged.tmuxCleanupDelaySec, 0, 3600, FORGE_CONFIG_DEFAULTS.tmuxCleanupDelaySec),
     activeTeamWarnThreshold: clampInt(merged.activeTeamWarnThreshold, 1, 50, FORGE_CONFIG_DEFAULTS.activeTeamWarnThreshold),
+    obsidianVaultPath: typeof merged.obsidianVaultPath === 'string' ? merged.obsidianVaultPath.trim() : '',
+    gauntletJudges:
+      Array.isArray(merged.gauntletJudges) && merged.gauntletJudges.length > 0
+        ? merged.gauntletJudges
+        : FORGE_CONFIG_DEFAULTS.gauntletJudges,
   }
   const file = forgeConfigPath()
   fs.mkdirSync(path.dirname(file), { recursive: true })
