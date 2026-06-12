@@ -269,7 +269,9 @@ async function cmdFactory(flags: Map<string, string>, sub: string): Promise<void
     case 'run': {
       const dateStamp = flags.get('date') ?? new Date().toISOString().slice(0, 10)
       const judges = flags.get('judges')?.split(',').map((s) => s.trim()).filter(Boolean)
-      const jobTimeoutMs = flags.get('job-timeout') ? parseInt(flags.get('job-timeout')!, 10) : 0
+      // 기본 4시간 — 멤버가 complete 신호를 안 보내면 야간 실행이 영원히 hang.
+      // 0 = 무제한 (명시해야만). job 별 타임아웃 시 blocked + worktree 보존.
+      const jobTimeoutMs = flags.get('job-timeout') ? parseInt(flags.get('job-timeout')!, 10) : 4 * 60 * 60 * 1000
       const result = await factory.run({
         workspacePath,
         dateStamp,
