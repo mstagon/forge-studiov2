@@ -4,6 +4,15 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.18.1] — 2026-06-12
+
+### Changed — 병렬 3단 선택 명문화 (하네스 1.1.0)
+
+- **Workflow / forge-team / 직접** 판정 체계: 분 단위 짧은 fan-out (리서치·
+  다관점 리뷰 패널) 은 Workflow 도구, forge-team 은 ①cross-provider 적대 검수
+  ②관전/개입 ③세션 독립 장기 잡 — 3용도 전용으로 집중. Agent/Task 차단 유지.
+- 프리셋 CLAUDE.md overlay 4종 동기 재생성.
+
 ## [0.18.0] — 2026-06-11
 
 ### Added — 프리셋 2라운드
