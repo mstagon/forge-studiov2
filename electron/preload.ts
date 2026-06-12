@@ -628,6 +628,17 @@ const api = {
       ipcRenderer.invoke('settings:removeEnvVar', opts),
   },
 
+  // ─── Factory 관제실 (큐 / 브리핑 / Gauntlet 리포트) ──────────────
+  factory: {
+    status: (
+      workspacePath: string,
+    ): Promise<{
+      queue: { jobs: Array<Record<string, unknown>> }
+      briefing: { name: string; content: string } | null
+      gauntlet: Array<{ name: string; range: string; blockerCount: number; consensus: number; solo: number }>
+    }> => ipcRenderer.invoke('factory:status', workspacePath),
+  },
+
   // ─── ForgeConfig (팀 동작 설정 — ~/.forge-studio/config.json) ─────
   forgeConfig: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('forgeConfig:get'),

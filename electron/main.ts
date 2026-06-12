@@ -599,6 +599,65 @@ ipcMain.handle('preset:delete', async (_event, presetId: string) => {
   return presetManager.deletePreset(presetId)
 })
 
+// ─── Factory 관제실 (v0.21) — 큐 / 아침 브리핑 / Gauntlet 리포트 읽기 전용 ───
+ipcMain.handle('factory:status', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    return { queue: { jobs: [] }, briefing: null, gauntlet: [] }
+  }
+  const factoryDir = path.join(workspacePath, '.claude', 'factory')
+  const gauntletDir = path.join(workspacePath, '.claude', 'gauntlet')
+
+  let queue: { jobs: unknown[] } = { jobs: [] }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(factoryDir, 'queue.json'), 'utf-8'))
+    if (parsed && Array.isArray(parsed.jobs)) queue = parsed
+  } catch {
+    // 없음
+  }
+
+  let briefing: { name: string; content: string } | null = null
+  try {
+    const files = fs
+      .readdirSync(factoryDir)
+      .filter((f) => f.startsWith('briefing-') && f.endsWith('.md'))
+      .sort()
+      .reverse()
+    if (files[0]) {
+      briefing = { name: files[0], content: fs.readFileSync(path.join(factoryDir, files[0]), 'utf-8') }
+    }
+  } catch {
+    // 없음
+  }
+
+  const gauntlet: Array<{ name: string; range: string; blockerCount: number; consensus: number; solo: number }> = []
+  try {
+    const files = fs
+      .readdirSync(gauntletDir)
+      .filter((f) => f.endsWith('.json'))
+      .sort()
+      .reverse()
+      .slice(0, 8)
+    for (const f of files) {
+      try {
+        const v = JSON.parse(fs.readFileSync(path.join(gauntletDir, f), 'utf-8'))
+        gauntlet.push({
+          name: f,
+          range: String(v.range ?? ''),
+          blockerCount: Number(v.blockerCount ?? 0),
+          consensus: Array.isArray(v.consensus) ? v.consensus.length : 0,
+          solo: Array.isArray(v.solo) ? v.solo.length : 0,
+        })
+      } catch {
+        // 깨진 리포트 skip
+      }
+    }
+  } catch {
+    // 없음
+  }
+
+  return { queue, briefing, gauntlet }
+})
+
 // ─── IPC Handlers: Harness Authoring (CRUD) ─────────────────────────
 //
 // All authoring writes are gated by `assertTrackedWorkspace` — the renderer
