@@ -306,6 +306,28 @@ function TeamBehaviorCard() {
       }
     >
       <Row
+        label="인증 모드"
+        sub="subscription = 구독 랩핑 (spawn 시 stray API 키 제거 → 구독 로그인 사용). api = env 그대로"
+        right={
+          <select
+            value={String(cfg.authMode ?? 'subscription')}
+            onChange={(e) => save({ authMode: e.target.value })}
+            style={{
+              background: 'var(--bg-1)',
+              color: 'var(--text-1)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 4,
+              padding: '4px 6px',
+              fontSize: 11.5,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <option value="subscription">subscription</option>
+            <option value="api">api</option>
+          </select>
+        }
+      />
+      <Row
         label="기본 멤버 모델"
         sub="멤버 spawn 시 model 미지정이면 사용. forge-team CLI 도 동일 적용"
         right={
