@@ -16,7 +16,13 @@ import fs from 'fs'
  *   - GUI Settings 의 "팀 동작" 카드가 forgeConfig:get/set IPC 로 편집
  */
 
+export type AuthMode = 'subscription' | 'api'
+
 export interface ForgeConfig {
+  /** claude/codex 인증 모드 (v0.19.1). 'subscription' = 구독 랩핑 — spawn 시
+   *  stray API 키 env 를 제거해 구독 로그인을 쓰게 강제 (API 키가 있으면 CLI 가
+   *  구독을 무시하고 저단가 API 로 라우팅하는 문제 방지). 'api' = 그대로 둠. */
+  authMode: AuthMode
   /** 멤버 spawn 시 model 미지정이면 쓰는 기본 모델 id. */
   defaultMemberModel: string
   /** claude/codex 부팅 후 task prompt 주입까지 대기 (ms). codex 는 auto-update 로 더 걸릴 수 있음. */
@@ -39,6 +45,7 @@ export interface ForgeConfig {
 }
 
 export const FORGE_CONFIG_DEFAULTS: ForgeConfig = {
+  authMode: 'subscription',
   defaultMemberModel: 'claude-opus-4-8',
   memberBootWaitMs: 4000,
   tmuxHistoryLimit: 50_000,
@@ -77,6 +84,7 @@ export function loadForgeConfig(): ForgeConfig {
   }
   const d = FORGE_CONFIG_DEFAULTS
   return {
+    authMode: raw.authMode === 'api' ? 'api' : 'subscription',
     defaultMemberModel:
       typeof raw.defaultMemberModel === 'string' && raw.defaultMemberModel.trim()
         ? raw.defaultMemberModel.trim()
@@ -102,6 +110,7 @@ export function saveForgeConfig(partial: Partial<ForgeConfig>): ForgeConfig {
   // 저장 전에도 한 번 더 검증 (renderer 가 임의 값을 보낼 수 있음)
   const validated: ForgeConfig = {
     ...merged,
+    authMode: merged.authMode === 'api' ? 'api' : 'subscription',
     defaultMemberModel: merged.defaultMemberModel.trim() || FORGE_CONFIG_DEFAULTS.defaultMemberModel,
     memberBootWaitMs: clampInt(merged.memberBootWaitMs, 0, 60_000, FORGE_CONFIG_DEFAULTS.memberBootWaitMs),
     tmuxHistoryLimit: clampInt(merged.tmuxHistoryLimit, 100, 200_000, FORGE_CONFIG_DEFAULTS.tmuxHistoryLimit),
@@ -119,4 +128,22 @@ export function saveForgeConfig(partial: Partial<ForgeConfig>): ForgeConfig {
   fs.writeFileSync(tmp, JSON.stringify(validated, null, 2) + '\n', 'utf-8')
   fs.renameSync(tmp, file)
   return validated
+}
+
+/**
+ * 구독 랩핑 모드 (authMode='subscription') 이면 spawn 환경에서 stray API 키를
+ * 제거해 claude/codex CLI 가 로그인된 구독을 쓰게 한다. 문서상 ANTHROPIC_API_KEY
+ * 가 있으면 CLI 가 구독 대신 저단가 API 키로 라우팅된다 (= 크레딧 부족 에러의
+ * 원인). OAuth/구독 토큰은 보존. authMode='api' 면 env 그대로.
+ */
+export function authScrubbedEnv(
+  env: NodeJS.ProcessEnv,
+  authMode?: AuthMode,
+): NodeJS.ProcessEnv {
+  const mode = authMode ?? loadForgeConfig().authMode
+  if (mode !== 'subscription') return env
+  const out = { ...env }
+  delete out.ANTHROPIC_API_KEY
+  delete out.OPENAI_API_KEY
+  return out
 }
