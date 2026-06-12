@@ -4,6 +4,23 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] — 2026-06-12
+
+### Added — Gauntlet (cross-provider 적대 심판) + Obsidian 볼트
+
+- **Gauntlet** (`forge-team gauntlet --range <git range> [--judges m1,m2]`):
+  diff 를 여러 provider (claude + codex 기본) headless CLI 에 적대적으로 검수시켜
+  verdict 통합. 2개+ 심판이 같은 file:line 지적 시 confidence 승격 (교차 합의),
+  1개만이면 단독 주장으로 분리. blocker 발견 시 exit 3 (CI 게이트).
+  산출: `.claude/gauntlet/<ts>.{json,md}`. 중립 코드 심판은 서드파티만 가능한
+  구조적 차별점 — Anthropic/OpenAI 는 경쟁사 모델을 자기 심판에 안 넣는다.
+- **Obsidian 볼트 연동** (`ForgeConfig.obsidianVaultPath`): 설정 시 Gauntlet
+  리포트를 `<vault>/Forge/<workspace>/` 에 frontmatter (tags/verdict) +
+  [[wikilink]] 로 미러 — 그래프/백링크/검색 즉시 동작.
+- Settings → Agents "팀 동작" 카드에 Gauntlet 심판 / 볼트 경로 필드.
+- 자율 개발 공장 로드맵 (`docs/roadmap-factory.md`): Night Shift (v0.20) /
+  Flight Recorder (v0.21) 설계.
+
 ## [0.18.1] — 2026-06-12
 
 ### Changed — 병렬 3단 선택 명문화 (하네스 1.1.0)
