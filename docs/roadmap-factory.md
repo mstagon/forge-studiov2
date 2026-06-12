@@ -44,6 +44,17 @@
   frontmatter (tags: forge/gauntlet, date, verdict) + [[wikilink]] 로 그래프 연결.
 - Settings → Agents "팀 동작" 카드에 볼트 경로 필드.
 
+## 구독 랩핑 제약 (v0.19.1 — 전 단계 공통)
+
+claude/codex 는 **구독 랩핑**으로 작동 (API 키 아님). 함의:
+- **stray API 키 = 독**: ANTHROPIC_API_KEY 가 env 에 있으면 CLI 가 구독을 무시하고
+  저단가 API 로 라우팅 (= "크레딧 부족" 에러). `ForgeConfig.authMode='subscription'`
+  (기본) 이 spawn 전 `authScrubbedEnv` 로 제거. GauntletRunner + 멤버 spawn 적용 완료.
+- **한도 = 롤링 사용량** (토큰 크레딧 아님): 429 `rate_limit_error`. GauntletRunner 가
+  분류 + 백오프 재시도. **Night Shift 는 반드시 순차 + 넉넉한 백오프** — 밤새 버스트로
+  돌리면 5시간 한도 소진. factory run 은 한도 감지 시 일시정지 → resets 후 재개.
+- 분류: rate_limited(재시도) / auth(크레딧·로그인 — 사용자 개입) / error.
+
 ## v0.20 — Night Shift (자율 공장)
 
 - `<workspace>/.claude/factory/queue.json` — 계약 기반 작업 큐 (각 항목: contract 경로,
