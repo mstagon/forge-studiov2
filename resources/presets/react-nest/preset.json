@@ -1,0 +1,41 @@
+{
+  "name": "React + NestJS (풀스택)",
+  "description": "React 19 + Vite 프론트 + NestJS + Prisma 백엔드. 분리 레포(client/server), contract-first.",
+  "extends": "default",
+  "_sync_note": "CLAUDE.md overlay 는 base 의 Project 섹션 교체본 — base CLAUDE.md 대폭 변경 시 재생성",
+  "exclude": [
+    "agents/flutter-ui.md",
+    "agents/riverpod-logic.md",
+    "agents/nextjs-cms.md",
+    "skills/dio-retrofit",
+    "skills/flutter-driver-e2e",
+    "skills/freezed-models",
+    "skills/go-router",
+    "skills/mobile-design",
+    "skills/mobile-touch",
+    "skills/riverpod-patterns",
+    "skills/nextjs-patterns"
+  ],
+  "optionalMcp": [
+    {
+      "id": "supabase",
+      "label": "Supabase MCP",
+      "hint": "관리형 Postgres/인증으로 쓸 때. SUPABASE_ACCESS_TOKEN 필요 — Settings → Integrations"
+    },
+    {
+      "id": "vercel",
+      "label": "Vercel MCP",
+      "hint": "React 프론트 배포/프리뷰 (remote MCP — 브라우저 인증)"
+    },
+    {
+      "id": "railway",
+      "label": "Railway MCP",
+      "hint": "NestJS 서버 배포/로그/환경변수"
+    },
+    {
+      "id": "playwright",
+      "label": "Playwright MCP",
+      "hint": "프론트 E2E / 브라우저 자동화"
+    }
+  ]
+}
