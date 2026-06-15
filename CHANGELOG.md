@@ -4,6 +4,15 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.21.1] — 2026-06-15
+
+### Added
+- **react-nest 프리셋**: React 19 + Vite 프론트 + NestJS + Prisma 백엔드 풀스택.
+  Flutter/CMS 계열 제외, NestJS+Prisma 유지. 신규 `react-ui` agent +
+  `react-query-patterns` 스킬 (TanStack Query 서버상태 패턴) + feature-sliced
+  architecture. contract-first. 옵트인 MCP: supabase/vercel/railway/playwright.
+  번들 프리셋 5종 → 6종 (default 제외).
+
 ## [0.21.0] — 2026-06-12
 
 ### Added — 공장 관제실 GUI
