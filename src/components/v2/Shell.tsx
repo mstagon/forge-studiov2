@@ -215,6 +215,7 @@ export function Shell({
       if (e.key === '2') { e.preventDefault(); onView('git');       return }
       if (e.key === '3') { e.preventDefault(); onView('dashboard'); return }
       if (e.key === '4') { e.preventDefault(); onView('factory');   return }
+      if (e.key === '5') { e.preventDefault(); onView('recorder');  return }
       if (e.key === ',') {
         e.preventDefault()
         if (onOpenSettings) onOpenSettings()

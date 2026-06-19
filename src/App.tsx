@@ -12,6 +12,7 @@ import { useLiveTerminalsStore } from './stores/liveTerminals'
 import { WorkspaceV2 } from './components/v2/WorkspaceV2'
 import { SettingsFull } from './components/v2/SettingsFull'
 import { FactoryView } from './components/v2/FactoryView'
+import { RecorderView } from './components/v2/RecorderView'
 import { Wizard, type WizardResult } from './components/v2/Wizard'
 import { CommandPalette, DEFAULT_PALETTE_ITEMS } from './components/v2/CommandPalette'
 import { GitPanelWired } from './components/v2/wired/GitPanelWired'
@@ -626,6 +627,8 @@ export default function App() {
     secondaryView = <DashboardPanelWired onCmdK={() => setPaletteOpen(true)} />
   } else if (view === 'factory') {
     secondaryView = <FactoryView />
+  } else if (view === 'recorder') {
+    secondaryView = <RecorderView />
   } else if (view === 'settings') {
     secondaryView = <SettingsFull workspaces={workspaceSummaries} workspace={activeSummary} />
   }
@@ -701,6 +704,8 @@ export default function App() {
             setView('dashboard')
           } else if (action === 'go-factory' || action === 'view-factory') {
             setView('factory')
+          } else if (action === 'go-recorder' || action === 'view-recorder') {
+            setView('recorder')
           } else if (action === 'go-teams') {
             setView('workspace')
           } else if (action === 'go-settings' || action === 'open-settings') {

@@ -70,6 +70,7 @@ export const DEFAULT_PALETTE_ITEMS: PaletteItem[] = [
   { g: 'Workspace', t: 'Git 보기',       k: '⌘2', action: 'go-git' },
   { g: 'Workspace', t: 'Dashboard 보기', k: '⌘3', action: 'go-dashboard' },
   { g: 'Workspace', t: '공장 관제실',    k: '⌘4', action: 'go-factory' },
+  { g: 'Workspace', t: 'Flight Recorder', k: '⌘5', action: 'go-recorder' },
   { g: 'Workspace', t: 'Teams 보기',              action: 'go-teams' },
   { g: 'Workspace', t: 'Settings 보기',  k: '⌘,', action: 'go-settings' },
 
