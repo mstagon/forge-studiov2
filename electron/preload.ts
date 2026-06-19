@@ -639,6 +639,21 @@ const api = {
     }> => ipcRenderer.invoke('factory:status', workspacePath),
   },
 
+  // ─── Flight Recorder (팀 작업 타임라인 스크럽) ───────────────────
+  recorder: {
+    teams: (workspacePath: string): Promise<Array<Record<string, unknown>>> =>
+      ipcRenderer.invoke('recorder:teams', workspacePath),
+    timeline: (
+      workspacePath: string,
+      teamId: string,
+      limit?: number,
+    ): Promise<{
+      teamId: string
+      events: Array<{ ts: number; agent: string; kind: string; summary: string; detail?: Record<string, unknown> }>
+      error?: string
+    }> => ipcRenderer.invoke('recorder:timeline', workspacePath, teamId, limit),
+  },
+
   // ─── ForgeConfig (팀 동작 설정 — ~/.forge-studio/config.json) ─────
   forgeConfig: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('forgeConfig:get'),

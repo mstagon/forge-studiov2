@@ -11,6 +11,8 @@ import { PresetManager } from './services/PresetManager'
 import { GitManager } from './services/GitManager'
 import { UpdateChecker } from './services/UpdateChecker'
 import { AgentTeamWatcher } from './services/AgentTeamWatcher'
+import { TeamOperations } from './services/TeamOperations'
+import { FlightRecorder } from './services/FlightRecorder'
 import { FsManager, type FsListOpts } from './services/FsManager'
 import { CodeReviewGraphManager, type InstallMethod } from './services/CodeReviewGraphManager'
 import { HookProfiler } from './services/HookProfiler'
@@ -39,6 +41,13 @@ const updateChecker = new UpdateChecker()
 const agentTeamWatcher = new AgentTeamWatcher()
 const fsManager = new FsManager()
 const hookProfiler = new HookProfiler()
+// Flight Recorder (v0.23) — GUI 타임라인 조회용 독립 인스턴스.
+// tmux 는 PathManager 의 bundled bin 우선 (Watcher 와 동일 해석).
+const teamOps = new TeamOperations({
+  tmuxBin: () => pathManager.getTmux() ?? 'tmux',
+  tmuxEnv: () => pathManager.augmentEnv({ ...process.env }),
+})
+const flightRecorder = new FlightRecorder(teamOps)
 const teamActivityTracker = new TeamActivityTracker()
 
 /**
@@ -657,6 +666,32 @@ ipcMain.handle('factory:status', async (_event, workspacePath: string) => {
 
   return { queue, briefing, gauntlet }
 })
+
+// ─── Flight Recorder (v0.23) — 팀 타임라인 조회 (GUI 스크럽) ──────────
+ipcMain.handle('recorder:teams', async (_event, workspacePath: string) => {
+  if (!workspacePath || typeof workspacePath !== 'string') return []
+  try {
+    return await teamOps.list(workspacePath)
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle(
+  'recorder:timeline',
+  async (_event, workspacePath: string, teamId: string, limit?: number) => {
+    if (!workspacePath || !teamId) return { teamId, events: [] }
+    try {
+      const events = await flightRecorder.timeline(workspacePath, teamId, {
+        limit: typeof limit === 'number' ? limit : 300,
+        env: process.env,
+      })
+      return { teamId, events }
+    } catch (err) {
+      return { teamId, events: [], error: (err as Error).message }
+    }
+  },
+)
 
 // ─── IPC Handlers: Harness Authoring (CRUD) ─────────────────────────
 //
