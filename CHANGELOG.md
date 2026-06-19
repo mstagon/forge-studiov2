@@ -4,6 +4,15 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-06-20
+
+### Added — Flight Recorder GUI
+
+- **Flight Recorder 뷰** (⌘5 / 사이드바 "기록"): 팀 작업 타임라인을 GUI 에서
+  스크럽. 활동 + tmux pane 출력 + inbox + git 커밋을 단일 시계열로, 슬라이더로
+  과거 시점까지의 이벤트만 표시 (블랙박스 → 가시화). `recorder:teams/timeline` IPC.
+  fork(시점 분기) 안내. CLI-only 였던 Flight Recorder 의 GUI 짝.
+
 ## [0.22.0] — 2026-06-20
 
 ### Added — Gauntlet 적대적 CI (외부 채택용)
