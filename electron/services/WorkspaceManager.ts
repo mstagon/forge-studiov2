@@ -258,6 +258,11 @@ export class WorkspaceManager {
       if (await fs.pathExists(contractsSrc)) {
         await fs.copy(contractsSrc, path.join(projectPath, 'contracts'), { overwrite: false })
       }
+      // .github/ (Gauntlet 적대적 CI 워크플로 + 번들) 시드 — v0.22
+      const githubSrc = path.join(options.templatePath, '..', '.github')
+      if (await fs.pathExists(githubSrc)) {
+        await fs.copy(githubSrc, path.join(projectPath, '.github'), { overwrite: false })
+      }
     }
 
     // Initialize git
@@ -552,6 +557,20 @@ export class WorkspaceManager {
     if (await fs.pathExists(contractsSrc)) {
       await fs.ensureDir(path.join(workspacePath, 'contracts'))
       await fs.copy(contractsSrc, path.join(workspacePath, 'contracts'), { overwrite: false })
+    }
+
+    // .github/ — Gauntlet 워크플로 + 번들 (forge-gauntlet.mjs) 은 Forge 소유라
+    // 갱신 시 덮어씀. 사용자 다른 워크플로는 같은 디렉토리라도 건드리지 않음
+    // (forge-gauntlet.mjs / workflows/gauntlet.yml 만 overwrite).
+    const githubSrc = path.join(templatePath, '..', '.github')
+    if (await fs.pathExists(githubSrc)) {
+      await fs.copy(githubSrc, path.join(workspacePath, '.github'), {
+        overwrite: true,
+        filter: (src) => {
+          const rel = path.relative(githubSrc, src)
+          return rel === '' || rel.startsWith('forge-gauntlet') || rel.startsWith('workflows')
+        },
+      })
     }
 
     // Write version marker — 하네스 독립 버전 (없으면 앱 버전 fallback)

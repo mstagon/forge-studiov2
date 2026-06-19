@@ -16,13 +16,14 @@
     "sync-harness": "bash scripts/sync-harness.sh",
     "bundle:tools": "bash scripts/download-bundled-tools.sh && bash scripts/build-cr-graph-venv.sh",
     "electron:build": "npm run sync-harness && npm run bundle:tools && npm run build:renderer && electron-builder",
-    "release:dmg": "npm run bundle:tools && npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 -c.mac.identity=null",
+    "release:dmg": "npm run build:gauntlet-action && npm run bundle:tools && npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 -c.mac.identity=null",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "team": "node --experimental-strip-types --no-warnings bin/forge-team.ts",
     "typecheck": "tsc --noEmit",
-    "postinstall": "electron-rebuild && node scripts/patch-isbinaryfile.js"
+    "postinstall": "electron-rebuild && node scripts/patch-isbinaryfile.js",
+    "build:gauntlet-action": "node scripts/build-gauntlet-action.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
