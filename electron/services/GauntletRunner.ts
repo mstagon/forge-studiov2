@@ -69,6 +69,9 @@ export interface GauntletOptions {
   /** 심판 구성. 기본 = claude + codex 혼성 (cross-provider). */
   judges?: JudgeSpec[]
   env?: NodeJS.ProcessEnv
+  /** 인증 모드 override (CI 용). 'api' 면 env 스크럽 안 함 — secrets 의 API
+   *  키를 그대로 사용. 미지정 시 ForgeConfig.authMode (기본 subscription). */
+  authMode?: 'subscription' | 'api'
   /** diff 가 이 바이트를 넘으면 잘라서 프롬프트에 (토큰 폭발 방지). */
   maxDiffBytes?: number
   /** rate-limit 시 재시도 횟수 (구독 한도 대응). 기본 1 — Night Shift 는 더 크게. */
@@ -94,8 +97,9 @@ minor=경계 케이스, nit=권장. confidence 는 본인 확신도.
 
 export class GauntletRunner {
   async run(opts: GauntletOptions): Promise<GauntletVerdict> {
-    // 구독 랩핑: stray API 키 제거 → CLI 가 로그인된 구독 사용 (authMode 따름)
-    const env = authScrubbedEnv(opts.env ?? process.env)
+    // 구독 랩핑: stray API 키 제거 → CLI 가 로그인된 구독 사용 (authMode 따름).
+    // CI 는 opts.authMode='api' 로 스크럽 끄고 secrets 의 API 키 사용.
+    const env = authScrubbedEnv(opts.env ?? process.env, opts.authMode)
     const judges = opts.judges?.length ? opts.judges : DEFAULT_JUDGES
     const maxDiff = opts.maxDiffBytes ?? 120_000
     const retries = opts.rateLimitRetries ?? 1
