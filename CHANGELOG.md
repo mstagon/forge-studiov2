@@ -4,6 +4,20 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-06-20
+
+### Added — Gauntlet 적대적 CI (외부 채택용)
+
+- **GitHub Action 워크플로** (`.github/workflows/gauntlet.yml`) + **단일 파일
+  번들** (`.github/forge-gauntlet.mjs`, esbuild): PR 마다 claude+codex 가
+  cross-provider 적대 검수, blocker 시 체크 실패 + 리포트 코멘트. forge-cli
+  설치 불필요 (self-contained) — Forge 안 써도 워크플로만 복사하면 동작.
+  중립 코드 심판은 서드파티만 가능한 구조적 차별점.
+- `GauntletOptions.authMode` override — CI 는 'api' 로 env 스크럽 끄고 secrets
+  API 키 사용 (구독 OAuth 는 headless CI 불가).
+- 워크스페이스 생성/하네스 업데이트 시 `.github/` (워크플로 + 번들) 자동 시드.
+- `npm run build:gauntlet-action` — release 파이프라인에 번들 단계 연결.
+
 ## [0.21.1] — 2026-06-15
 
 ### Added
