@@ -1,0 +1,74 @@
+# Forge Gauntlet — cross-provider 적대적 CI
+#
+# 모든 PR 의 diff 를 claude + codex (서로 다른 모델 패밀리) 가 적대적으로 검수.
+# 중립 코드 심판은 서드파티만 가능 — Anthropic 은 GPT 를, OpenAI 는 Claude 를
+# 자기 CI 에 안 넣는다. Forge 는 둘 다 부른다.
+#
+# 준비 (한 번):
+#   1. 이 파일 + .github/forge-gauntlet.mjs 를 repo 에 커밋 (Forge 워크스페이스면 자동 ship).
+#   2. repo Secrets 에 ANTHROPIC_API_KEY, OPENAI_API_KEY 등록.
+#      (CI 는 구독 OAuth 불가 — API 키 필요. 토큰 사용량만큼 과금.)
+#   3. 심판 모델을 바꾸려면 아래 --judges 수정.
+#
+# blocker 발견 시 체크 실패 + PR 코멘트로 리포트.
+
+name: Forge Gauntlet (적대 검수)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gauntlet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # base..head diff 위해 전체 히스토리
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install judge CLIs
+        run: |
+          npm install -g @anthropic-ai/claude-code @openai/codex || true
+
+      - name: Run Gauntlet
+        id: gauntlet
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set +e
+          node .github/forge-gauntlet.mjs \
+            --range "origin/${{ github.base_ref }}...HEAD" \
+            --judges "claude-opus-4-8,gpt-5.5" \
+            --workspace "$GITHUB_WORKSPACE" | tee /tmp/gauntlet-report.md
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Post verdict comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            let body = '## 🥊 Forge Gauntlet 적대 검수\n\n'
+            try { body += fs.readFileSync('/tmp/gauntlet-report.md', 'utf8') }
+            catch { body += '_리포트 생성 실패 — 워크플로 로그 확인._' }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            })
+
+      - name: Fail on blockers
+        if: steps.gauntlet.outputs.exit_code == '3'
+        run: |
+          echo "::error::Gauntlet blocker 발견 — PR 코멘트의 리포트 확인"
+          exit 1
