@@ -105,6 +105,36 @@ api.harness.readFile(absPath)               // sandboxed: only inside .claude/ o
 
 ---
 
+## Forge Gauntlet — cross-provider adversarial review
+
+The one thing a single-vendor tool **structurally cannot** ship: a neutral code
+judge. Anthropic won't put a GPT reviewer in its product; OpenAI won't put Claude
+in theirs. Forge calls **both** and makes them argue.
+
+```bash
+# 로컬 — 변경분을 claude + codex 가 적대적으로 검수
+forge-team gauntlet --workspace . --range main...HEAD
+# → 2개+ 심판이 같은 file:line 지적 = 교차 합의(승격), 1개만 = 단독 주장
+#   blocker 발견 시 exit 3 (CI 게이트)
+```
+
+### Adversarial CI (GitHub Action)
+
+워크스페이스를 만들면 `.github/workflows/gauntlet.yml` + 단일 파일 번들
+`.github/forge-gauntlet.mjs` 가 함께 ship 된다. repo Secrets 에
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 만 넣으면 **모든 PR 이 cross-provider
+적대 검수**를 받고, blocker 면 체크 실패 + 리포트 코멘트. forge-cli 설치 불필요
+(번들이 self-contained). Forge 를 안 써도 이 워크플로 하나만 복사하면 동작.
+
+## Autonomous Dev Factory
+
+- **Night Shift** (`forge-team factory run`) — 계약 큐를 의존성 순으로 자율 실행:
+  팀 생산 → 멤버 완료 대기 → **머지 전 Gauntlet 게이트** → blocker 없을 때만
+  머지, 있으면 보류 + worktree 보존. 아침 브리핑(+ Obsidian 볼트 미러).
+- **Flight Recorder** (`forge-team recorder timeline/fork`) — 작업 타임라인
+  (활동 + pane 출력 + inbox + git) 단일 스트림, 과거 시점에서 worktree 분기.
+- **공장 관제실** (⌘4) — 큐 보드 + Gauntlet 리포트 + 아침 브리핑 GUI.
+
 ## Other features
 
 ### Real terminal, done right
