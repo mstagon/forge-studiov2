@@ -15,11 +15,15 @@ SKILLS=""
 if echo "$FILE" | grep -qE 'client/domain/entity/|client/data/.*/dto/'; then
   SKILLS="$SKILLS freezed-models"
 fi
-if echo "$FILE" | grep -qE 'client/presentation/'; then
-  SKILLS="$SKILLS riverpod-patterns go-router mobile-design mobile-touch"
+if echo "$FILE" | grep -qE 'client/presentation/|client/.*/(screens|widgets)/|client/.*/theme/'; then
+  SKILLS="$SKILLS riverpod-patterns go-router mobile-design mobile-touch figma-pixel-perfect"
 fi
-if echo "$FILE" | grep -qE 'client/data/remote/|client/core/network/'; then
-  SKILLS="$SKILLS dio-retrofit"
+if echo "$FILE" | grep -qE 'client/data/remote/|client/core/network/|client/data/repository/'; then
+  SKILLS="$SKILLS dio-retrofit flutter-api-integration"
+fi
+# React UI (react-nest 프리셋) — Figma 픽셀 퍼펙트 공용
+if echo "$FILE" | grep -qE 'client/src/(features|shared)/.*/(components?|ui)/|client/src/.*\.(tsx)$'; then
+  SKILLS="$SKILLS figma-pixel-perfect"
 fi
 if echo "$FILE" | grep -qE 'client/core/utils/result'; then
   SKILLS="$SKILLS error-handling"
