@@ -1086,6 +1086,7 @@ export function SettingsIntegrations() {
     { key: 'LINEAR_API_KEY', label: 'Linear', help: 'Run ↔ 이슈 양방향 동기화. linear.app/settings/api 에서 발급' },
     { key: 'SLACK_WEBHOOK_URL', label: 'Slack', help: 'Run 완료/머지/실패 알림. api.slack.com/apps 에서 webhook 생성' },
     { key: 'FIGMA_ACCESS_TOKEN', label: 'Figma', help: '디자인 토큰 동기화. figma.com/developers/api 에서 발급' },
+    { key: 'FIGMA_API_KEY', label: 'Figma (Framelink MCP)', help: 'figma-framelink MCP 용 personal token. 공식 remote Figma MCP 는 /mcp OAuth 라 불필요' },
     { key: 'SENTRY_AUTH_TOKEN', label: 'Sentry', help: '프로덕션 에러 → Run 컨텍스트. sentry.io/settings/auth-tokens 에서 발급' },
     { key: 'VERCEL_TOKEN', label: 'Vercel', help: '프리뷰 배포 URL. vercel.com/account/tokens 에서 발급' },
   ]
