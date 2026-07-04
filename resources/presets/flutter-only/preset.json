@@ -23,6 +23,16 @@
       "id": "playwright",
       "label": "Playwright MCP",
       "hint": "Flutter Web 빌드 E2E / 웹뷰 테스트용 브라우저 자동화"
+    },
+    {
+      "id": "figma",
+      "label": "Figma MCP (공식 remote — 픽셀퍼펙트)",
+      "hint": "get_image/변수/코드 — 스크린샷 대조에 최적. 추가 후 /mcp 로 인증. Figma Dev/Full seat 필요"
+    },
+    {
+      "id": "figma-framelink",
+      "label": "Figma MCP (Framelink — 무료 토큰)",
+      "hint": "FIGMA_API_KEY(개인 토큰) 필요 — Settings → Integrations. 데스크톱 앱 불필요"
     }
   ]
 }
