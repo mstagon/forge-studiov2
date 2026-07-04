@@ -4,6 +4,23 @@ All notable changes to Forge Studio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] — 2026-07-04
+
+### Added — Flutter 디자인 픽셀 퍼펙트 + API 연동 보강
+
+- **figma-pixel-perfect 스킬**: Figma MCP 로 디자인 토큰 추출 → 테마 매핑 →
+  정확한 측정값 → 구현 → **스크린샷 diff 검증 루프**(Flutter golden test / React
+  Playwright 렌더 vs Figma get_image 대조 → 차이 지목 → 수정 → 반복). "대충 비슷"
+  이 아니라 이미지 대조가 완료 조건. 매직 넘버 금지, 토큰 우선.
+- **flutter-api-integration 스킬**: 외부/BaaS API 풀 파이프라인 — 계약 → DTO
+  (freezed) → retrofit 코드젠 → dio 인터셉터(401 refresh 큐잉 / 멱등 retry /
+  민감정보 마스킹) → Result 매핑(throw 금지) → repository(오프라인 우선) → 테스트
+  (http_mock_adapter). dio-retrofit 심화.
+- **Figma MCP 옵트인**: New Workspace 프리셋 선택 시 공식 remote(`mcp.figma.com/mcp`,
+  OAuth) + Framelink(`figma-developer-mcp`, FIGMA_API_KEY) 체크박스. flutter-only /
+  react-nest / nextjs-web. flutter-ui / react-ui 에이전트에 Figma 워크플로 주입.
+- Settings 에 FIGMA_API_KEY 필드 (Framelink 용).
+
 ## [0.23.0] — 2026-06-20
 
 ### Added — Flight Recorder GUI

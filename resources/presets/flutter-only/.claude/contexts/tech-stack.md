@@ -18,3 +18,12 @@ dart run build_runner build --delete-conflicting-outputs
 flutter analyze && flutter test
 flutter test integration_test   # 디바이스/시뮬레이터 필요
 ```
+
+## 디자인 → 코드 (픽셀 퍼펙트)
+Figma MCP 옵트인 (New Workspace) → `figma-pixel-perfect` 스킬: 토큰 추출 → 테마
+매핑 → 정확한 측정 → **golden test 스크린샷 vs Figma get_image 대조 검증 루프**.
+
+## API 연동
+`flutter-api-integration` 스킬: 계약 → DTO(freezed) → retrofit 코드젠 → dio
+인터셉터(auth refresh/retry) → Result 매핑 → repository(오프라인 캐시). 실제 네트워크
+테스트 금지 (http_mock_adapter).
